@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grudge Arena — PvP Combat</title>
+  <link rel="icon" type="image/png" href="/grudge-logo.png">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --void: #07070f; --iron: #111120; --steel: #1a1a2e;
+      --gold: #c9a84c; --gold-light: #f0c060; --gold-dark: #8b6914;
+      --ember: #DB6331; --ember-light: #FAAC47;
+      --text: #e8dcc8; --text-muted: hsl(45,15%,60%); --text-dim: hsl(45,10%,40%);
+      --border: rgba(201,168,76,0.25); --border-dim: rgba(255,255,255,0.08);
+      --blood: #8B0000; --green: #22c55e;
+      --font-heading: 'Cinzel Decorative', 'Cinzel', serif;
+      --font-title: 'Cinzel', serif;
+      --font-ui: 'Inter', system-ui, sans-serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--void); color: var(--text); font-family: var(--font-ui); overflow: hidden; height: 100vh; }
+
+    /* ── Auth/Lobby overlay ── */
+    #lobby-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: radial-gradient(ellipse at 50% -20%, rgba(219,99,49,0.12) 0%, transparent 60%), var(--void);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 2rem;
+    }
+    #lobby-overlay.hidden { display: none; }
+
+    .lobby-brand { text-align: center; }
+    .lobby-logo { width: 80px; height: 80px; border-radius: 50%; border: 2px solid rgba(201,168,76,0.3); overflow: hidden; margin: 0 auto 1rem; box-shadow: 0 0 40px rgba(201,168,76,0.15); }
+    .lobby-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .lobby-title { font-family: var(--font-heading); font-size: 2.5rem; font-weight: 900; background: linear-gradient(135deg, var(--gold-light), var(--ember)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 0.08em; }
+    .lobby-sub { font-family: var(--font-ui); font-size: 0.7rem; color: var(--text-dim); letter-spacing: 0.2em; text-transform: uppercase; margin-top: 0.25rem; }
+
+    .lobby-card {
+      background: linear-gradient(160deg, rgba(17,17,32,0.95), rgba(10,10,20,0.98));
+      border: 1px solid var(--border); border-radius: 16px; padding: 2rem;
+      width: 100%; max-width: 520px; box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+    }
+
+    /* Auth gate */
+    #auth-gate { text-align: center; }
+    #auth-gate p { color: var(--text-muted); margin-bottom: 1rem; font-size: 0.85rem; }
+    .auth-btn {
+      display: inline-block; padding: 0.8rem 2rem; font-family: var(--font-title); font-size: 0.9rem;
+      font-weight: 700; color: var(--void); background: linear-gradient(135deg, var(--ember-light), var(--ember), var(--gold-dark));
+      border: none; border-radius: 10px; cursor: pointer; text-decoration: none;
+      box-shadow: 0 4px 20px rgba(219,99,49,0.3); transition: all 0.2s;
+    }
+    .auth-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(219,99,49,0.4); }
+
+    /* Race selection */
+    #race-select { display: none; }
+    #race-select.show { display: block; }
+    .race-title { font-family: var(--font-title); font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); text-align: center; margin-bottom: 1rem; }
+    .race-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1.5rem; }
+    .race-card {
+      padding: 16px 8px; border-radius: 10px; text-align: center; cursor: pointer;
+      background: rgba(0,0,0,0.3); border: 2px solid var(--border-dim); transition: all 0.2s;
+    }
+    .race-card:hover { border-color: var(--gold); background: rgba(201,168,76,0.04); transform: translateY(-2px); }
+    .race-card.selected { border-color: var(--ember); background: rgba(219,99,49,0.08); box-shadow: 0 0 20px rgba(219,99,49,0.15); }
+    .race-icon { font-size: 2rem; margin-bottom: 6px; }
+    .race-name { font-family: var(--font-title); font-size: 0.75rem; font-weight: 700; color: var(--gold-light); }
+    .race-desc { font-size: 0.6rem; color: var(--text-dim); margin-top: 4px; }
+
+    .user-info { display: flex; align-items: center; gap: 10px; margin-bottom: 1.25rem; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 10px; border: 1px solid var(--border-dim); }
+    .user-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--steel); border: 2px solid var(--gold-dark); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: var(--gold); }
+    .user-name { font-family: var(--font-title); font-size: 0.9rem; color: var(--gold-light); }
+    .user-gid { font-size: 0.65rem; color: var(--text-dim); }
+
+    .enter-btn {
+      width: 100%; padding: 0.9rem; font-family: var(--font-title); font-size: 1rem;
+      font-weight: 900; letter-spacing: 0.06em; color: var(--void);
+      background: linear-gradient(135deg, var(--ember-light), var(--ember), var(--gold-dark));
+      border: none; border-radius: 10px; cursor: pointer;
+      box-shadow: 0 4px 20px rgba(219,99,49,0.3); transition: all 0.2s;
+    }
+    .enter-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(219,99,49,0.4); }
+    .enter-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .queue-btn {
+      width: 100%; padding: 0.7rem; margin-top: 0.75rem; font-family: var(--font-ui); font-size: 0.82rem;
+      color: var(--text); background: rgba(0,0,0,0.3); border: 1px solid var(--border-dim);
+      border-radius: 8px; cursor: pointer; transition: 0.2s;
+    }
+    .queue-btn:hover { border-color: var(--gold); background: rgba(201,168,76,0.04); }
+
+    .back-link { display: block; text-align: center; margin-top: 1rem; font-size: 0.72rem; color: var(--text-dim); text-decoration: none; }
+    .back-link:hover { color: var(--gold); }
+
+    /* Game canvas container */
+    #game-root { width: 100vw; height: 100vh; display: none; }
+    #game-root.active { display: block; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ LOBBY OVERLAY ═══ -->
+<div id="lobby-overlay">
+  <div class="lobby-brand">
+    <div class="lobby-logo"><img src="/grudge-logo.png" alt="Grudge"></div>
+    <div class="lobby-title">GRUDGE ARENA</div>
+    <div class="lobby-sub">3D PvP Combat · 6 Races · 5 Weapon Classes</div>
+  </div>
+
+  <div class="lobby-card">
+    <!-- Auth gate (shown when not logged in) -->
+    <div id="auth-gate">
+      <p>Sign in with your Grudge ID to enter the arena</p>
+      <a class="auth-btn" id="login-btn" href="#">⚔ SIGN IN WITH GRUDGE ID</a>
+    </div>
+
+    <!-- Race selection (shown when logged in) -->
+    <div id="race-select">
+      <div class="user-info">
+        <div class="user-avatar" id="ua">⚔</div>
+        <div>
+          <div class="user-name" id="un">Warlord</div>
+          <div class="user-gid" id="ug"></div>
+        </div>
+      </div>
+
+      <div class="race-title">Choose your race</div>
+      <div class="race-grid">
+        <div class="race-card selected" data-race="human" onclick="selectRace(this)">
+          <div class="race-icon">🛡️</div>
+          <div class="race-name">Human</div>
+          <div class="race-desc">Balanced · Versatile</div>
+        </div>
+        <div class="race-card" data-race="barbarian" onclick="selectRace(this)">
+          <div class="race-icon">⚔️</div>
+          <div class="race-name">Barbarian</div>
+          <div class="race-desc">Strength · Rage</div>
+        </div>
+        <div class="race-card" data-race="elf" onclick="selectRace(this)">
+          <div class="race-icon">🏹</div>
+          <div class="race-name">Elf</div>
+          <div class="race-desc">Agility · Magic</div>
+        </div>
+        <div class="race-card" data-race="dwarf" onclick="selectRace(this)">
+          <div class="race-icon">🔨</div>
+          <div class="race-name">Dwarf</div>
+          <div class="race-desc">Toughness · Defense</div>
+        </div>
+        <div class="race-card" data-race="orc" onclick="selectRace(this)">
+          <div class="race-icon">🪓</div>
+          <div class="race-name">Orc</div>
+          <div class="race-desc">Power · Ferocity</div>
+        </div>
+        <div class="race-card" data-race="undead" onclick="selectRace(this)">
+          <div class="race-icon">💀</div>
+          <div class="race-name">Undead</div>
+          <div class="race-desc">Shadow · Drain</div>
+        </div>
+      </div>
+
+      <button class="enter-btn" id="enter-btn" onclick="enterArena()">⚔ ENTER THE ARENA</button>
+      <button class="queue-btn" onclick="joinQueue()">🔍 Find PvP Match</button>
+      <a class="back-link" href="https://grudge-studio.com">← Back to The Engine</a>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ GAME CANVAS ═══ -->
+<div id="game-root"></div>
+
+<script>
+// ── Grudge Auth ──────────────────────────────────────
+const ID_URL = 'https://id.grudge-studio.com';
+const WS_URL = 'https://ws.grudge-studio.com';
+let selectedRace = 'human';
+let grudgeUser = null;
+
+function getToken() { return localStorage.getItem('grudge_auth_token'); }
+function getUser() { try { return JSON.parse(localStorage.getItem('grudge_user') || 'null'); } catch { return null; } }
+
+function checkAuth() {
+  const token = getToken();
+  const user = getUser();
+  if (token && user) {
+    grudgeUser = user;
+    document.getElementById('auth-gate').style.display = 'none';
+    document.getElementById('race-select').classList.add('show');
+    document.getElementById('un').textContent = user.displayName || user.username || 'Warlord';
+    const gid = (user.grudgeId || localStorage.getItem('grudge_id') || '').slice(0, 8).toUpperCase();
+    document.getElementById('ug').textContent = gid ? 'GRUDGE-' + gid : '';
+    if (user.avatarUrl) {
+      document.getElementById('ua').innerHTML = '<img src="' + user.avatarUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+    } else {
+      document.getElementById('ua').textContent = (user.username || 'W')[0].toUpperCase();
+    }
+  } else {
+    document.getElementById('auth-gate').style.display = 'block';
+    document.getElementById('race-select').classList.remove('show');
+  }
+}
+
+// Handle login redirect
+document.getElementById('login-btn').addEventListener('click', function(e) {
+  e.preventDefault();
+  location.href = ID_URL + '/?redirect_uri=' + encodeURIComponent(location.href);
+});
+
+// Ingest token from redirect
+const params = new URLSearchParams(location.search);
+const incomingToken = params.get('token') || params.get('sso_token');
+if (incomingToken) {
+  localStorage.setItem('grudge_auth_token', incomingToken);
+  // Fetch user profile
+  fetch(ID_URL + '/auth/user', { headers: { Authorization: 'Bearer ' + incomingToken } })
+    .then(r => r.ok ? r.json() : null)
+    .then(u => {
+      if (u) {
+        localStorage.setItem('grudge_user', JSON.stringify(u));
+        localStorage.setItem('grudge_id', u.grudgeId || '');
+        localStorage.setItem('grudge_username', u.username || '');
+      }
+      history.replaceState({}, '', location.pathname);
+      checkAuth();
+    }).catch(() => checkAuth());
+} else {
+  checkAuth();
+}
+
+// ── Race Selection ───────────────────────────────────
+window.selectRace = function(el) {
+  document.querySelectorAll('.race-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedRace = el.dataset.race;
+};
+
+// ── Enter Arena ──────────────────────────────────────
+window.enterArena = function() {
+  document.getElementById('lobby-overlay').classList.add('hidden');
+  document.getElementById('game-root').classList.add('active');
+  loadArenaGame(selectedRace);
+};
+
+// ── PvP Queue ────────────────────────────────────────
+window.joinQueue = async function() {
+  const token = getToken();
+  if (!token) return;
+  const btn = document.querySelector('.queue-btn');
+  btn.textContent = '🔍 Searching for opponent...';
+  btn.disabled = true;
+
+  try {
+    // Connect to ws.grudge-studio.com/pvp for matchmaking
+    const { io } = await import('socket.io-client');
+    const pvpSocket = io(WS_URL + '/pvp', {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+    });
+
+    pvpSocket.on('connect', () => {
+      console.log('[arena] Connected to PvP service');
+    });
+
+    pvpSocket.on('pvp:queue_matched', (data) => {
+      console.log('[arena] Match found!', data);
+      btn.textContent = '⚔ MATCH FOUND!';
+      setTimeout(() => {
+        document.getElementById('lobby-overlay').classList.add('hidden');
+        document.getElementById('game-root').classList.add('active');
+        loadArenaGame(selectedRace, data);
+      }, 1500);
+    });
+
+    pvpSocket.on('connect_error', (err) => {
+      console.warn('[arena] PvP connect error:', err.message);
+      btn.textContent = '🔍 Find PvP Match';
+      btn.disabled = false;
+    });
+  } catch (err) {
+    console.error('[arena] Queue error:', err);
+    btn.textContent = '🔍 Find PvP Match';
+    btn.disabled = false;
+  }
+};
+
+// ── Load Arena Game ──────────────────────────────────
+async function loadArenaGame(race, matchData) {
+  const root = document.getElementById('game-root');
+
+  // Race model paths
+  const RACE_MODELS = {
+    human: '/models/human.glb',
+    barbarian: '/models/barbarian.glb',
+    elf: '/models/elf.glb',
+    dwarf: '/models/dwarf.glb',
+    orc: '/models/orc.glb',
+    undead: '/models/undead.glb',
+  };
+
+  // Dynamic import the game engine
+  try {
+    const gameModule = await import('./game.js');
+    if (gameModule.default || gameModule.GrudgeArena || gameModule.init) {
+      const init = gameModule.default || gameModule.GrudgeArena || gameModule.init;
+      if (typeof init === 'function') {
+        init({
+          container: root,
+          race: race,
+          modelPath: RACE_MODELS[race],
+          animationLibrary: '/models/animations/AnimationLibrary.glb',
+          playerName: grudgeUser?.username || 'Warlord',
+          grudgeId: grudgeUser?.grudgeId || localStorage.getItem('grudge_id') || '',
+          matchData: matchData || null,
+          wsUrl: WS_URL,
+          token: getToken(),
+        });
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn('[arena] game.js module import failed, loading inline:', e.message);
+  }
+
+  // Fallback: load the arena as an iframe from the original HTML
+  console.log('[arena] Loading Three.js arena for race:', race);
+
+  // Import Three.js directly and set up a basic arena scene
+  const THREE = await import('https://unpkg.com/three@0.160.0/build/three.module.js');
+  const { OrbitControls } = await import('https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js');
+  const { GLTFLoader } = await import('https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js');
+
+  // Scene setup
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a1a);
+  scene.fog = new THREE.Fog(0x0a0a1a, 50, 200);
+
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
+  camera.position.set(0, 12, 18);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  root.appendChild(renderer.domElement);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.maxPolarAngle = Math.PI / 2.1;
+  controls.minDistance = 5;
+  controls.maxDistance = 50;
+  controls.target.set(0, 1, 0);
+
+  // Lighting
+  const ambientLight = new THREE.AmbientLight(0x334466, 0.5);
+  scene.add(ambientLight);
+
+  const dirLight = new THREE.DirectionalLight(0xffeedd, 1.5);
+  dirLight.position.set(30, 50, 20);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.set(2048, 2048);
+  dirLight.shadow.camera.near = 1;
+  dirLight.shadow.camera.far = 150;
+  dirLight.shadow.camera.left = dirLight.shadow.camera.bottom = -60;
+  dirLight.shadow.camera.right = dirLight.shadow.camera.top = 60;
+  scene.add(dirLight);
+
+  const rimLight = new THREE.DirectionalLight(0x8866ff, 0.4);
+  rimLight.position.set(-20, 30, -30);
+  scene.add(rimLight);
+
+  // Arena ground
+  const groundGeo = new THREE.CircleGeometry(60, 64);
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.8, metalness: 0.2 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // Arena ring (gold border)
+  const ringGeo = new THREE.RingGeometry(59, 60, 64);
+  const ringMat = new THREE.MeshStandardMaterial({ color: 0xc9a84c, emissive: 0x8b6914, emissiveIntensity: 0.3, metalness: 0.8, roughness: 0.3 });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.01;
+  scene.add(ring);
+
+  // Grid lines on the arena floor
+  const gridHelper = new THREE.GridHelper(120, 30, 0x222244, 0x111133);
+  gridHelper.position.y = 0.02;
+  scene.add(gridHelper);
+
+  // Pillars around the arena
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const pillarGeo = new THREE.CylinderGeometry(1.2, 1.5, 8, 8);
+    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x333355, roughness: 0.6, metalness: 0.4 });
+    const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+    pillar.position.set(Math.cos(angle) * 55, 4, Math.sin(angle) * 55);
+    pillar.castShadow = true;
+    scene.add(pillar);
+
+    // Torch light on each pillar
+    const torchLight = new THREE.PointLight(0xff6622, 1.5, 20);
+    torchLight.position.set(Math.cos(angle) * 55, 9, Math.sin(angle) * 55);
+    scene.add(torchLight);
+  }
+
+  // Load race character model
+  const loader = new GLTFLoader();
+  let playerModel = null;
+  let mixer = null;
+
+  try {
+    const gltf = await new Promise((resolve, reject) => {
+      loader.load(RACE_MODELS[race], resolve, undefined, reject);
+    });
+    playerModel = gltf.scene;
+    playerModel.scale.setScalar(1);
+    playerModel.position.set(0, 0, 0);
+    playerModel.castShadow = true;
+    playerModel.traverse(child => {
+      if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
+    });
+    scene.add(playerModel);
+
+    // Play idle animation if available
+    if (gltf.animations.length > 0) {
+      mixer = new THREE.AnimationMixer(playerModel);
+      const idle = gltf.animations.find(a => a.name.toLowerCase().includes('idle')) || gltf.animations[0];
+      mixer.clipAction(idle).play();
+    }
+
+    controls.target.copy(playerModel.position);
+    controls.target.y = 1.5;
+    camera.position.set(0, 8, 12);
+    console.log('[arena] Loaded race model:', race, '- Animations:', gltf.animations.map(a => a.name));
+  } catch (err) {
+    console.error('[arena] Failed to load model:', err);
+    // Placeholder capsule
+    const capsuleGeo = new THREE.CapsuleGeometry(0.4, 1.2, 8, 16);
+    const capsuleMat = new THREE.MeshStandardMaterial({ color: 0xc9a84c, emissive: 0x8b6914, emissiveIntensity: 0.2 });
+    playerModel = new THREE.Mesh(capsuleGeo, capsuleMat);
+    playerModel.position.set(0, 1, 0);
+    playerModel.castShadow = true;
+    scene.add(playerModel);
+  }
+
+  // HUD overlay
+  const hud = document.createElement('div');
+  hud.style.cssText = 'position:fixed;top:16px;left:16px;z-index:50;pointer-events:none;';
+  hud.innerHTML = `
+    <div style="font-family:'Cinzel',serif;font-size:14px;color:#f0c060;letter-spacing:2px;text-shadow:0 0 10px rgba(201,168,76,0.3);">
+      GRUDGE ARENA
+    </div>
+    <div style="font-family:'Inter',sans-serif;font-size:11px;color:rgba(232,220,200,0.5);margin-top:4px;">
+      ${grudgeUser?.username || 'Warlord'} · ${race.charAt(0).toUpperCase() + race.slice(1)}
+    </div>
+  `;
+  document.body.appendChild(hud);
+
+  // Render loop
+  const clock = new THREE.Clock();
+  function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    if (mixer) mixer.update(delta);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // Resize handler
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+}
+</script>
+</body>
+</html>

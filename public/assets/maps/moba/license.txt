@@ -1,0 +1,11 @@
+Model Information:
+* title:	Low Poly MOBA set
+* source:	https://sketchfab.com/3d-models/low-poly-moba-set-66de1cdcced8436984932636350a3770
+* author:	AnshiNoWara (https://sketchfab.com/anshinowara)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Low Poly MOBA set" (https://sketchfab.com/3d-models/low-poly-moba-set-66de1cdcced8436984932636350a3770) by AnshiNoWara (https://sketchfab.com/anshinowara) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
