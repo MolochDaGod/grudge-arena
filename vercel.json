@@ -3,6 +3,12 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/auth/:path*", "destination": "https://id.grudge-studio.com/auth/:path*" },
+    { "source": "/api/oauth-google", "destination": "https://id.grudge-studio.com/auth/google?redirect_uri=https://grudge-arena.vercel.app" },
+    { "source": "/api/oauth-discord", "destination": "https://id.grudge-studio.com/auth/discord?redirect_uri=https://grudge-arena.vercel.app" },
+    { "source": "/api/guest", "destination": "https://id.grudge-studio.com/auth/guest" },
+    { "source": "/api/wallet/:path*", "destination": "https://api.grudge-studio.com/wallet/:path*" },
+    { "source": "/api/account/:path*", "destination": "https://api.grudge-studio.com/api/account/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

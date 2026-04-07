@@ -44,14 +44,43 @@
 
     /* Auth gate */
     #auth-gate { text-align: center; }
-    #auth-gate p { color: var(--text-muted); margin-bottom: 1rem; font-size: 0.85rem; }
+    #auth-gate p { color: var(--text-muted); margin-bottom: 1.25rem; font-size: 0.85rem; }
+    .auth-methods { display: flex; flex-direction: column; gap: 10px; }
     .auth-btn {
-      display: inline-block; padding: 0.8rem 2rem; font-family: var(--font-title); font-size: 0.9rem;
-      font-weight: 700; color: var(--void); background: linear-gradient(135deg, var(--ember-light), var(--ember), var(--gold-dark));
-      border: none; border-radius: 10px; cursor: pointer; text-decoration: none;
-      box-shadow: 0 4px 20px rgba(219,99,49,0.3); transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%; padding: 0.85rem 1.5rem; font-family: var(--font-title); font-size: 0.85rem;
+      font-weight: 700; border: none; border-radius: 10px; cursor: pointer; text-decoration: none;
+      transition: all 0.2s; letter-spacing: 0.03em;
     }
-    .auth-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(219,99,49,0.4); }
+    .auth-btn:hover { transform: translateY(-2px); }
+    .auth-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .auth-btn svg, .auth-btn img { width: 20px; height: 20px; flex-shrink: 0; }
+    .auth-btn--phantom {
+      color: #fff; background: linear-gradient(135deg, #ab9ff2, #7c3aed, #4f1d91);
+      box-shadow: 0 4px 20px rgba(124,58,237,0.3);
+    }
+    .auth-btn--phantom:hover { box-shadow: 0 6px 28px rgba(124,58,237,0.45); }
+    .auth-btn--google {
+      color: var(--void); background: #fff;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    }
+    .auth-btn--google:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+    .auth-btn--guest {
+      color: var(--text); background: rgba(255,255,255,0.06); border: 1px solid var(--border-dim);
+    }
+    .auth-btn--guest:hover { border-color: var(--gold); background: rgba(201,168,76,0.06); }
+    .auth-divider {
+      display: flex; align-items: center; gap: 12px; margin: 4px 0;
+      font-size: 0.65rem; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    .auth-divider::before, .auth-divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--border-dim);
+    }
+    .auth-status { font-size: 0.72rem; color: var(--ember-light); margin-top: 8px; min-height: 1.2em; }
+    .auth-wallet-addr {
+      font-size: 0.65rem; color: var(--text-dim); margin-top: 2px;
+      font-family: monospace; letter-spacing: 0;
+    }
 
     /* Race selection */
     #race-select { display: none; }
@@ -111,8 +140,22 @@
   <div class="lobby-card">
     <!-- Auth gate (shown when not logged in) -->
     <div id="auth-gate">
-      <p>Sign in with your Grudge ID to enter the arena</p>
-      <a class="auth-btn" id="login-btn" href="#">⚔ SIGN IN WITH GRUDGE ID</a>
+      <p>Connect to enter the arena</p>
+      <div class="auth-methods">
+        <button class="auth-btn auth-btn--phantom" id="phantom-btn">
+          <svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M110.6 56.1C104.1 23.7 73.5 2 41.1 8.5 19.3 13 3.2 30.3.3 52.5c-3.5 27 12.4 52.8 37.9 62.3 3 1.1 6.3-.4 7.4-3.4 1.1-3-0.4-6.3-3.4-7.4C22.1 96.2 9.2 76.5 11.8 55.2c2.2-17.4 14.8-31 31.7-35.5 25.3-6.8 51.1 8.6 57.3 33.9.1.5.2 1 .3 1.5H89.4c-3.1 0-5.9 1.8-7.2 4.6l-2.5 5.4-6.1-18.2c-1.2-3.5-4.4-5.9-8.1-5.9h-.3c-3.8.1-7 2.8-7.9 6.4l-7.6 29.8-4.6-12.7c-1.3-3.5-4.6-5.8-8.3-5.8H20.2c-3.2 0-5.8 2.6-5.8 5.8s2.6 5.8 5.8 5.8h13.9l10.4 28.7c1.3 3.6 4.7 6 8.4 5.9 3.7-.1 6.9-2.6 8.1-6.2l8.1-32.1 5.9 17.7c1.2 3.6 4.5 6.1 8.3 6.1 3.7 0 7.1-2.3 8.3-5.9l5.5-11.9h13.6c3.2 0 5.8-2.6 5.8-5.8-.1-3.4-2.7-6-5.9-6z" fill="white"/></svg>
+          Connect Phantom
+        </button>
+        <div class="auth-divider">or</div>
+        <button class="auth-btn auth-btn--google" id="google-btn">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+          Sign in with Google
+        </button>
+        <button class="auth-btn auth-btn--guest" id="guest-btn">
+          ⚔ Play as Guest
+        </button>
+      </div>
+      <div class="auth-status" id="auth-status"></div>
     </div>
 
     <!-- Race selection (shown when logged in) -->
@@ -172,12 +215,39 @@
 <script type="module">
 // ── Grudge Auth ──────────────────────────────────────
 const ID_URL = 'https://id.grudge-studio.com';
+const API_BASE = '/api';
 const WS_URL = 'https://ws.grudge-studio.com';
 let selectedRace = 'human';
 let grudgeUser = null;
 
-function getToken() { return localStorage.getItem('grudge_auth_token'); }
-function getUser() { try { return JSON.parse(localStorage.getItem('grudge_user') || 'null'); } catch { return null; } }
+// ── LocalStorage keys (cross-app SSO compatible with GrudgeBuilder) ──
+const AUTH_TOKEN_KEY = 'grudge_auth_token';
+const SESSION_TOKEN_KEY = 'grudge_session_token';
+const DEVICE_ID_KEY = 'grudge_device_id';
+
+function getToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(SESSION_TOKEN_KEY);
+}
+function setToken(token) {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+  localStorage.setItem(SESSION_TOKEN_KEY, token);
+}
+function getUser() {
+  try { return JSON.parse(localStorage.getItem('grudge_user') || 'null'); } catch { return null; }
+}
+function getDeviceId() {
+  let id = localStorage.getItem(DEVICE_ID_KEY);
+  if (!id) {
+    id = 'ga_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
+    localStorage.setItem(DEVICE_ID_KEY, id);
+  }
+  return id;
+}
+
+function setAuthStatus(msg) {
+  const el = document.getElementById('auth-status');
+  if (el) el.textContent = msg;
+}
 
 function showLoggedIn(user) {
   grudgeUser = user;
@@ -186,6 +256,11 @@ function showLoggedIn(user) {
   document.getElementById('un').textContent = user.displayName || user.username || 'Warlord';
   const gid = (user.grudgeId || user.grudge_id || localStorage.getItem('grudge_id') || '').slice(0, 8).toUpperCase();
   document.getElementById('ug').textContent = gid ? 'GRUDGE-' + gid : '';
+  // Show wallet address if available
+  const walletAddr = user.walletAddress || user.serverWalletAddress || '';
+  if (walletAddr) {
+    document.getElementById('ug').textContent += (gid ? ' · ' : '') + walletAddr.slice(0, 4) + '...' + walletAddr.slice(-4);
+  }
   if (user.avatarUrl) {
     document.getElementById('ua').innerHTML = '<img src="' + user.avatarUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
   } else {
@@ -200,18 +275,50 @@ function showLoggedOut() {
 
 // Store auth data from any source
 function storeAuth(token, user) {
-  if (token) localStorage.setItem('grudge_auth_token', token);
+  if (token) setToken(token);
   if (user) {
     localStorage.setItem('grudge_user', JSON.stringify(user));
     if (user.grudgeId || user.grudge_id) localStorage.setItem('grudge_id', user.grudgeId || user.grudge_id);
     if (user.username) localStorage.setItem('grudge_username', user.username);
+    if (user.id) localStorage.setItem('grudge_user_id', String(user.id));
   }
+}
+
+function clearAuth() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(SESSION_TOKEN_KEY);
+  localStorage.removeItem('grudge_user');
+  localStorage.removeItem('grudge_id');
+  localStorage.removeItem('grudge_username');
+  localStorage.removeItem('grudge_user_id');
+  localStorage.removeItem('grudge-session');
+}
+
+// Handle auth response from Grudge backend (same shape as GrudgeBuilder)
+function handleAuthData(data) {
+  const token = data.sessionToken || data.token;
+  const user = data.user || {};
+  if (!user.grudgeId && data.grudgeId) user.grudgeId = data.grudgeId;
+  if (!user.username && data.username) user.username = data.username;
+  storeAuth(token, user);
+  // Also store session for cross-app compat
+  try {
+    localStorage.setItem('grudge-session', JSON.stringify({
+      type: user.walletAddress ? 'wallet' : (user.isGuest ? 'guest' : 'grudge'),
+      username: user.username || 'Warlord',
+      grudgeId: user.grudgeId,
+      accountId: user.id,
+      walletAddress: user.walletAddress,
+      loginTime: Date.now()
+    }));
+  } catch {}
+  return user;
 }
 
 // Fetch full user profile from grudge-id using a token
 async function fetchUserProfile(token) {
   try {
-    const r = await fetch(ID_URL + '/auth/user', { headers: { Authorization: 'Bearer ' + token } });
+    const r = await fetch(API_BASE + '/auth/user', { headers: { Authorization: 'Bearer ' + token } });
     if (!r.ok) return null;
     return await r.json();
   } catch { return null; }
@@ -220,49 +327,145 @@ async function fetchUserProfile(token) {
 // Verify a token is still valid
 async function verifyToken(token) {
   try {
-    const r = await fetch(ID_URL + '/auth/verify', {
+    const r = await fetch(API_BASE + '/auth/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: token })
+      body: JSON.stringify({ token })
     });
     const d = await r.json();
     return d.valid === true;
   } catch { return false; }
 }
 
-// Handle login redirect
-document.getElementById('login-btn').addEventListener('click', function(e) {
-  e.preventDefault();
-  location.href = ID_URL + '/?redirect_uri=' + encodeURIComponent(location.origin + location.pathname);
+// ── Phantom Wallet Connect ───────────────────────────
+function getPhantomProvider() {
+  if (window.phantom?.solana?.isPhantom) return window.phantom.solana;
+  if (window.solana?.isPhantom) return window.solana;
+  return null;
+}
+
+document.getElementById('phantom-btn').addEventListener('click', async () => {
+  const provider = getPhantomProvider();
+  if (!provider) {
+    // Phantom not installed — open install page
+    window.open('https://phantom.app/', '_blank');
+    setAuthStatus('Install Phantom wallet extension, then try again');
+    return;
+  }
+
+  const btn = document.getElementById('phantom-btn');
+  btn.disabled = true;
+  setAuthStatus('Connecting to Phantom...');
+
+  try {
+    // Request wallet connection
+    const resp = await provider.connect();
+    const walletAddress = resp.publicKey.toString();
+    setAuthStatus('Wallet connected · Signing in...');
+
+    // Auth with Grudge backend — auto-creates account if new
+    const r = await fetch(API_BASE + '/auth/wallet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallet_address: walletAddress })
+    });
+
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.error || 'Backend auth failed');
+    }
+
+    const data = await r.json();
+    const user = handleAuthData(data);
+    if (!user.walletAddress) user.walletAddress = walletAddress;
+    storeAuth(null, user);
+    setAuthStatus('');
+    showLoggedIn(user);
+  } catch (err) {
+    console.error('[arena] Phantom auth error:', err);
+    setAuthStatus(err.message === 'User rejected the request.' ? 'Connection cancelled' : err.message || 'Wallet connection failed');
+    btn.disabled = false;
+  }
+});
+
+// ── Google OAuth ─────────────────────────────────────
+document.getElementById('google-btn').addEventListener('click', () => {
+  setAuthStatus('Redirecting to Google...');
+  // Redirect to Grudge ID Google OAuth (via Vercel rewrite)
+  location.href = API_BASE + '/oauth-google';
+});
+
+// ── Guest Login ──────────────────────────────────────
+document.getElementById('guest-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('guest-btn');
+  btn.disabled = true;
+  setAuthStatus('Creating guest account...');
+
+  try {
+    const r = await fetch(API_BASE + '/auth/puter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        puterUuid: 'guest_' + getDeviceId(),
+        puterUsername: 'Guest'
+      })
+    });
+
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.error || 'Guest login failed');
+    }
+
+    const data = await r.json();
+    const user = handleAuthData(data);
+    if (!user.username) user.username = 'Guest';
+    user.isGuest = true;
+    storeAuth(null, user);
+    setAuthStatus('');
+    showLoggedIn(user);
+  } catch (err) {
+    console.error('[arena] Guest auth error:', err);
+    setAuthStatus(err.message || 'Guest login failed');
+    btn.disabled = false;
+  }
 });
 
 // ── Boot auth flow ───────────────────────────────
 (async function initAuth() {
   const params = new URLSearchParams(location.search);
+  // Pick up SSO tokens from redirects (Google OAuth, cross-app SSO, etc.)
   const incomingToken = params.get('token') || params.get('sso_token');
+  const incomingGrudgeId = params.get('grudge_id') || params.get('grudgeId');
+  const incomingUsername = params.get('grudge_username') || params.get('username');
 
-  // Case 1: Returning from id.grudge-studio.com with a token in the URL
+  // Case 1: Returning from OAuth/SSO with a token in the URL
   if (incomingToken) {
     storeAuth(incomingToken, null);
+    // Store any extra params from the redirect
+    if (incomingGrudgeId) localStorage.setItem('grudge_id', incomingGrudgeId);
+    if (incomingUsername) localStorage.setItem('grudge_username', incomingUsername);
+    // Fetch full profile
     const user = await fetchUserProfile(incomingToken);
     if (user) {
       storeAuth(incomingToken, user);
-      history.replaceState({}, '', location.pathname);
-      showLoggedIn(user);
     } else {
-      history.replaceState({}, '', location.pathname);
-      showLoggedOut();
+      // Build user from URL params
+      storeAuth(incomingToken, {
+        grudgeId: incomingGrudgeId || '',
+        username: incomingUsername || 'Warlord'
+      });
     }
+    // Clean URL
+    history.replaceState({}, '', location.pathname);
+    showLoggedIn(getUser() || { username: incomingUsername || 'Warlord', grudgeId: incomingGrudgeId || '' });
     return;
   }
 
   // Case 2: Already have a token in localStorage
   const existingToken = getToken();
   if (existingToken) {
-    // Verify it's still valid
     const valid = await verifyToken(existingToken);
     if (valid) {
-      // We have a valid token — try to get/refresh user profile
       let user = getUser();
       if (!user || !user.username) {
         user = await fetchUserProfile(existingToken);
@@ -273,12 +476,11 @@ document.getElementById('login-btn').addEventListener('click', function(e) {
         return;
       }
     }
-    // Token invalid or can't get user — clear and show login
-    localStorage.removeItem('grudge_auth_token');
-    localStorage.removeItem('grudge_user');
+    // Token invalid — clear and show login
+    clearAuth();
   }
 
-  // Case 3: No token at all
+  // Case 3: No token — show auth gate
   showLoggedOut();
 })();
 
