@@ -2,9 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Grudge Arena — PvP Combat</title>
+  <meta name="description" content="Grudge Arena — 3D PvP combat arena with 6 playable races, 5 weapon classes, and real-time multiplayer. Built on Grudge Studio.">
+  <meta name="theme-color" content="#07070f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta property="og:title" content="Grudge Arena — PvP Combat">
+  <meta property="og:description" content="3D PvP combat arena with 6 playable races and 5 weapon classes">
+  <meta property="og:image" content="/grudge-logo.png">
+  <meta property="og:type" content="website">
   <link rel="icon" type="image/png" href="/grudge-logo.png">
+  <link rel="apple-touch-icon" href="/grudge-logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -123,8 +134,88 @@
     .back-link:hover { color: var(--gold); }
 
     /* Game canvas container */
-    #game-root { width: 100vw; height: 100vh; display: none; }
+    #game-root {
+      position: fixed; inset: 0; width: 100vw; height: 100dvh;
+      display: none; overflow: hidden; touch-action: none;
+    }
     #game-root.active { display: block; }
+    #game-root canvas { display: block; width: 100%; height: 100%; }
+
+    /* Loading overlay */
+    #loading-overlay {
+      position: fixed; inset: 0; z-index: 90;
+      background: var(--void); display: none;
+      flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem;
+    }
+    #loading-overlay.active { display: flex; }
+    .loading-spinner {
+      width: 48px; height: 48px; border: 3px solid var(--border-dim);
+      border-top-color: var(--ember); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text {
+      font-family: var(--font-title); font-size: 0.85rem;
+      color: var(--text-muted); letter-spacing: 0.08em;
+    }
+    .loading-progress {
+      width: 200px; height: 3px; background: var(--border-dim); border-radius: 3px; overflow: hidden;
+    }
+    .loading-progress-bar {
+      height: 100%; width: 0%; background: linear-gradient(90deg, var(--ember), var(--gold));
+      transition: width 0.3s ease;
+    }
+
+    /* Game HUD */
+    #gameUI {
+      display: none; position: fixed; inset: 0; z-index: 50;
+      pointer-events: none; font-family: var(--font-ui);
+    }
+    #gameUI > * { pointer-events: auto; }
+    .hud-top-left {
+      position: absolute; top: 16px; left: 16px;
+    }
+    .hud-label {
+      font-family: var(--font-title); font-size: 14px; color: var(--gold-light);
+      letter-spacing: 2px; text-shadow: 0 0 10px rgba(201,168,76,0.3);
+    }
+    .hud-sub {
+      font-size: 11px; color: rgba(232,220,200,0.5); margin-top: 4px;
+    }
+    .hud-bars {
+      position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; gap: 4px; width: 320px; max-width: 80vw;
+    }
+    .bar-row { display: flex; align-items: center; gap: 8px; }
+    .bar-label { width: 48px; font-size: 10px; color: var(--text-dim); text-align: right; text-transform: uppercase; letter-spacing: 0.05em; }
+    .bar-track { flex: 1; height: 8px; background: rgba(0,0,0,0.5); border-radius: 4px; overflow: hidden; border: 1px solid var(--border-dim); }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }
+    #healthBar { background: linear-gradient(90deg, #8B0000, #cc2222); width: 100%; }
+    #manaBar { background: linear-gradient(90deg, #1a3a8a, #4488ff); width: 100%; }
+    #energyBar { background: linear-gradient(90deg, #8a6e14, #f0c060); width: 100%; }
+    #rageBar { background: linear-gradient(90deg, #6b1010, #ff3333); width: 0%; }
+    .hud-weapons {
+      position: absolute; bottom: 16px; right: 16px;
+      display: flex; gap: 6px;
+    }
+    .weapon-slot {
+      width: 48px; height: 48px; border: 2px solid var(--border-dim); border-radius: 8px;
+      background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center;
+      font-size: 11px; color: var(--text-dim); cursor: pointer; transition: 0.15s;
+    }
+    .weapon-slot.active { border-color: var(--ember); color: var(--gold-light); background: rgba(219,99,49,0.1); }
+    #abilityBar {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 6px;
+    }
+    .ability-slot {
+      width: 52px; height: 52px; border: 2px solid var(--border-dim); border-radius: 8px;
+      background: rgba(0,0,0,0.5); display: flex; flex-direction: column;
+      align-items: center; justify-content: center; cursor: pointer; transition: 0.15s;
+    }
+    .ability-slot:hover { border-color: var(--gold); }
+    .ability-key { font-size: 13px; font-weight: 700; color: var(--gold-light); }
+    .ability-name { font-size: 7px; color: var(--text-dim); margin-top: 2px; text-align: center; }
   </style>
 </head>
 <body>
@@ -209,8 +300,36 @@
   </div>
 </div>
 
+<!-- ═══ LOADING OVERLAY ═══ -->
+<div id="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loading-text">Loading arena...</div>
+  <div class="loading-progress"><div class="loading-progress-bar" id="loading-bar"></div></div>
+</div>
+
 <!-- ═══ GAME CANVAS ═══ -->
-<div id="game-root"></div>
+<div id="game-root">
+  <canvas id="arena-canvas"></canvas>
+</div>
+
+<!-- ═══ GAME HUD ═══ -->
+<div id="gameUI">
+  <div class="hud-top-left">
+    <div class="hud-label">GRUDGE ARENA</div>
+    <div class="hud-sub" id="hud-player-info"></div>
+  </div>
+  <div class="hud-bars">
+    <div class="bar-row"><span class="bar-label">Health</span><div class="bar-track"><div class="bar-fill" id="healthBar"></div></div></div>
+    <div class="bar-row"><span class="bar-label">Mana</span><div class="bar-track"><div class="bar-fill" id="manaBar"></div></div></div>
+    <div class="bar-row"><span class="bar-label">Energy</span><div class="bar-track"><div class="bar-fill" id="energyBar"></div></div></div>
+    <div class="bar-row"><span class="bar-label">Rage</span><div class="bar-track"><div class="bar-fill" id="rageBar"></div></div></div>
+  </div>
+  <div class="hud-weapons">
+    <div class="weapon-slot active" id="weapon1">1</div>
+    <div class="weapon-slot" id="weapon2">2</div>
+  </div>
+  <div id="abilityBar"></div>
+</div>
 
 <script type="module">
 // ── Grudge Auth ──────────────────────────────────────
@@ -491,10 +610,10 @@ window.selectRace = function(el) {
   selectedRace = el.dataset.race;
 };
 
-// ── Enter Arena ──────────────────────────────────────
+// ── Enter Arena ──────────────────────────────
 window.enterArena = function() {
   document.getElementById('lobby-overlay').classList.add('hidden');
-  document.getElementById('game-root').classList.add('active');
+  document.getElementById('loading-overlay').classList.add('active');
   loadArenaGame(selectedRace);
 };
 
@@ -540,202 +659,61 @@ window.joinQueue = async function() {
   }
 };
 
-// ── Load Arena Game ──────────────────────────────────
+// ── Load Arena Game ──────────────────────────
+function setLoadingProgress(pct, text) {
+  const bar = document.getElementById('loading-bar');
+  const label = document.getElementById('loading-text');
+  if (bar) bar.style.width = pct + '%';
+  if (label && text) label.textContent = text;
+}
+
 async function loadArenaGame(race, matchData) {
   const root = document.getElementById('game-root');
+  const playerName = grudgeUser?.username || 'Warlord';
+  const raceName = race.charAt(0).toUpperCase() + race.slice(1);
 
-  // Race model paths
-  const RACE_MODELS = {
-    human: '/models/human.glb',
-    barbarian: '/models/barbarian.glb',
-    elf: '/models/elf.glb',
-    dwarf: '/models/dwarf.glb',
-    orc: '/models/orc.glb',
-    undead: '/models/undead.glb',
-  };
-
-  // Dynamic import the game engine
-  try {
-    const gameModule = await import('./game.js');
-    if (gameModule.default || gameModule.GrudgeArena || gameModule.init) {
-      const init = gameModule.default || gameModule.GrudgeArena || gameModule.init;
-      if (typeof init === 'function') {
-        init({
-          container: root,
-          race: race,
-          modelPath: RACE_MODELS[race],
-          animationLibrary: '/models/animations/AnimationLibrary.glb',
-          playerName: grudgeUser?.username || 'Warlord',
-          grudgeId: grudgeUser?.grudgeId || localStorage.getItem('grudge_id') || '',
-          matchData: matchData || null,
-          wsUrl: WS_URL,
-          token: getToken(),
-        });
-        return;
-      }
-    }
-  } catch (e) {
-    console.warn('[arena] game.js module import failed, loading inline:', e.message);
-  }
-
-  // Fallback: load the arena as an iframe from the original HTML
-  console.log('[arena] Loading Three.js arena for race:', race);
-
-  // Import Three.js directly and set up a basic arena scene
-  const THREE = await import('https://unpkg.com/three@0.160.0/build/three.module.js');
-  const { OrbitControls } = await import('https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js');
-  const { GLTFLoader } = await import('https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js');
-
-  // Scene setup
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a0a1a);
-  scene.fog = new THREE.Fog(0x0a0a1a, 50, 200);
-
-  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
-  camera.position.set(0, 12, 18);
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.2;
-  root.appendChild(renderer.domElement);
-
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
-  controls.maxPolarAngle = Math.PI / 2.1;
-  controls.minDistance = 5;
-  controls.maxDistance = 50;
-  controls.target.set(0, 1, 0);
-
-  // Lighting
-  const ambientLight = new THREE.AmbientLight(0x334466, 0.5);
-  scene.add(ambientLight);
-
-  const dirLight = new THREE.DirectionalLight(0xffeedd, 1.5);
-  dirLight.position.set(30, 50, 20);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(2048, 2048);
-  dirLight.shadow.camera.near = 1;
-  dirLight.shadow.camera.far = 150;
-  dirLight.shadow.camera.left = dirLight.shadow.camera.bottom = -60;
-  dirLight.shadow.camera.right = dirLight.shadow.camera.top = 60;
-  scene.add(dirLight);
-
-  const rimLight = new THREE.DirectionalLight(0x8866ff, 0.4);
-  rimLight.position.set(-20, 30, -30);
-  scene.add(rimLight);
-
-  // Arena ground
-  const groundGeo = new THREE.CircleGeometry(60, 64);
-  const groundMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.8, metalness: 0.2 });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // Arena ring (gold border)
-  const ringGeo = new THREE.RingGeometry(59, 60, 64);
-  const ringMat = new THREE.MeshStandardMaterial({ color: 0xc9a84c, emissive: 0x8b6914, emissiveIntensity: 0.3, metalness: 0.8, roughness: 0.3 });
-  const ring = new THREE.Mesh(ringGeo, ringMat);
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.01;
-  scene.add(ring);
-
-  // Grid lines on the arena floor
-  const gridHelper = new THREE.GridHelper(120, 30, 0x222244, 0x111133);
-  gridHelper.position.y = 0.02;
-  scene.add(gridHelper);
-
-  // Pillars around the arena
-  for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
-    const pillarGeo = new THREE.CylinderGeometry(1.2, 1.5, 8, 8);
-    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x333355, roughness: 0.6, metalness: 0.4 });
-    const pillar = new THREE.Mesh(pillarGeo, pillarMat);
-    pillar.position.set(Math.cos(angle) * 55, 4, Math.sin(angle) * 55);
-    pillar.castShadow = true;
-    scene.add(pillar);
-
-    // Torch light on each pillar
-    const torchLight = new THREE.PointLight(0xff6622, 1.5, 20);
-    torchLight.position.set(Math.cos(angle) * 55, 9, Math.sin(angle) * 55);
-    scene.add(torchLight);
-  }
-
-  // Load race character model
-  const loader = new GLTFLoader();
-  let playerModel = null;
-  let mixer = null;
+  setLoadingProgress(10, 'Loading game engine...');
 
   try {
-    const gltf = await new Promise((resolve, reject) => {
-      loader.load(RACE_MODELS[race], resolve, undefined, reject);
-    });
-    playerModel = gltf.scene;
-    playerModel.scale.setScalar(1);
-    playerModel.position.set(0, 0, 0);
-    playerModel.castShadow = true;
-    playerModel.traverse(child => {
-      if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
-    });
-    scene.add(playerModel);
+    // Import the game engine (bundled by Vite from game.js)
+    const { GrudgeArena } = await import('./game.js');
+    setLoadingProgress(40, 'Initializing arena...');
 
-    // Play idle animation if available
-    if (gltf.animations.length > 0) {
-      mixer = new THREE.AnimationMixer(playerModel);
-      const idle = gltf.animations.find(a => a.name.toLowerCase().includes('idle')) || gltf.animations[0];
-      mixer.clipAction(idle).play();
-    }
+    const arena = new GrudgeArena({
+      container: root,
+      race: race,
+      playerName: playerName,
+      grudgeId: grudgeUser?.grudgeId || localStorage.getItem('grudge_id') || '',
+      matchData: matchData || null,
+      wsUrl: WS_URL,
+      token: getToken(),
+    });
 
-    controls.target.copy(playerModel.position);
-    controls.target.y = 1.5;
-    camera.position.set(0, 8, 12);
-    console.log('[arena] Loaded race model:', race, '- Animations:', gltf.animations.map(a => a.name));
+    setLoadingProgress(60, 'Building world...');
+    await arena.init();
+
+    setLoadingProgress(100, 'Ready!');
+
+    // Update HUD player info
+    const hudInfo = document.getElementById('hud-player-info');
+    if (hudInfo) hudInfo.textContent = playerName + ' · ' + raceName;
+
+    // Transition: hide loading, show game
+    setTimeout(() => {
+      document.getElementById('loading-overlay').classList.remove('active');
+      root.classList.add('active');
+    }, 300);
+
+    console.log('[arena] Game loaded —', raceName);
   } catch (err) {
-    console.error('[arena] Failed to load model:', err);
-    // Placeholder capsule
-    const capsuleGeo = new THREE.CapsuleGeometry(0.4, 1.2, 8, 16);
-    const capsuleMat = new THREE.MeshStandardMaterial({ color: 0xc9a84c, emissive: 0x8b6914, emissiveIntensity: 0.2 });
-    playerModel = new THREE.Mesh(capsuleGeo, capsuleMat);
-    playerModel.position.set(0, 1, 0);
-    playerModel.castShadow = true;
-    scene.add(playerModel);
+    console.error('[arena] Failed to load game engine:', err);
+    setLoadingProgress(100, 'Loading failed — ' + (err.message || 'unknown error'));
+    // Show retry after 2s
+    setTimeout(() => {
+      document.getElementById('loading-overlay').classList.remove('active');
+      document.getElementById('lobby-overlay').classList.remove('hidden');
+    }, 3000);
   }
-
-  // HUD overlay
-  const hud = document.createElement('div');
-  hud.style.cssText = 'position:fixed;top:16px;left:16px;z-index:50;pointer-events:none;';
-  hud.innerHTML = `
-    <div style="font-family:'Cinzel',serif;font-size:14px;color:#f0c060;letter-spacing:2px;text-shadow:0 0 10px rgba(201,168,76,0.3);">
-      GRUDGE ARENA
-    </div>
-    <div style="font-family:'Inter',sans-serif;font-size:11px;color:rgba(232,220,200,0.5);margin-top:4px;">
-      ${grudgeUser?.username || 'Warlord'} · ${race.charAt(0).toUpperCase() + race.slice(1)}
-    </div>
-  `;
-  document.body.appendChild(hud);
-
-  // Render loop
-  const clock = new THREE.Clock();
-  function animate() {
-    requestAnimationFrame(animate);
-    const delta = clock.getDelta();
-    if (mixer) mixer.update(delta);
-    controls.update();
-    renderer.render(scene, camera);
-  }
-  animate();
-
-  // Resize handler
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
 }
 </script>
 </body>

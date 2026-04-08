@@ -1642,7 +1642,9 @@ function createSkybox(scene) {
 // ============================================================================
 
 class GrudgeArena {
-  constructor() {
+  constructor(config = {}) {
+    this.config = config;
+    this.container = config.container || document.getElementById('game-root') || document.getElementById('root') || document.body;
     this.scene = null;
     this.camera = null;
     this.renderer = null;
@@ -1671,7 +1673,11 @@ class GrudgeArena {
     };
   }
   
-  async init() {
+  async init(config) {
+    if (config) {
+      Object.assign(this.config, config);
+      if (config.container) this.container = config.container;
+    }
     this.setupRenderer();
     this.setupScene();
     this.setupLighting();
@@ -1689,26 +1695,40 @@ class GrudgeArena {
     
     createSkybox(this.scene);
     
-    document.getElementById('gameUI').style.display = 'block';
+    const gameUI = document.getElementById('gameUI');
+    if (gameUI) gameUI.style.display = 'block';
     
     this.animate();
     
-    console.log('Grudge Arena initialized successfully!');
-    console.log('Controls: WASD to move, Shift to sprint, Q/E/R/F for abilities, Click to attack');
+    console.log('[arena] Grudge Arena initialized — race:', this.config.race || 'human');
+    console.log('[arena] Controls: WASD move, Shift sprint, Q/E/R/F abilities, Click attack');
   }
   
   setupRenderer() {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    // Use an existing <canvas> if present, otherwise create one
+    const existingCanvas = this.container.querySelector('canvas');
+    const opts = { antialias: true, alpha: false, powerPreference: 'high-performance' };
+    if (existingCanvas) opts.canvas = existingCanvas;
+
+    this.renderer = new THREE.WebGLRenderer(opts);
+    this.renderer.setSize(this.container.clientWidth || window.innerWidth, this.container.clientHeight || window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.getElementById('root').appendChild(this.renderer.domElement);
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.2;
+
+    if (!existingCanvas) {
+      this.renderer.domElement.style.display = 'block';
+      this.container.appendChild(this.renderer.domElement);
+    }
     
     window.addEventListener('resize', () => {
-      this.camera.aspect = window.innerWidth / window.innerHeight;
+      const w = this.container.clientWidth || window.innerWidth;
+      const h = this.container.clientHeight || window.innerHeight;
+      this.camera.aspect = w / h;
       this.camera.updateProjectionMatrix();
-      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.renderer.setSize(w, h);
     });
   }
   
@@ -2335,24 +2355,31 @@ class GrudgeArena {
   updateUI() {
     const health = this.playerEntity.getComponent('Health');
     const resources = this.playerEntity.getComponent('Resources');
-    const abilityState = this.playerEntity.getComponent('AbilityState');
+    
+    const safeSet = (id, pct, extra) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.width = `${pct}%`;
+      if (extra) el.dataset.health = extra;
+    };
     
     const healthPercent = (health.current / health.max) * 100;
-    document.getElementById('healthBar').style.width = `${healthPercent}%`;
-    document.getElementById('healthBar').dataset.health = `${Math.round(health.current)}/${health.max}`;
-    
-    document.getElementById('manaBar').style.width = `${(resources.mana.current / resources.mana.max) * 100}%`;
-    document.getElementById('energyBar').style.width = `${(resources.energy.current / resources.energy.max) * 100}%`;
-    document.getElementById('rageBar').style.width = `${(resources.rage.current / resources.rage.max) * 100}%`;
+    safeSet('healthBar', healthPercent, `${Math.round(health.current)}/${health.max}`);
+    safeSet('manaBar', (resources.mana.current / resources.mana.max) * 100);
+    safeSet('energyBar', (resources.energy.current / resources.energy.max) * 100);
+    safeSet('rageBar', (resources.rage.current / resources.rage.max) * 100);
   }
   
   updateWeaponUI() {
     const weaponState = this.playerEntity.getComponent('WeaponState');
-    document.getElementById('weapon1').classList.toggle('active', weaponState.activeSlot === 'primary');
-    document.getElementById('weapon2').classList.toggle('active', weaponState.activeSlot === 'secondary');
+    const w1 = document.getElementById('weapon1');
+    const w2 = document.getElementById('weapon2');
+    if (w1) w1.classList.toggle('active', weaponState.activeSlot === 'primary');
+    if (w2) w2.classList.toggle('active', weaponState.activeSlot === 'secondary');
     
     const weapon = this.getCurrentWeapon();
     const abilityBar = document.getElementById('abilityBar');
+    if (!abilityBar) return;
     abilityBar.innerHTML = '';
     
     for (const [key, ability] of Object.entries(weapon.abilities)) {
