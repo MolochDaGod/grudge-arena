@@ -1693,9 +1693,9 @@ class GrudgeArena {
   
   createInputState() {
     return {
-      keys: { w: false, a: false, s: false, d: false, shift: false, space: false },
+      keys: { w: false, a: false, s: false, d: false, shift: false, space: false, ctrl: false, alt: false },
       mouse: { x: 0, y: 0, leftButton: false, rightButton: false },
-      abilities: { q: false, e: false, r: false, f: false, p: false },
+      abilities: { 1: false, 2: false, 3: false, 4: false, 5: false },
       weaponSlot: 1
     };
   }
@@ -1858,34 +1858,66 @@ class GrudgeArena {
     this.scene.add(warmFill);
   }
   
+  /**
+   * Keybindings:
+   *   WASD     = move
+   *   Shift    = sprint
+   *   Ctrl     = roll (dodge forward)
+   *   Alt      = dodge backward
+   *   1-5      = skills (weapon abilities)
+   *   E,R,F    = skills 3,4,5 (alternates)
+   *   LMB      = select target (handled by TargetSystem click)
+   *   RMB      = normal attack
+   *   Wheel    = zoom camera in/out
+   *   Tab      = cycle enemy targets
+   *   Shift+Tab= cycle ally targets
+   *   F1/F2/F3 = self/ally1/ally2
+   *   Esc      = deselect
+   */
   setupInput() {
+    // Skill key → ability slot mapping
+    const SKILL_MAP = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, 'e': 2, 'r': 3, 'f': 4 };
+    const ABILITY_KEYS = ['Q', 'E', 'R', 'F', 'P']; // internal ability keys on weapon defs
+
     document.addEventListener('keydown', (e) => {
       const key = e.key.toLowerCase();
+      
+      // Movement keys
       if (key in this.inputState.keys) this.inputState.keys[key] = true;
-      if (key === 'shift') this.inputState.keys.shift = true;
+      if (e.key === 'Shift') this.inputState.keys.shift = true;
+      if (e.key === 'Control') this.inputState.keys.ctrl = true;
+      if (e.key === 'Alt') { this.inputState.keys.alt = true; e.preventDefault(); }
       if (key === ' ') this.inputState.keys.space = true;
-      if (['q', 'e', 'r', 'f', 'p'].includes(key)) {
-        this.inputState.abilities[key] = true;
-        this.useAbility(key.toUpperCase());
+      
+      // Skill keys: 1-5 and E/R/F alternates
+      if (key in SKILL_MAP) {
+        const slot = SKILL_MAP[key];
+        const abilityKey = ABILITY_KEYS[slot];
+        if (abilityKey) this.useAbility(abilityKey);
       }
-      if (key === '1') this.switchWeapon(1);
-      if (key === '2') this.switchWeapon(2);
+      
+      // Ctrl = roll forward
+      if (e.key === 'Control' && !e.repeat) this.performRoll(1);
+      // Alt = dodge backward
+      if (e.key === 'Alt' && !e.repeat) this.performRoll(-1);
     });
     
     document.addEventListener('keyup', (e) => {
       const key = e.key.toLowerCase();
       if (key in this.inputState.keys) this.inputState.keys[key] = false;
-      if (key === 'shift') this.inputState.keys.shift = false;
+      if (e.key === 'Shift') this.inputState.keys.shift = false;
+      if (e.key === 'Control') this.inputState.keys.ctrl = false;
+      if (e.key === 'Alt') this.inputState.keys.alt = false;
       if (key === ' ') this.inputState.keys.space = false;
-      if (['q', 'e', 'r', 'f', 'p'].includes(key)) this.inputState.abilities[key] = false;
     });
     
+    // RMB = normal attack, LMB = select (target system handles LMB click)
     document.addEventListener('mousedown', (e) => {
-      if (e.button === 0) {
-        this.inputState.mouse.leftButton = true;
+      if (e.button === 0) this.inputState.mouse.leftButton = true;
+      if (e.button === 2) {
+        this.inputState.mouse.rightButton = true;
         this.performAttack();
       }
-      if (e.button === 2) this.inputState.mouse.rightButton = true;
     });
     
     document.addEventListener('mouseup', (e) => {
@@ -1894,6 +1926,36 @@ class GrudgeArena {
     });
     
     document.addEventListener('contextmenu', (e) => e.preventDefault());
+    
+    // Mouse wheel = zoom camera
+    document.addEventListener('wheel', (e) => {
+      if (this.chaseCamera) {
+        this.chaseCamera.distance += e.deltaY * 0.005;
+        this.chaseCamera.distance = Math.max(3, Math.min(15, this.chaseCamera.distance));
+      }
+    }, { passive: true });
+  }
+  
+  /** Roll/dodge: direction = 1 (forward) or -1 (backward) */
+  performRoll(direction) {
+    if (!this.playerUnit || this.playerEntity?.hasTag('dead')) return;
+    const mesh = this.playerUnit.mesh;
+    const controller = this.playerUnit.controller;
+    if (!mesh) return;
+    
+    // Play dodge/roll animation
+    const animName = controller?.actions.has('dodge') ? 'dodge' : 'jump';
+    if (controller) controller.playOnce(animName, 1.5);
+    
+    // Dash in facing direction * direction
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(mesh.quaternion);
+    const dashDist = 5 * direction;
+    mesh.position.addScaledVector(forward, dashDist);
+    
+    // Clamp to arena
+    const limit = 35;
+    mesh.position.x = Math.max(-limit, Math.min(limit, mesh.position.x));
+    mesh.position.z = Math.max(-limit, Math.min(limit, mesh.position.z));
   }
   
   createFallbackArena() {
@@ -2064,38 +2126,66 @@ class GrudgeArena {
   }
   
   useAbility(key) {
+    if (!this.playerUnit || !this.playerEntity) return;
     const weapon = this.getCurrentWeapon();
+    if (!weapon) return;
     const ability = weapon.abilities[key];
     if (!ability) return;
     
     const abilityState = this.playerEntity.getComponent('AbilityState');
-    if (abilityState.cooldowns[key] > 0) {
-      console.log(`${ability.name} on cooldown`);
-      return;
-    }
+    if (!abilityState) return;
+    if (abilityState.cooldowns[key] > 0) return; // On cooldown
     
     const resources = this.playerEntity.getComponent('Resources');
-    if (ability.cost && ability.costType) {
+    if (ability.cost && ability.costType && resources) {
       const resource = resources[ability.costType];
-      if (resource.current < ability.cost) {
-        console.log(`Not enough ${ability.costType} for ${ability.name}`);
-        return;
-      }
-      resource.current -= ability.cost;
+      if (resource && resource.current < ability.cost) return; // Not enough resource
+      if (resource) resource.current -= ability.cost;
     }
     
     abilityState.cooldowns[key] = ability.cooldown;
     
-    console.log(`Used ${ability.name}!`);
+    // Play skill animation based on ability effect
+    const controller = this.playerUnit.controller;
+    if (controller) {
+      const skillAnim = this._getSkillAnim(ability.effect);
+      controller.playOnce(skillAnim, 1.0);
+    }
+    
     this.executeAbility(ability, key);
     this.updateUI();
   }
   
+  /** Map ability effect type → animation state */
+  _getSkillAnim(effect) {
+    switch (effect) {
+      case 'fireball': case 'dot_projectile': case 'lifesteal_projectile':
+      case 'multi_projectile': case 'debuff_target':
+        return 'cast';       // ranged spell cast
+      case 'frost_nova': case 'meteor': case 'aoe_zone':
+        return 'aoe';        // area cast
+      case 'shield': case 'buff_damage': case 'reset_cooldowns':
+        return 'block';      // defensive/buff
+      case 'dash': case 'blink': case 'teleport_behind':
+        return 'dodge';      // movement skill
+      case 'aoe_melee': case 'execute':
+        return 'spin';       // melee AoE
+      case 'aoe_strike':
+        return 'kick';       // big melee hit
+      case 'stealth':
+        return 'crouch';     // stealth
+      default:
+        return 'attack1';    // generic skill
+    }
+  }
+  
   executeAbility(ability, key) {
-    const transform = this.playerEntity.getComponent('Transform');
-    const mesh = this.playerEntity.getComponent('RenderMesh').mesh;
+    if (!this.playerUnit) return;
+    const mesh = this.playerUnit.mesh;
+    if (!mesh) return;
     const position = mesh.position.clone();
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(mesh.quaternion);
+    const target = this.targeting?.currentTarget;
     
     switch (ability.effect) {
       case 'fireball':
@@ -2452,24 +2542,31 @@ class GrudgeArena {
   }
   
   updateWeaponUI() {
+    if (!this.playerEntity) return;
     const weaponState = this.playerEntity.getComponent('WeaponState');
+    if (!weaponState) return;
     const w1 = document.getElementById('weapon1');
     const w2 = document.getElementById('weapon2');
     if (w1) w1.classList.toggle('active', weaponState.activeSlot === 'primary');
     if (w2) w2.classList.toggle('active', weaponState.activeSlot === 'secondary');
     
     const weapon = this.getCurrentWeapon();
+    if (!weapon) return;
     const abilityBar = document.getElementById('abilityBar');
     if (!abilityBar) return;
     abilityBar.innerHTML = '';
     
-    for (const [key, ability] of Object.entries(weapon.abilities)) {
+    // Map weapon abilities to 1-5 keys
+    const entries = Object.entries(weapon.abilities);
+    entries.forEach(([key, ability], index) => {
+      const slotKey = index + 1; // 1, 2, 3, 4, 5
       const slot = document.createElement('div');
       slot.className = 'ability-slot';
-      slot.innerHTML = `<span class="ability-key">${key}</span><span class="ability-name">${ability.name}</span>`;
-      slot.title = ability.description;
+      slot.innerHTML = `<span class="ability-key">${slotKey}</span><span class="ability-name">${ability.name}</span>`;
+      slot.title = `[${slotKey}] ${ability.name}: ${ability.description}`;
+      slot.addEventListener('click', () => this.useAbility(key));
       abilityBar.appendChild(slot);
-    }
+    });
   }
   
   animate() {
