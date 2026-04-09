@@ -4,11 +4,20 @@
   "framework": "vite",
   "rewrites": [
     { "source": "/api/auth/:path*", "destination": "https://id.grudge-studio.com/auth/:path*" },
+    { "source": "/api/login", "destination": "https://id.grudge-studio.com/auth/login" },
+    { "source": "/api/register", "destination": "https://id.grudge-studio.com/auth/register" },
+    { "source": "/api/guest", "destination": "https://id.grudge-studio.com/auth/guest" },
     { "source": "/api/oauth-google", "destination": "https://id.grudge-studio.com/auth/google?redirect_uri=https://grudge-arena.vercel.app" },
     { "source": "/api/oauth-discord", "destination": "https://id.grudge-studio.com/auth/discord?redirect_uri=https://grudge-arena.vercel.app" },
-    { "source": "/api/guest", "destination": "https://id.grudge-studio.com/auth/guest" },
+    { "source": "/api/oauth-github", "destination": "https://id.grudge-studio.com/auth/github?redirect_uri=https://grudge-arena.vercel.app" },
+    { "source": "/api/wallet", "destination": "https://api.grudge-studio.com/wallet" },
     { "source": "/api/wallet/:path*", "destination": "https://api.grudge-studio.com/wallet/:path*" },
     { "source": "/api/account/:path*", "destination": "https://api.grudge-studio.com/api/account/:path*" },
+    { "source": "/api/characters/:path*", "destination": "https://api.grudge-studio.com/api/characters/:path*" },
+    { "source": "/api/characters", "destination": "https://api.grudge-studio.com/api/characters" },
+    { "source": "/api/nfts/:path*", "destination": "https://api.grudge-studio.com/api/nfts/:path*" },
+    { "source": "/api/game/:path*", "destination": "https://api.grudge-studio.com/:path*" },
+    { "source": "/api/assets/:path*", "destination": "https://assets.grudge-studio.com/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
@@ -16,6 +25,18 @@
       "source": "/models/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=86400" }
+      ]
+    },
+    {
+      "source": "/assets/animations/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=604800, immutable" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)\.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     }
   ]
