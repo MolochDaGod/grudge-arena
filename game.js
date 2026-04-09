@@ -1641,6 +1641,20 @@ function createSkybox(scene) {
 // SECTION 11: MAIN GAME CLASS
 // ============================================================================
 
+/** Static spawn helpers (duplicated from arenaMatch.js for fallback use) */
+const ArenaMatchStatic = {
+  getSpawnPosition(teamId, slot, teamSize) {
+    const xSign = teamId === 'A' ? -1 : 1;
+    const baseX = 15 * xSign;
+    const spacing = 4;
+    const zOffset = (slot - (teamSize - 1) / 2) * spacing;
+    return new THREE.Vector3(baseX, 0, zOffset);
+  },
+  getSpawnFacing(teamId) {
+    return teamId === 'A' ? Math.PI / 2 : -Math.PI / 2;
+  },
+};
+
 class GrudgeArena {
   constructor(config = {}) {
     this.config = config;
@@ -1654,14 +1668,19 @@ class GrudgeArena {
     this.collisionSystem = new CollisionSystem();
     this.particleSystem = null;
     this.spriteSystem = null;
-    this.mouseSystem = null;
     this.chaseCamera = null;
     
+    // Arena systems (imported dynamically to keep game.js working even if modules fail)
+    this.match = null;
+    this.targeting = null;
+    this.arenaAI = null;
+    
     this.playerEntity = null;
+    this.playerUnit = null; // { entity, mesh, controller, team, isPlayer, weaponDef }
+    this.allUnits = [];     // all arena units (both teams)
     this.inputState = this.createInputState();
     
     this.projectiles = [];
-    this.enemies = [];
   }
   
   createInputState() {
@@ -1686,22 +1705,76 @@ class GrudgeArena {
     this.particleSystem = new ParticleSystem(this.scene);
     this.spriteSystem = new SpriteSystem(this.scene);
     
-    this.createArena();
-    this.createPlayer();
-    this.createEnemies();
-    
-    this.mouseSystem = new MouseSystem(this.camera, this.scene, this.renderer);
-    this.chaseCamera = new ChaseCamera(this.camera, this.playerEntity.getComponent('RenderMesh').mesh);
-    
+    this.createFallbackArena();
     createSkybox(this.scene);
     
-    const gameUI = document.getElementById('gameUI');
-    if (gameUI) gameUI.style.display = 'block';
+    // Load arena systems
+    try {
+      const [matchMod, targetMod, aiMod, modelMod] = await Promise.all([
+        import('./src/arenaMatch.js'),
+        import('./src/targetSystem.js'),
+        import('./src/arenaAI.js'),
+        import('./src/modelLoader.js'),
+      ]);
+      
+      this.match = new matchMod.ArenaMatch();
+      this.arenaAI = new aiMod.ArenaAI();
+      
+      // Default 3v3 composition
+      const race = this.config.race || 'human';
+      const TEAM_A_COMP = [
+        { race, weapon: 'greatsword', isPlayer: true },
+        { race: 'elf', weapon: 'bow', isPlayer: false },
+        { race: 'undead', weapon: 'scythe', isPlayer: false },
+      ];
+      const TEAM_B_COMP = [
+        { race: 'orc', weapon: 'greatsword', isPlayer: false },
+        { race: 'barbarian', weapon: 'sabres', isPlayer: false },
+        { race: 'dwarf', weapon: 'runeblade', isPlayer: false },
+      ];
+      
+      // Load all units in parallel
+      const teamAUnits = await Promise.all(
+        TEAM_A_COMP.map((comp, i) => this._createArenaUnit(comp, 'A', i, TEAM_A_COMP.length, modelMod))
+      );
+      const teamBUnits = await Promise.all(
+        TEAM_B_COMP.map((comp, i) => this._createArenaUnit(comp, 'B', i, TEAM_B_COMP.length, modelMod))
+      );
+      
+      this.allUnits = [...teamAUnits, ...teamBUnits];
+      this.playerUnit = this.allUnits.find(u => u.isPlayer);
+      this.playerEntity = this.playerUnit?.entity;
+      
+      // Setup targeting (after renderer is ready)
+      this.targeting = new targetMod.TargetSystem(this.camera, this.scene, this.renderer);
+      for (const u of this.allUnits) this.targeting.register(u);
+      
+      // Register AI units (all non-player units)
+      for (const u of this.allUnits) {
+        if (!u.isPlayer) this.arenaAI.register(u);
+      }
+      
+      // Setup match teams
+      this.match.registerTeams(teamAUnits, teamBUnits);
+      
+      // Chase camera on player
+      if (this.playerUnit) {
+        this.chaseCamera = new ChaseCamera(this.camera, this.playerUnit.mesh);
+      }
+      
+      // Show UI and start match
+      const gameUI = document.getElementById('gameUI');
+      if (gameUI) gameUI.style.display = 'block';
+      
+      this.match.start();
+      console.log('[arena] 3v3 Arena loaded — race:', race);
+    } catch (err) {
+      console.error('[arena] Failed to load arena systems, falling back:', err);
+      this._createFallbackPlayer();
+    }
     
     this.animate();
-    
-    console.log('[arena] Grudge Arena initialized — race:', this.config.race || 'human');
-    console.log('[arena] Controls: WASD move, Shift sprint, Q/E/R/F abilities, Click attack');
+    console.log('[arena] Controls: WASD move, Shift sprint, Tab target, Q/E/R/F abilities, Click attack');
   }
   
   setupRenderer() {
@@ -1805,46 +1878,49 @@ class GrudgeArena {
     document.addEventListener('contextmenu', (e) => e.preventDefault());
   }
   
-  createArena() {
-    const loader = new GLTFLoader();
-    loader.load('/arena/assets/maps/moba/scene.gltf', (gltf) => {
-      this.mapModel = gltf.scene;
-      this.mapModel.scale.setScalar(1);
-      this.mapModel.position.set(0, 0, 0);
-      
-      this.mapModel.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-          
-          if (child.name.toLowerCase().includes('ground') || 
-              child.name.toLowerCase().includes('floor') ||
-              child.name.toLowerCase().includes('terrain')) {
-            this.collisionSystem.addCollider(child, 'environment');
-          }
-        }
-      });
-      
-      this.scene.add(this.mapModel);
-      console.log('MOBA map loaded successfully');
-    }, undefined, (error) => {
-      console.warn('Failed to load MOBA map, creating fallback arena:', error);
-      this.createFallbackArena();
-    });
-    
-    this.createFallbackArena();
-  }
-  
   createFallbackArena() {
     const groundMaterial = createShaderMaterial('arenaGround');
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(240, 240, 64, 64),
+      new THREE.PlaneGeometry(80, 80, 32, 32),
       groundMaterial
     );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
     this.collisionSystem.addCollider(ground, 'environment');
+    
+    // Arena boundary ring
+    const ringGeo = new THREE.RingGeometry(38, 40, 64);
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0xc9a84c, emissive: 0x8b6914, emissiveIntensity: 0.3, metalness: 0.8, roughness: 0.3 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.01;
+    this.scene.add(ring);
+    
+    // Team spawn markers
+    for (const teamId of ['A', 'B']) {
+      for (let i = 0; i < 3; i++) {
+        const pos = ArenaMatchStatic.getSpawnPosition(teamId, i, 3);
+        const markerGeo = new THREE.RingGeometry(0.8, 1.0, 32);
+        const markerMat = new THREE.MeshBasicMaterial({
+          color: teamId === 'A' ? 0x3366ff : 0xff3333,
+          transparent: true, opacity: 0.4, side: THREE.DoubleSide
+        });
+        const marker = new THREE.Mesh(markerGeo, markerMat);
+        marker.rotation.x = -Math.PI / 2;
+        marker.position.copy(pos);
+        marker.position.y = 0.02;
+        this.scene.add(marker);
+      }
+    }
+    
+    // Pillars at arena edges
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const pillar = this.createPillar();
+      pillar.position.set(Math.cos(angle) * 35, 0, Math.sin(angle) * 35);
+      this.scene.add(pillar);
+    }
   }
   
   createPillar() {
@@ -1878,131 +1954,83 @@ class GrudgeArena {
     return group;
   }
   
-  createPlayer() {
-    const player = new THREE.Group();
+  /** Create a GLB-based arena unit (player or AI) */
+  async _createArenaUnit(comp, teamId, slot, teamSize, modelMod) {
+    const spawnPos = ArenaMatchStatic.getSpawnPosition(teamId, slot, teamSize);
+    const facing = ArenaMatchStatic.getSpawnFacing(teamId);
     
-    const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.4, 1, 8, 16),
-      new THREE.MeshStandardMaterial({
-        color: 0x3366ff,
-        metalness: 0.3,
-        roughness: 0.7,
-        emissive: 0x3366ff,
-        emissiveIntensity: 0.1
-      })
-    );
-    body.position.y = 1;
-    body.castShadow = true;
-    player.add(body);
+    const weaponDef = WeaponDefinitions[comp.weapon] || WeaponDefinitions[WeaponTypes.GREATSWORD];
     
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.3, 16, 16),
-      new THREE.MeshStandardMaterial({ color: 0xffcc88, metalness: 0.1, roughness: 0.8 })
-    );
-    head.position.y = 1.85;
-    head.castShadow = true;
-    player.add(head);
+    // Load GLB model + weapon animations
+    const { scene: mesh, mixer, controller } = await modelMod.createAnimatedUnit(comp.race, comp.weapon);
+    mesh.position.copy(spawnPos);
+    mesh.rotation.y = facing;
+    this.scene.add(mesh);
     
-    const indicator = new THREE.Mesh(
-      new THREE.RingGeometry(0.5, 0.7, 32),
-      new THREE.MeshBasicMaterial({ color: 0x3366ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
-    );
-    indicator.rotation.x = -Math.PI / 2;
-    indicator.position.y = 0.05;
-    player.add(indicator);
-    
-    const glow = new THREE.PointLight(0x3366ff, 0.5, 5);
-    glow.position.y = 1;
-    player.add(glow);
-    
-    this.scene.add(player);
-    
-    this.playerEntity = this.world.createEntity()
-      .addComponent('Transform', Components.Transform(0, 0, 0))
+    // Create ECS entity
+    const entity = this.world.createEntity()
+      .addComponent('Transform', Components.Transform(spawnPos.x, 0, spawnPos.z))
       .addComponent('Velocity', Components.Velocity())
       .addComponent('Health', Components.Health(1000))
       .addComponent('Shield', Components.Shield(200))
       .addComponent('Resources', Components.Resources())
       .addComponent('Collider', Components.Collider(0.5, 1.8))
       .addComponent('Movement', Components.Movement(5))
+      .addComponent('WeaponState', Components.WeaponState(comp.weapon, comp.weapon))
+      .addComponent('AbilityState', Components.AbilityState())
+      .addComponent('RenderMesh', Components.RenderMesh(mesh))
+      .addComponent('TargetInfo', {
+        displayName: `${comp.race.charAt(0).toUpperCase() + comp.race.slice(1)} ${weaponDef.title || ''}`.trim(),
+        race: comp.race,
+        weaponType: comp.weapon,
+        team: teamId,
+      });
+    
+    if (comp.isPlayer) entity.addTag('player');
+    if (teamId === 'A') entity.addTag('teamA');
+    else entity.addTag('teamB');
+    
+    return {
+      entity,
+      mesh,
+      mixer,
+      controller,
+      team: teamId,
+      isPlayer: !!comp.isPlayer,
+      weaponDef,
+      race: comp.race,
+    };
+  }
+  
+  /** Fallback: create a capsule player if GLB loading fails */
+  _createFallbackPlayer() {
+    const player = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.4, 1, 8, 16),
+      new THREE.MeshStandardMaterial({ color: 0x3366ff, metalness: 0.3, roughness: 0.7, emissive: 0x3366ff, emissiveIntensity: 0.1 })
+    );
+    body.position.y = 1;
+    body.castShadow = true;
+    player.add(body);
+    this.scene.add(player);
+    
+    this.playerEntity = this.world.createEntity()
+      .addComponent('Transform', Components.Transform(0, 0, 0))
+      .addComponent('Velocity', Components.Velocity())
+      .addComponent('Health', Components.Health(1000))
+      .addComponent('Resources', Components.Resources())
+      .addComponent('Movement', Components.Movement(5))
       .addComponent('WeaponState', Components.WeaponState(WeaponTypes.GREATSWORD, WeaponTypes.BOW))
       .addComponent('AbilityState', Components.AbilityState())
       .addComponent('RenderMesh', Components.RenderMesh(player))
       .addTag('player');
     
-    return player;
-  }
-  
-  createEnemies() {
-    const enemyPositions = [
-      { x: 10, z: 10 },
-      { x: -10, z: 10 },
-      { x: 10, z: -10 },
-      { x: -10, z: -10 }
-    ];
+    this.playerUnit = { entity: this.playerEntity, mesh: player, controller: null, team: 'A', isPlayer: true, weaponDef: WeaponDefinitions[WeaponTypes.GREATSWORD] };
+    this.allUnits = [this.playerUnit];
+    this.chaseCamera = new ChaseCamera(this.camera, player);
     
-    enemyPositions.forEach((pos, i) => {
-      const enemy = this.createEnemy(pos.x, pos.z, i);
-      this.enemies.push(enemy);
-    });
-  }
-  
-  createEnemy(x, z, index) {
-    const colors = [0xff4444, 0x44ff44, 0xffaa00, 0xaa44ff];
-    const color = colors[index % colors.length];
-    
-    const enemy = new THREE.Group();
-    
-    const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.5, 1.2, 8, 16),
-      new THREE.MeshStandardMaterial({
-        color: color,
-        metalness: 0.4,
-        roughness: 0.6,
-        emissive: color,
-        emissiveIntensity: 0.2
-      })
-    );
-    body.position.y = 1.1;
-    body.castShadow = true;
-    enemy.add(body);
-    
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.35, 16, 16),
-      new THREE.MeshStandardMaterial({ color: 0x333333 })
-    );
-    head.position.y = 2;
-    head.castShadow = true;
-    enemy.add(head);
-    
-    const eyes = new THREE.Mesh(
-      new THREE.SphereGeometry(0.1, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xff0000 })
-    );
-    eyes.position.set(0, 2.1, 0.25);
-    enemy.add(eyes);
-    
-    enemy.position.set(x, 0, z);
-    this.scene.add(enemy);
-    
-    const entity = this.world.createEntity()
-      .addComponent('Transform', Components.Transform(x, 0, z))
-      .addComponent('Velocity', Components.Velocity())
-      .addComponent('Health', Components.Health(300))
-      .addComponent('Collider', Components.Collider(0.5, 2))
-      .addComponent('AI', Components.AI('patrol'))
-      .addComponent('RenderMesh', Components.RenderMesh(enemy))
-      .addTag('enemy');
-    
-    this.mouseSystem?.registerHoverable(enemy, {
-      highlight: true,
-      cursorStyle: 'attack',
-      tooltip: `Enemy #${index + 1}<br>HP: 300`
-    });
-    
-    this.collisionSystem.addCollider(enemy, 'enemy', { entity });
-    
-    return entity;
+    const gameUI = document.getElementById('gameUI');
+    if (gameUI) gameUI.style.display = 'block';
   }
   
   switchWeapon(slot) {
@@ -2322,25 +2350,9 @@ class GrudgeArena {
   }
   
   updateEnemies(delta) {
-    for (const enemy of this.enemies) {
-      const mesh = enemy.getComponent('RenderMesh').mesh;
-      const ai = enemy.getComponent('AI');
-      const playerMesh = this.playerEntity.getComponent('RenderMesh').mesh;
-      
-      const toPlayer = playerMesh.position.clone().sub(mesh.position);
-      const distance = toPlayer.length();
-      
-      if (distance < ai.aggroRange) {
-        ai.behavior = 'chase';
-        
-        if (distance > ai.attackRange) {
-          toPlayer.normalize();
-          mesh.position.add(toPlayer.multiplyScalar(2 * delta));
-          mesh.lookAt(playerMesh.position);
-        }
-      } else {
-        ai.behavior = 'idle';
-      }
+    // Handled by ArenaAI system now
+    if (this.arenaAI) {
+      this.arenaAI.update(delta, this.allUnits, this.match?.isCombatActive() ?? true);
     }
   }
   
@@ -2396,19 +2408,39 @@ class GrudgeArena {
     
     const delta = Math.min(this.clock.getDelta(), 0.1);
     
-    this.updateMovement(delta);
-    this.updateCooldowns(delta);
-    this.updateResources(delta);
-    this.updateProjectiles(delta);
+    // Update match state (countdown, victory checks)
+    if (this.match) this.match.update(delta);
+    
+    const combatActive = this.match?.isCombatActive() ?? true;
+    
+    // Only allow player movement/actions during combat
+    if (combatActive) {
+      this.updateMovement(delta);
+      this.updateCooldowns(delta);
+      this.updateResources(delta);
+      this.updateProjectiles(delta);
+    }
+    
+    // AI always updates (handles idle during countdown)
     this.updateEnemies(delta);
     this.updateShaders(delta);
     
-    this.particleSystem.update(delta);
-    this.spriteSystem.update(delta);
-    this.chaseCamera.update(delta);
-    this.mouseSystem?.update();
+    // Update all animation controllers
+    for (const unit of this.allUnits) {
+      if (unit.controller) unit.controller.update(delta);
+    }
     
+    this.particleSystem?.update(delta);
+    this.spriteSystem?.update(delta);
+    this.chaseCamera?.update(delta);
+    
+    // Update HUD
     this.updateUI();
+    if (this.targeting) {
+      this.targeting.updateTargetFrameHP();
+      this.targeting.updateTeamFrames();
+      this.targeting.cleanup();
+    }
     
     this.renderer.render(this.scene, this.camera);
   }
