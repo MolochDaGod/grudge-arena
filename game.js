@@ -1879,11 +1879,14 @@ class GrudgeArena {
     const SKILL_MAP = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, 'e': 2, 'r': 3, 'f': 4 };
     const ABILITY_KEYS = ['Q', 'E', 'R', 'F', 'P']; // internal ability keys on weapon defs
 
+    // Keys that are skill alternates — don't process as movement
+    const SKILL_KEYS_SET = new Set(['e', 'r', 'f', '1', '2', '3', '4', '5']);
+    
     document.addEventListener('keydown', (e) => {
       const key = e.key.toLowerCase();
       
-      // Movement keys
-      if (key in this.inputState.keys) this.inputState.keys[key] = true;
+      // Movement keys (WASD only — exclude skill alternate keys)
+      if (['w','a','s','d'].includes(key)) this.inputState.keys[key] = true;
       if (e.key === 'Shift') this.inputState.keys.shift = true;
       if (e.key === 'Control') this.inputState.keys.ctrl = true;
       if (e.key === 'Alt') { this.inputState.keys.alt = true; e.preventDefault(); }
@@ -1891,6 +1894,7 @@ class GrudgeArena {
       
       // Skill keys: 1-5 and E/R/F alternates
       if (key in SKILL_MAP) {
+        e.preventDefault();
         const slot = SKILL_MAP[key];
         const abilityKey = ABILITY_KEYS[slot];
         if (abilityKey) this.useAbility(abilityKey);
@@ -1904,7 +1908,7 @@ class GrudgeArena {
     
     document.addEventListener('keyup', (e) => {
       const key = e.key.toLowerCase();
-      if (key in this.inputState.keys) this.inputState.keys[key] = false;
+      if (['w','a','s','d'].includes(key)) this.inputState.keys[key] = false;
       if (e.key === 'Shift') this.inputState.keys.shift = false;
       if (e.key === 'Control') this.inputState.keys.ctrl = false;
       if (e.key === 'Alt') this.inputState.keys.alt = false;
@@ -2038,6 +2042,7 @@ class GrudgeArena {
   async _createArenaUnit(comp, teamId, slot, teamSize, modelMod) {
     const spawnPos = ArenaMatchStatic.getSpawnPosition(teamId, slot, teamSize);
     const facing = ArenaMatchStatic.getSpawnFacing(teamId);
+    const uuid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `unit_${teamId}_${slot}_${Date.now()}`;
     
     const weaponDef = WeaponDefinitions[comp.weapon] || WeaponDefinitions[WeaponTypes.GREATSWORD];
     
@@ -2070,6 +2075,9 @@ class GrudgeArena {
     if (teamId === 'A') entity.addTag('teamA');
     else entity.addTag('teamB');
     
+    // Register mesh for collision detection
+    this.collisionSystem.addCollider(mesh, teamId === 'A' ? 'ally' : 'enemy', { entity, uuid });
+    
     return {
       entity,
       mesh,
@@ -2079,6 +2087,7 @@ class GrudgeArena {
       isPlayer: !!comp.isPlayer,
       weaponDef,
       race: comp.race,
+      uuid,
     };
   }
   
@@ -2240,13 +2249,16 @@ class GrudgeArena {
         break;
         
       case 'dash':
-        const velocity = this.playerEntity.getComponent('Velocity');
-        velocity.linear.add(forward.multiplyScalar(15));
+        // Dash forward using mesh position (not velocity component)
+        mesh.position.addScaledVector(forward, ability.distance || 10);
+        // Clamp to arena
+        mesh.position.x = Math.max(-35, Math.min(35, mesh.position.x));
+        mesh.position.z = Math.max(-35, Math.min(35, mesh.position.z));
         
-        const resources = this.playerEntity.getComponent('Resources');
-        resources.rage.current = Math.min(resources.rage.max, resources.rage.current + 25);
+        const dashResources = this.playerEntity?.getComponent('Resources');
+        if (dashResources) dashResources.rage.current = Math.min(dashResources.rage.max, dashResources.rage.current + 25);
         
-        this.particleSystem.emit({
+        this.particleSystem?.emit({
           position: position,
           color: new THREE.Color(0x3366ff),
           count: 30,
@@ -2258,10 +2270,10 @@ class GrudgeArena {
         break;
         
       case 'blink':
-        const blinkDist = ability.distance;
-        const newPos = position.clone().add(forward.multiplyScalar(blinkDist));
-        newPos.x = Math.max(-28, Math.min(28, newPos.x));
-        newPos.z = Math.max(-28, Math.min(28, newPos.z));
+        const blinkDist = ability.distance || 8;
+        const newPos = position.clone().add(forward.clone().multiplyScalar(blinkDist));
+        newPos.x = Math.max(-35, Math.min(35, newPos.x));
+        newPos.z = Math.max(-35, Math.min(35, newPos.z));
         mesh.position.copy(newPos);
         
         this.particleSystem.emit({

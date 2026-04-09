@@ -152,9 +152,19 @@ const BONE_ALIASES = {
   'Spine2':       'Spine02',
   'Neck':         'neck',
   'HeadTop_End':  'head_end',
-  'Reye':         'headfront', // approximate
-  'Leye':         'headfront', // approximate
+  'Reye':         'headfront',
+  'Leye':         'headfront',
 };
+
+/** Bones that exist on our 24-joint character skeleton. Tracks targeting anything else get stripped. */
+const VALID_BONES = new Set([
+  'Hips', 'Spine', 'Spine01', 'Spine02', 'neck', 'Head', 'head_end', 'headfront',
+  'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
+  'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
+  'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'LeftToeBase',
+  'RightUpLeg', 'RightLeg', 'RightFoot', 'RightToeBase',
+  'Armature',
+]);
 
 function stripMixamoPrefix(name) {
   for (const prefix of MIXAMO_PREFIXES) {
@@ -312,6 +322,16 @@ export async function loadAnimClip(filePath) {
       return null;
     }
     const clip = remapClipBoneNames(gltf.animations[0]);
+
+    // Strip tracks targeting bones that don't exist on our 24-joint skeleton.
+    // Without this, unmatched finger/eye tracks get a default bind pose that
+    // can distort the mesh or cause invisible bones to hold wrong positions.
+    clip.tracks = clip.tracks.filter(track => {
+      const dotIdx = track.name.indexOf('.');
+      if (dotIdx === -1) return true;
+      const boneName = track.name.substring(0, dotIdx);
+      return VALID_BONES.has(boneName);
+    });
 
     // GLBs converted from Mixamo FBX have position tracks in centimeter space.
     // Scale them by 0.01 to match our character models' 0.01 root scale.
