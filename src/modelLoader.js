@@ -16,6 +16,11 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
 
+/**
+ * Race scale multipliers — applied ON TOP of the GLB's native scale.
+ * All 6 race GLBs have root scale 0.01 (centimeter units).
+ * These multipliers adjust relative size differences between races.
+ */
 export const RaceScaleConfig = {
   human:     { scale: 1.0,  heightOffset: 0 },
   barbarian: { scale: 1.12, heightOffset: 0.06 },
@@ -168,6 +173,47 @@ const fbxLoader = new FBXLoader();
  * @param {string} race - e.g. 'human', 'barbarian'
  * @returns {{ scene: THREE.Group, mixer: THREE.AnimationMixer, actions: Map<string, THREE.AnimationAction>, clips: THREE.AnimationClip[] }}
  */
+/**
+ * Properly clone a GLTF scene including SkinnedMesh skeleton bindings.
+ * Three.js clone(true) breaks skinned meshes — we need to manually
+ * rebind skeletons after cloning.
+ */
+function cloneGLTFScene(source) {
+  const clone = source.clone(true);
+  const sourceSkins = [];
+  const cloneSkins = [];
+
+  source.traverse(node => { if (node.isSkinnedMesh) sourceSkins.push(node); });
+  clone.traverse(node => { if (node.isSkinnedMesh) cloneSkins.push(node); });
+
+  for (let i = 0; i < cloneSkins.length; i++) {
+    const src = sourceSkins[i];
+    const dst = cloneSkins[i];
+    if (!src || !dst) continue;
+
+    // Find matching bones in the cloned hierarchy by name
+    const newBones = src.skeleton.bones.map(srcBone => {
+      let found = null;
+      clone.traverse(node => {
+        if (node.name === srcBone.name && node.isBone) found = node;
+      });
+      return found || srcBone;
+    });
+
+    dst.skeleton = new THREE.Skeleton(newBones, src.skeleton.boneInverses.map(m => m.clone()));
+    dst.bind(dst.skeleton, dst.matrixWorld);
+
+    // Clone material so we don't mutate the cached original
+    if (dst.material) {
+      dst.material = Array.isArray(dst.material)
+        ? dst.material.map(m => m.clone())
+        : dst.material.clone();
+    }
+  }
+
+  return clone;
+}
+
 export async function loadRaceModel(race) {
   const path = `/models/${race}.glb`;
   let gltf = gltfCache.get(path);
@@ -179,33 +225,41 @@ export async function loadRaceModel(race) {
     gltfCache.set(path, gltf);
   }
 
-  const scene = gltf.scene.clone(true);
+  // Properly clone with skeleton rebinding
+  const scene = cloneGLTFScene(gltf.scene);
 
-  // Enable shadows on all meshes
+  // Enable shadows, fix materials
   scene.traverse(child => {
     if (child.isMesh) {
       child.castShadow = true;
       child.receiveShadow = true;
+      child.frustumCulled = false; // Prevent skinned mesh culling glitches
       if (child.material?.metalness !== undefined) {
         child.material.metalness = Math.min(child.material.metalness, 0.6);
       }
     }
   });
 
-  // Apply race scale
+  // IMPORTANT: Do NOT overwrite the root scale.
+  // GLB models have root scale 0.01 (centimeter units) baked in.
+  // Apply race multiplier ON TOP of the native scale.
   const cfg = RaceScaleConfig[race] || RaceScaleConfig.human;
-  scene.scale.setScalar(cfg.scale);
+  const nativeScale = scene.scale.x; // 0.01 for all race GLBs
+  scene.scale.setScalar(nativeScale * cfg.scale);
 
   const mixer = new THREE.AnimationMixer(scene);
   const actions = new Map();
 
   // Register embedded animations (remap bone names)
+  // Clone clips so cached originals aren't mutated
   for (const clip of gltf.animations) {
-    remapClipBoneNames(clip);
-    const action = mixer.clipAction(clip, scene);
-    actions.set(clip.name.toLowerCase(), action);
+    const clonedClip = clip.clone();
+    remapClipBoneNames(clonedClip);
+    const action = mixer.clipAction(clonedClip, scene);
+    actions.set(clonedClip.name.toLowerCase(), action);
   }
 
+  console.log(`[modelLoader] Loaded ${race} — scale: ${nativeScale * cfg.scale}, bones: ${scene.children.length > 0 ? 'OK' : 'NONE'}, anims: ${gltf.animations.length} embedded`);
   return { scene, mixer, actions, clips: gltf.animations };
 }
 
@@ -213,7 +267,7 @@ export async function loadRaceModel(race) {
 
 export async function loadFBXClip(filePath) {
   const cached = fbxClipCache.get(filePath);
-  if (cached) return cached;
+  if (cached) return cached.clone();
 
   try {
     const fbx = await new Promise((resolve, reject) => {
@@ -224,8 +278,20 @@ export async function loadFBXClip(filePath) {
       return null;
     }
     const clip = remapClipBoneNames(fbx.animations[0]);
+
+    // FBX animations from Mixamo are in centimeter space — scale position tracks
+    // to match our GLB models (which also use 0.01 root scale).
+    // Position tracks (Hips.position) need to be scaled by 0.01 to match.
+    for (const track of clip.tracks) {
+      if (track.name.endsWith('.position')) {
+        for (let i = 0; i < track.values.length; i++) {
+          track.values[i] *= 0.01;
+        }
+      }
+    }
+
     fbxClipCache.set(filePath, clip);
-    return clip;
+    return clip.clone();
   } catch (err) {
     console.warn(`[modelLoader] Failed to load ${filePath}:`, err.message);
     return null;

@@ -1194,9 +1194,10 @@ class ChaseCamera {
     this.camera = camera;
     this.target = target;
     
-    this.distance = 15;
-    this.height = 12;
-    this.lookAtHeight = 1;
+    // Over-shoulder third person — tuned for ~1.8-unit tall characters
+    this.distance = 6;
+    this.height = 4;
+    this.lookAtHeight = 1.2;
     
     this.smoothSpeed = 5;
     
@@ -1204,10 +1205,12 @@ class ChaseCamera {
     this.currentLookAt = new THREE.Vector3();
     
     this.offsetAngle = 0;
+    this._initialized = false;
   }
   
   setTarget(target) {
     this.target = target;
+    this._initialized = false;
   }
   
   update(delta) {
@@ -1215,24 +1218,29 @@ class ChaseCamera {
     
     const targetPos = this.target.position.clone();
     
+    // Camera behind and above the player
     const angle = this.target.rotation?.y || 0;
-    const offsetX = Math.sin(angle + this.offsetAngle) * this.distance;
-    const offsetZ = Math.cos(angle + this.offsetAngle) * this.distance;
-    
     const desiredPosition = new THREE.Vector3(
-      targetPos.x - offsetX * 0.3,
+      targetPos.x - Math.sin(angle) * this.distance,
       targetPos.y + this.height,
-      targetPos.z + this.distance
+      targetPos.z - Math.cos(angle) * this.distance
     );
-    
-    this.currentPosition.lerp(desiredPosition, this.smoothSpeed * delta);
     
     const desiredLookAt = new THREE.Vector3(
       targetPos.x,
       targetPos.y + this.lookAtHeight,
       targetPos.z
     );
-    this.currentLookAt.lerp(desiredLookAt, this.smoothSpeed * delta);
+    
+    // Snap on first frame, lerp after
+    if (!this._initialized) {
+      this.currentPosition.copy(desiredPosition);
+      this.currentLookAt.copy(desiredLookAt);
+      this._initialized = true;
+    } else {
+      this.currentPosition.lerp(desiredPosition, this.smoothSpeed * delta);
+      this.currentLookAt.lerp(desiredLookAt, this.smoothSpeed * delta);
+    }
     
     this.camera.position.copy(this.currentPosition);
     this.camera.lookAt(this.currentLookAt);
@@ -1808,36 +1816,46 @@ class GrudgeArena {
   setupScene() {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0a0f);
-    this.scene.fog = new THREE.Fog(0x0a0a0f, 30, 100);
+    this.scene.fog = new THREE.Fog(0x0a0a0f, 50, 150);
     
-    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 500);
-    this.camera.position.set(0, 15, 20);
+    // Camera: 50 FOV, positioned for ~1.8-unit tall characters at ±15 unit spawns
+    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.05, 500);
+    this.camera.position.set(0, 8, 12);
+    this.camera.lookAt(0, 1, 0);
   }
   
   setupLighting() {
-    const ambient = new THREE.AmbientLight(0xffffff, 0.3);
+    // Brighter ambient for character visibility
+    const ambient = new THREE.AmbientLight(0xb0c4de, 0.6);
     this.scene.add(ambient);
     
-    const directional = new THREE.DirectionalLight(0xffffff, 1);
+    // Hemisphere light for natural sky/ground fill
+    const hemi = new THREE.HemisphereLight(0x87ceeb, 0x362d1e, 0.4);
+    this.scene.add(hemi);
+    
+    // Main directional (sun) with shadows
+    const directional = new THREE.DirectionalLight(0xfff5e1, 1.2);
     directional.position.set(10, 20, 10);
     directional.castShadow = true;
     directional.shadow.mapSize.width = 2048;
     directional.shadow.mapSize.height = 2048;
-    directional.shadow.camera.near = 0.1;
-    directional.shadow.camera.far = 100;
-    directional.shadow.camera.left = -30;
-    directional.shadow.camera.right = 30;
-    directional.shadow.camera.top = 30;
-    directional.shadow.camera.bottom = -30;
+    directional.shadow.camera.near = 0.5;
+    directional.shadow.camera.far = 80;
+    directional.shadow.camera.left = -40;
+    directional.shadow.camera.right = 40;
+    directional.shadow.camera.top = 40;
+    directional.shadow.camera.bottom = -40;
+    directional.shadow.bias = -0.001;
     this.scene.add(directional);
     
-    const blue = new THREE.PointLight(0x4488ff, 0.5, 50);
-    blue.position.set(-15, 10, -15);
-    this.scene.add(blue);
+    // Rim/back light for character edge definition
+    const rimLight = new THREE.DirectionalLight(0x8888ff, 0.3);
+    rimLight.position.set(-10, 15, -15);
+    this.scene.add(rimLight);
     
-    const purple = new THREE.PointLight(0x8844ff, 0.5, 50);
-    purple.position.set(15, 10, 15);
-    this.scene.add(purple);
+    const warmFill = new THREE.PointLight(0xff8844, 0.3, 40);
+    warmFill.position.set(15, 8, 15);
+    this.scene.add(warmFill);
   }
   
   setupInput() {
