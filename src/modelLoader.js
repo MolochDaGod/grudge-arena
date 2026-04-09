@@ -132,13 +132,29 @@ const ANIM_FILE_MAP = {
   },
 };
 
-// ── Mixamo bone-name remapping ──────────────────────────────────────────────
+// ── Mixamo bone-name remapping ──────────────────────────────────────
+//
+// Animation GLBs (from Mixamo) use "mixamorig:Hips", "mixamorig:Spine1", etc.
+// Our character GLBs use bare names with slight differences:
+//   mixamorig:Spine1 → Spine01, mixamorig:Spine2 → Spine02,
+//   mixamorig:Neck → neck, mixamorig:HeadTop_End → head_end
+// We strip the prefix first, then apply the alias map.
 
 const MIXAMO_PREFIXES = [
   'mixamorig10:', 'mixamorig9:', 'mixamorig8:', 'mixamorig7:',
   'mixamorig6:', 'mixamorig5:', 'mixamorig4:', 'mixamorig3:',
   'mixamorig2:', 'mixamorig1:', 'mixamorig:',
 ];
+
+/** After stripping prefix, remap any names that differ between Mixamo standard and our models */
+const BONE_ALIASES = {
+  'Spine1':       'Spine01',
+  'Spine2':       'Spine02',
+  'Neck':         'neck',
+  'HeadTop_End':  'head_end',
+  'Reye':         'headfront', // approximate
+  'Leye':         'headfront', // approximate
+};
 
 function stripMixamoPrefix(name) {
   for (const prefix of MIXAMO_PREFIXES) {
@@ -147,14 +163,29 @@ function stripMixamoPrefix(name) {
   return name;
 }
 
+/**
+ * Remap all track names in an AnimationClip to match our character skeletons.
+ * Track format: "boneName.property" (e.g. "mixamorig:Hips.position")
+ * Steps: 1) strip mixamorig prefix  2) apply bone alias map
+ */
 function remapClipBoneNames(clip) {
   for (const track of clip.tracks) {
     const dotIdx = track.name.indexOf('.');
     if (dotIdx === -1) continue;
     const bone = track.name.substring(0, dotIdx);
     const prop = track.name.substring(dotIdx);
-    const stripped = stripMixamoPrefix(bone);
-    if (stripped !== bone) track.name = stripped + prop;
+    
+    // Step 1: strip mixamorig: prefix
+    let remapped = stripMixamoPrefix(bone);
+    
+    // Step 2: apply alias map for bones that differ
+    if (BONE_ALIASES[remapped]) {
+      remapped = BONE_ALIASES[remapped];
+    }
+    
+    if (remapped !== bone) {
+      track.name = remapped + prop;
+    }
   }
   return clip;
 }
@@ -325,16 +356,25 @@ export async function preloadWeaponAnims(weaponType, mixer, root) {
   );
 
   const actions = new Map();
+  let boundTracks = 0;
+  let totalTracks = 0;
   for (const result of results) {
     if (result.status === 'fulfilled' && result.value.clip) {
       const { state, clip } = result.value;
       clip.name = state;
+      totalTracks += clip.tracks.length;
+      
+      // Verify tracks bind to bones in the character hierarchy
       const action = mixer.clipAction(clip, root);
+      // Count how many property bindings resolved
+      for (const binding of action._propertyBindings || []) {
+        if (binding?.binding?.node) boundTracks++;
+      }
       actions.set(state, action);
     }
   }
 
-  console.log(`[modelLoader] Loaded ${actions.size}/${entries.length} anims for ${weaponType} (${packName})`);
+  console.log(`[modelLoader] Loaded ${actions.size}/${entries.length} anims for ${weaponType} (${packName}), ${boundTracks}/${totalTracks} tracks bound`);
   return actions;
 }
 
