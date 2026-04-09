@@ -429,10 +429,253 @@ export class AnimationController {
   }
 }
 
-// ── High-level: create a fully animated arena unit ──────────────────────────
+// ── Weapon mesh creation ──────────────────────────────────────────────
 
 /**
- * Load a race model + weapon animations, return ready-to-use unit.
+ * Create a procedural weapon mesh for a given weapon type.
+ * Positioned and rotated to sit naturally in a character's hand.
+ * All geometry is in local space (attached to hand bone).
+ */
+function createWeaponMesh(weaponType) {
+  const group = new THREE.Group();
+  group.name = '__weapon';
+
+  // Weapon meshes are in centimeter space (matching the 0.01 root scale).
+  // Since they're children of a hand bone inside the scaled armature,
+  // we need to build them at ~100x to appear correctly (1 unit = 1cm in bone space).
+  const S = 100; // scale factor to compensate for 0.01 root
+
+  switch (weaponType) {
+    case 'greatsword':
+    case 'scythe': {
+      // Blade
+      const blade = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06 * S, 1.2 * S, 0.015 * S),
+        new THREE.MeshStandardMaterial({ color: 0xaabbcc, metalness: 0.9, roughness: 0.2 })
+      );
+      blade.position.y = 0.8 * S;
+      blade.castShadow = true;
+      group.add(blade);
+
+      // Edge highlight
+      const edge = new THREE.Mesh(
+        new THREE.BoxGeometry(0.065 * S, 1.2 * S, 0.003 * S),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xaaddff, emissiveIntensity: 0.3, metalness: 1, roughness: 0.1 })
+      );
+      edge.position.y = 0.8 * S;
+      edge.position.z = 0.008 * S;
+      group.add(edge);
+
+      // Guard
+      const guard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18 * S, 0.03 * S, 0.04 * S),
+        new THREE.MeshStandardMaterial({ color: 0x8b6914, metalness: 0.7, roughness: 0.3 })
+      );
+      guard.position.y = 0.18 * S;
+      guard.castShadow = true;
+      group.add(guard);
+
+      // Handle
+      const handle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.015 * S, 0.018 * S, 0.25 * S, 8),
+        new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.9 })
+      );
+      handle.position.y = 0.05 * S;
+      group.add(handle);
+
+      // Pommel
+      const pommel = new THREE.Mesh(
+        new THREE.SphereGeometry(0.025 * S, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0x8b6914, metalness: 0.8, roughness: 0.2 })
+      );
+      pommel.position.y = -0.08 * S;
+      group.add(pommel);
+      break;
+    }
+
+    case 'sabres':
+    case 'runeblade': {
+      // Main sword (shorter, one-handed)
+      const sblade = new THREE.Mesh(
+        new THREE.BoxGeometry(0.04 * S, 0.7 * S, 0.012 * S),
+        new THREE.MeshStandardMaterial({ color: 0xccddee, metalness: 0.9, roughness: 0.15 })
+      );
+      sblade.position.y = 0.5 * S;
+      sblade.castShadow = true;
+      group.add(sblade);
+
+      // Guard
+      const sguard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12 * S, 0.025 * S, 0.035 * S),
+        new THREE.MeshStandardMaterial({ color: 0xc9a84c, metalness: 0.8, roughness: 0.2 })
+      );
+      sguard.position.y = 0.15 * S;
+      group.add(sguard);
+
+      // Handle
+      const shandle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.013 * S, 0.016 * S, 0.18 * S, 8),
+        new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.9 })
+      );
+      shandle.position.y = 0.05 * S;
+      group.add(shandle);
+
+      // Rune glow for runeblade
+      if (weaponType === 'runeblade') {
+        const glow = new THREE.Mesh(
+          new THREE.BoxGeometry(0.02 * S, 0.5 * S, 0.02 * S),
+          new THREE.MeshStandardMaterial({ color: 0x4488ff, emissive: 0x4488ff, emissiveIntensity: 0.8, transparent: true, opacity: 0.6 })
+        );
+        glow.position.y = 0.5 * S;
+        group.add(glow);
+      }
+      break;
+    }
+
+    case 'bow': {
+      // Bow limb (curved via TorusGeometry)
+      const limb = new THREE.Mesh(
+        new THREE.TorusGeometry(0.5 * S, 0.015 * S, 8, 16, Math.PI * 0.8),
+        new THREE.MeshStandardMaterial({ color: 0x6b4226, roughness: 0.8, metalness: 0.1 })
+      );
+      limb.position.y = 0.3 * S;
+      limb.rotation.z = Math.PI / 2;
+      limb.castShadow = true;
+      group.add(limb);
+
+      // Bowstring
+      const stringGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, -0.2 * S, 0.02 * S),
+        new THREE.Vector3(0, 0.8 * S, 0.02 * S),
+      ]);
+      const bowstring = new THREE.Line(
+        stringGeo,
+        new THREE.LineBasicMaterial({ color: 0xccccaa, linewidth: 2 })
+      );
+      group.add(bowstring);
+
+      // Grip
+      const grip = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.018 * S, 0.018 * S, 0.12 * S, 8),
+        new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.9 })
+      );
+      grip.position.y = 0.3 * S;
+      group.add(grip);
+      break;
+    }
+
+    case 'staff':
+    case 'wand': {
+      // Shaft
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.015 * S, 0.02 * S, 1.4 * S, 8),
+        new THREE.MeshStandardMaterial({ color: 0x5c3d2e, roughness: 0.8 })
+      );
+      shaft.position.y = 0.5 * S;
+      shaft.castShadow = true;
+      group.add(shaft);
+
+      // Crystal/orb at top
+      const crystal = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.06 * S, 1),
+        new THREE.MeshStandardMaterial({ color: 0x8844ff, emissive: 0x8844ff, emissiveIntensity: 0.6, metalness: 0.3, roughness: 0.2 })
+      );
+      crystal.position.y = 1.25 * S;
+      crystal.castShadow = true;
+      group.add(crystal);
+
+      // Crystal glow
+      const light = new THREE.PointLight(0x8844ff, 0.5, 3 * S);
+      light.position.y = 1.25 * S;
+      group.add(light);
+      break;
+    }
+
+    default: {
+      // Generic weapon placeholder
+      const generic = new THREE.Mesh(
+        new THREE.BoxGeometry(0.04 * S, 0.6 * S, 0.04 * S),
+        new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5, roughness: 0.5 })
+      );
+      generic.position.y = 0.3 * S;
+      generic.castShadow = true;
+      group.add(generic);
+    }
+  }
+
+  return group;
+}
+
+/**
+ * Attach a weapon mesh to a character's hand bone.
+ * @param {THREE.Object3D} characterScene - The loaded character scene (Group containing Armature)
+ * @param {THREE.Group} weaponMesh - The weapon mesh group from createWeaponMesh()
+ * @param {string} boneName - Target bone name (default: 'RightHand')
+ */
+export function attachWeaponToBone(characterScene, weaponMesh, boneName = 'RightHand') {
+  let handBone = null;
+
+  characterScene.traverse(node => {
+    if (node.isBone && node.name === boneName) {
+      handBone = node;
+    }
+  });
+
+  if (!handBone) {
+    console.warn(`[modelLoader] Bone '${boneName}' not found, weapon not attached`);
+    return null;
+  }
+
+  // Weapon offset in bone-local space.
+  // Adjust rotation so weapon points "forward" from the hand grip.
+  weaponMesh.rotation.set(-Math.PI / 2, 0, 0); // Point weapon forward
+  weaponMesh.position.set(0, 0, 0);
+
+  handBone.add(weaponMesh);
+  console.log(`[modelLoader] Attached weapon to ${boneName}`);
+  return handBone;
+}
+
+/**
+ * Attach a shield mesh to the left hand (for sword_shield weapon type).
+ */
+function createShieldMesh() {
+  const S = 100;
+  const group = new THREE.Group();
+  group.name = '__shield';
+
+  // Shield body
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3 * S, 0.4 * S, 0.03 * S),
+    new THREE.MeshStandardMaterial({ color: 0x5a5a7a, metalness: 0.7, roughness: 0.3 })
+  );
+  body.position.y = 0.1 * S;
+  body.castShadow = true;
+  group.add(body);
+
+  // Boss (center bump)
+  const boss = new THREE.Mesh(
+    new THREE.SphereGeometry(0.06 * S, 8, 8),
+    new THREE.MeshStandardMaterial({ color: 0xc9a84c, metalness: 0.9, roughness: 0.2 })
+  );
+  boss.position.set(0, 0.1 * S, 0.02 * S);
+  group.add(boss);
+
+  // Rim
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.2 * S, 0.012 * S, 4, 16),
+    new THREE.MeshStandardMaterial({ color: 0x8b6914, metalness: 0.8, roughness: 0.2 })
+  );
+  rim.position.set(0, 0.1 * S, 0.015 * S);
+  group.add(rim);
+
+  return group;
+}
+
+// ── High-level: create a fully animated arena unit ──────────────────────
+
+/**
+ * Load a race model + weapon animations + weapon mesh, return ready-to-use unit.
  * @param {string} race - 'human', 'barbarian', etc.
  * @param {string} weaponType - 'greatsword', 'bow', etc.
  * @returns {{ scene, mixer, controller: AnimationController }}
@@ -447,6 +690,18 @@ export async function createAnimatedUnit(race, weaponType) {
   // Load and register weapon animation pack (FBX)
   const weaponActions = await preloadWeaponAnims(weaponType, mixer, scene);
   controller.registerActions(weaponActions);
+
+  // Attach weapon mesh to RightHand bone
+  const weapon = createWeaponMesh(weaponType);
+  attachWeaponToBone(scene, weapon, 'RightHand');
+
+  // Attach shield to LeftHand for sword+shield weapons
+  const shieldWeapons = ['sabres', 'runeblade'];
+  if (shieldWeapons.includes(weaponType)) {
+    const shield = createShieldMesh();
+    shield.rotation.set(-Math.PI / 2, 0, Math.PI); // Face outward
+    attachWeaponToBone(scene, shield, 'LeftHand');
+  }
 
   // Start idle
   controller.play('idle');
