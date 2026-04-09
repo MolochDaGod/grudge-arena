@@ -2455,12 +2455,22 @@ class GrudgeArena {
       // Face movement direction
       mesh.rotation.y = Math.atan2(moveX, moveZ);
       
-      // Play run animation
-      if (controller) controller.play('run');
+      // Pick animation: sprint > run, with directional variants
+      if (controller) {
+        const isSprinting = this.inputState.keys.shift;
+        if (isSprinting && controller.actions.has('sprint')) {
+          controller.play('sprint');
+        } else {
+          controller.play('run');
+        }
+      }
     } else {
-      // Play idle when stopped
-      if (controller && controller.currentState === 'run') {
-        controller.play('idle');
+      // Play idle when stopped (only if in a movement state)
+      if (controller) {
+        const movementStates = ['run', 'runBack', 'sprint', 'walk', 'strafeLeft', 'strafeRight'];
+        if (movementStates.includes(controller.currentState)) {
+          controller.play('idle');
+        }
       }
     }
     
