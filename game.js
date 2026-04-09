@@ -2208,22 +2208,62 @@ class GrudgeArena {
   }
   
   performAttack() {
+    if (!this.playerUnit || this.playerEntity?.hasTag('dead')) return;
     const weapon = this.getCurrentWeapon();
-    const mesh = this.playerEntity.getComponent('RenderMesh').mesh;
+    const mesh = this.playerUnit.mesh;
+    const controller = this.playerUnit.controller;
+    if (!mesh) return;
+    
     const position = mesh.position.clone();
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(mesh.quaternion);
     
+    // Play random attack animation
+    const attacks = ['attack1', 'attack2', 'attack3'];
+    const anim = attacks[Math.floor(Math.random() * attacks.length)];
+    if (controller) controller.playOnce(anim, 1.2);
+    
+    // Get current target from target system
+    const target = this.targeting?.currentTarget;
+    
     if (weapon.range > 5) {
+      // Ranged: fire projectile
+      const dir = target ? 
+        new THREE.Vector3().subVectors(target.mesh.position, position).normalize() :
+        forward;
       this.createProjectile({
-        position: position.clone().add(forward).add(new THREE.Vector3(0, 1, 0)),
-        direction: forward,
+        position: position.clone().add(dir.clone().multiplyScalar(0.5)).add(new THREE.Vector3(0, 1, 0)),
+        direction: dir,
         speed: 30,
         damage: weapon.baseAttackDamage,
         color: weapon.name === 'Bow' ? 0x8B4513 : 0x3366ff,
         lifetime: 2
       });
     } else {
-      this.particleSystem.emit({
+      // Melee: direct damage to target if in range
+      if (target && target.team !== 'A') {
+        const dist = mesh.position.distanceTo(target.mesh.position);
+        if (dist <= weapon.range + 1) {
+          const hp = target.entity.getComponent('Health');
+          if (hp && !hp.invulnerable) {
+            const variance = 0.8 + Math.random() * 0.4;
+            const dmg = weapon.baseAttackDamage * variance;
+            hp.current = Math.max(0, hp.current - dmg);
+            hp.lastDamageTime = performance.now();
+            
+            // Hit reaction on target
+            if (target.controller) target.controller.playOnce('hit', 1.5);
+            
+            // Check death
+            if (hp.current <= 0) {
+              target.entity.addTag('dead');
+              if (target.controller) target.controller.play('death', { loop: false });
+            }
+          }
+        }
+      }
+      
+      // Melee particle effect
+      this.particleSystem?.emit({
         position: position.clone().add(forward.multiplyScalar(weapon.range / 2)).add(new THREE.Vector3(0, 1, 0)),
         color: new THREE.Color(0xffffff),
         count: 10,
@@ -2233,8 +2273,9 @@ class GrudgeArena {
         size: 0.1
       });
       
-      const resources = this.playerEntity.getComponent('Resources');
-      resources.rage.current = Math.min(resources.rage.max, resources.rage.current + 10);
+      // Generate rage on melee hit
+      const resources = this.playerEntity?.getComponent('Resources');
+      if (resources) resources.rage.current = Math.min(resources.rage.max, resources.rage.current + 10);
     }
   }
   
@@ -2285,9 +2326,11 @@ class GrudgeArena {
   }
   
   updateMovement(delta) {
-    const mesh = this.playerEntity.getComponent('RenderMesh').mesh;
-    const velocity = this.playerEntity.getComponent('Velocity');
-    const movement = this.playerEntity.getComponent('Movement');
+    if (!this.playerUnit) return;
+    const mesh = this.playerUnit.mesh;
+    const controller = this.playerUnit.controller;
+    const movement = this.playerEntity?.getComponent('Movement');
+    if (!mesh || !movement) return;
     
     const speed = this.inputState.keys.shift ? 
       movement.baseSpeed * movement.sprintMultiplier : 
@@ -2304,25 +2347,31 @@ class GrudgeArena {
       moveX /= length;
       moveZ /= length;
       
-      velocity.linear.x = moveX * speed;
-      velocity.linear.z = moveZ * speed;
+      mesh.position.x += moveX * speed * delta;
+      mesh.position.z += moveZ * speed * delta;
       
+      // Face movement direction
       mesh.rotation.y = Math.atan2(moveX, moveZ);
+      
+      // Play run animation
+      if (controller) controller.play('run');
     } else {
-      velocity.linear.x *= movement.friction;
-      velocity.linear.z *= movement.friction;
+      // Play idle when stopped
+      if (controller && controller.currentState === 'run') {
+        controller.play('idle');
+      }
     }
     
-    mesh.position.x += velocity.linear.x * delta;
-    mesh.position.z += velocity.linear.z * delta;
-    
-    const limit = 28;
+    // Arena boundary
+    const limit = 35;
     mesh.position.x = Math.max(-limit, Math.min(limit, mesh.position.x));
     mesh.position.z = Math.max(-limit, Math.min(limit, mesh.position.z));
   }
   
   updateCooldowns(delta) {
+    if (!this.playerEntity) return;
     const abilityState = this.playerEntity.getComponent('AbilityState');
+    if (!abilityState) return;
     for (const key of Object.keys(abilityState.cooldowns)) {
       if (abilityState.cooldowns[key] > 0) {
         abilityState.cooldowns[key] -= delta;
@@ -2383,8 +2432,10 @@ class GrudgeArena {
   }
   
   updateUI() {
+    if (!this.playerEntity) return;
     const health = this.playerEntity.getComponent('Health');
     const resources = this.playerEntity.getComponent('Resources');
+    if (!health || !resources) return;
     
     const safeSet = (id, pct, extra) => {
       const el = document.getElementById(id);

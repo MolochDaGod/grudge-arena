@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "fbx2gltf": "^0.9.7-p1",
     "vite": "^6.2.0"
   },
   "dependencies": {

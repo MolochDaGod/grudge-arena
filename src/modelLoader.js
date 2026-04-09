@@ -12,7 +12,6 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
 
@@ -54,82 +53,82 @@ export const CORE_ANIMS = {
   hit:     { loop: false },
 };
 
-/** Map from our state names → FBX filenames per weapon pack */
+/** Map from our state names → GLB filenames per weapon pack (converted from FBX via fbx2gltf) */
 const ANIM_FILE_MAP = {
   axe: {
-    idle:    'standing idle.fbx',
-    run:     'standing run forward.fbx',
-    walk:    'standing walk forward.fbx',
-    attack1: 'standing melee attack horizontal.fbx',
-    attack2: 'standing melee attack downward.fbx',
-    attack3: 'standing melee combo attack ver. 1.fbx',
-    combo1:  'standing melee combo attack ver. 2.fbx',
-    combo2:  'standing melee combo attack ver. 3.fbx',
-    spin:    'standing melee attack 360 high.fbx',
-    kick:    'standing melee attack kick ver. 1.fbx',
-    block:   'standing block idle.fbx',
-    hit:     'standing react large from left.fbx',
-    jump:    'standing jump.fbx',
-    taunt:   'standing taunt battlecry.fbx',
+    idle:    'standing idle.glb',
+    run:     'standing run forward.glb',
+    walk:    'standing walk forward.glb',
+    attack1: 'standing melee attack horizontal.glb',
+    attack2: 'standing melee attack downward.glb',
+    attack3: 'standing melee combo attack ver. 1.glb',
+    combo1:  'standing melee combo attack ver. 2.glb',
+    combo2:  'standing melee combo attack ver. 3.glb',
+    spin:    'standing melee attack 360 high.glb',
+    kick:    'standing melee attack kick ver. 1.glb',
+    block:   'standing block idle.glb',
+    hit:     'standing react large from left.glb',
+    jump:    'standing jump.glb',
+    taunt:   'standing taunt battlecry.glb',
   },
   sword_shield: {
-    idle:    'sword and shield idle.fbx',
-    run:     'sword and shield run.fbx',
-    walk:    'sword and shield walk.fbx',
-    attack1: 'sword and shield attack.fbx',
-    attack2: 'sword and shield attack (2).fbx',
-    attack3: 'sword and shield slash.fbx',
-    slash2:  'sword and shield slash (2).fbx',
-    kick:    'sword and shield kick.fbx',
-    block:   'sword and shield block.fbx',
-    blockIdle: 'sword and shield block idle.fbx',
-    hit:     'sword and shield impact.fbx',
-    death:   'sword and shield death.fbx',
-    cast:    'sword and shield casting.fbx',
-    jump:    'sword and shield jump.fbx',
-    draw:    'draw sword 1.fbx',
+    idle:    'sword and shield idle.glb',
+    run:     'sword and shield run.glb',
+    walk:    'sword and shield walk.glb',
+    attack1: 'sword and shield attack.glb',
+    attack2: 'sword and shield attack (2).glb',
+    attack3: 'sword and shield slash.glb',
+    slash2:  'sword and shield slash (2).glb',
+    kick:    'sword and shield kick.glb',
+    block:   'sword and shield block.glb',
+    blockIdle: 'sword and shield block idle.glb',
+    hit:     'sword and shield impact.glb',
+    death:   'sword and shield death.glb',
+    cast:    'sword and shield casting.glb',
+    jump:    'sword and shield jump.glb',
+    draw:    'draw sword 1.glb',
   },
   longbow: {
-    idle:    'standing idle 01.fbx',
-    run:     'standing run forward.fbx',
-    walk:    'standing walk forward.fbx',
-    attack1: 'standing draw arrow.fbx',
-    attack2: 'standing aim recoil.fbx',
-    attack3: 'standing aim overdraw.fbx',
-    block:   'standing block.fbx',
-    kick:    'standing melee kick.fbx',
-    hit:     'standing react small from front.fbx',
-    death:   'standing death forward 01.fbx',
-    dodge:   'standing dodge forward.fbx',
-    dive:    'standing dive forward.fbx',
-    draw:    'standing equip bow.fbx',
+    idle:    'standing idle 01.glb',
+    run:     'standing run forward.glb',
+    walk:    'standing walk forward.glb',
+    attack1: 'standing draw arrow.glb',
+    attack2: 'standing aim recoil.glb',
+    attack3: 'standing aim overdraw.glb',
+    block:   'standing block.glb',
+    kick:    'standing melee kick.glb',
+    hit:     'standing react small from front.glb',
+    death:   'standing death forward 01.glb',
+    dodge:   'standing dodge forward.glb',
+    dive:    'standing dive forward.glb',
+    draw:    'standing equip bow.glb',
   },
   magic: {
-    idle:    'standing idle.fbx',
-    run:     'Standing Run Forward.fbx',
-    walk:    'Standing Walk Forward.fbx',
-    attack1: 'Standing 1H Magic Attack 01.fbx',
-    attack2: 'Standing 2H Magic Attack 01.fbx',
-    attack3: 'Standing 2H Magic Attack 02.fbx',
-    cast:    'standing 1H cast spell 01.fbx',
-    cast2H:  'Standing 2H Cast Spell 01.fbx',
-    aoe:     'Standing 2H Magic Area Attack 01.fbx',
-    block:   'Standing Block Start.fbx',
-    blockIdle: 'Standing Block Idle.fbx',
-    hit:     'Standing React Large From Front.fbx',
-    death:   'Standing React Death Forward.fbx',
-    crouch:  'Crouch Idle.fbx',
+    idle:    'standing idle.glb',
+    run:     'Standing Run Forward.glb',
+    walk:    'Standing Walk Forward.glb',
+    attack1: 'Standing 1H Magic Attack 01.glb',
+    attack2: 'Standing 2H Magic Attack 01.glb',
+    attack3: 'Standing 2H Magic Attack 02.glb',
+    cast:    'standing 1H cast spell 01.glb',
+    cast2H:  'Standing 2H Cast Spell 01.glb',
+    aoe:     'Standing 2H Magic Area Attack 01.glb',
+    block:   'Standing Block Start.glb',
+    blockIdle: 'Standing Block Idle.glb',
+    hit:     'Standing React Large From Front.glb',
+    death:   'Standing React Death Forward.glb',
+    crouch:  'Crouch Idle.glb',
   },
   rifle: {
-    idle:    'idle.fbx',
-    run:     'run forward.fbx',
-    walk:    'walk forward.fbx',
-    attack1: 'idle aiming.fbx',
-    block:   'idle crouching.fbx',
-    death:   'death from the front.fbx',
-    hit:     'death from front headshot.fbx',
-    jump:    'jump up.fbx',
-    sprint:  'sprint forward.fbx',
+    idle:    'idle.glb',
+    run:     'run forward.glb',
+    walk:    'walk forward.glb',
+    attack1: 'idle aiming.glb',
+    block:   'idle crouching.glb',
+    death:   'death from the front.glb',
+    hit:     'death from front headshot.glb',
+    jump:    'jump up.glb',
+    sprint:  'sprint forward.glb',
   },
 };
 
@@ -160,12 +159,11 @@ function remapClipBoneNames(clip) {
   return clip;
 }
 
-// ── Caches ──────────────────────────────────────────────────────────────────
+// ── Caches ────────────────────────────────────────────────────────────────
 
 const gltfCache = new Map();
-const fbxClipCache = new Map();
+const clipCache = new Map();
 const gltfLoader = new GLTFLoader();
-const fbxLoader = new FBXLoader();
 
 // ── Load race GLB model ─────────────────────────────────────────────────────
 
@@ -265,23 +263,27 @@ export async function loadRaceModel(race) {
 
 // ── Load a single FBX animation clip ────────────────────────────────────────
 
-export async function loadFBXClip(filePath) {
-  const cached = fbxClipCache.get(filePath);
+/**
+ * Load a standalone animation GLB (extract clip only).
+ * All animation files are now GLB (converted from FBX via fbx2gltf).
+ * GLTFLoader is used for everything — no FBXLoader needed.
+ */
+export async function loadAnimClip(filePath) {
+  const cached = clipCache.get(filePath);
   if (cached) return cached.clone();
 
   try {
-    const fbx = await new Promise((resolve, reject) => {
-      fbxLoader.load(filePath, resolve, undefined, reject);
+    const gltf = await new Promise((resolve, reject) => {
+      gltfLoader.load(filePath, resolve, undefined, reject);
     });
-    if (!fbx.animations || fbx.animations.length === 0) {
+    if (!gltf.animations || gltf.animations.length === 0) {
       console.warn(`[modelLoader] No animations in ${filePath}`);
       return null;
     }
-    const clip = remapClipBoneNames(fbx.animations[0]);
+    const clip = remapClipBoneNames(gltf.animations[0]);
 
-    // FBX animations from Mixamo are in centimeter space — scale position tracks
-    // to match our GLB models (which also use 0.01 root scale).
-    // Position tracks (Hips.position) need to be scaled by 0.01 to match.
+    // GLBs converted from Mixamo FBX have position tracks in centimeter space.
+    // Scale them by 0.01 to match our character models' 0.01 root scale.
     for (const track of clip.tracks) {
       if (track.name.endsWith('.position')) {
         for (let i = 0; i < track.values.length; i++) {
@@ -290,7 +292,7 @@ export async function loadFBXClip(filePath) {
       }
     }
 
-    fbxClipCache.set(filePath, clip);
+    clipCache.set(filePath, clip);
     return clip.clone();
   } catch (err) {
     console.warn(`[modelLoader] Failed to load ${filePath}:`, err.message);
@@ -318,7 +320,7 @@ export async function preloadWeaponAnims(weaponType, mixer, root) {
   const entries = Object.entries(fileMap);
   const results = await Promise.allSettled(
     entries.map(([state, file]) =>
-      loadFBXClip(basePath + file).then(clip => ({ state, clip }))
+      loadAnimClip(basePath + file).then(clip => ({ state, clip }))
     )
   );
 
