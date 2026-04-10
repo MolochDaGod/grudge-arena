@@ -992,24 +992,73 @@ function createShieldMesh() {
   return group;
 }
 
-// ── High-level: create a fully animated arena unit ──────────────────────
+// ── Animation Library (single pre-built GLB) ────────────────────
+
+let _animLibraryCache = null;
 
 /**
- * Load a race model + weapon animations + weapon mesh, return ready-to-use unit.
+ * Load the pre-built animation library GLB.
+ * Contains 21 animations with bone names already matching our character skeletons.
+ * Built by scripts/build-anim-library.mjs from individual Mixamo animation GLBs.
+ */
+async function loadAnimationLibrary() {
+  if (_animLibraryCache) return _animLibraryCache;
+  
+  const gltf = await new Promise((resolve, reject) => {
+    gltfLoader.load('/models/animation-library.glb', resolve, undefined, reject);
+  });
+  
+  // Index animations by name
+  const clips = new Map();
+  for (const clip of gltf.animations) {
+    clips.set(clip.name, clip);
+  }
+  
+  console.log(`[modelLoader] Animation library loaded: ${clips.size} clips [${[...clips.keys()].join(', ')}]`);
+  _animLibraryCache = clips;
+  return clips;
+}
+
+// ── High-level: create a fully animated arena unit ─────────────────────
+
+/**
+ * Load a race model + animation library + weapon mesh, return ready-to-use unit.
  * @param {string} race - 'human', 'barbarian', etc.
  * @param {string} weaponType - 'greatsword', 'bow', etc.
  * @returns {{ scene, mixer, controller: AnimationController }}
  */
 export async function createAnimatedUnit(race, weaponType) {
-  const { scene, mixer, actions: embeddedActions } = await loadRaceModel(race);
+  // Load character model and animation library in parallel
+  const [{ scene, mixer, actions: embeddedActions }, animClips] = await Promise.all([
+    loadRaceModel(race),
+    loadAnimationLibrary(),
+  ]);
+  
   const controller = new AnimationController(mixer, scene);
 
-  // Register embedded animations from the GLB
+  // Register embedded animations from the character GLB (Running, Walking)
   controller.registerActions(embeddedActions);
 
-  // Load and register weapon animation pack (FBX)
-  const weaponActions = await preloadWeaponAnims(weaponType, mixer, scene);
-  controller.registerActions(weaponActions);
+  // Register all animations from the pre-built library
+  // These clips have bone names already matching our skeleton (remapped at build time)
+  for (const [name, clip] of animClips) {
+    const clonedClip = clip.clone();
+    clonedClip.name = name;
+    
+    // Scale position tracks for centimeter space
+    for (const track of clonedClip.tracks) {
+      if (track.name.endsWith('.position')) {
+        for (let i = 0; i < track.values.length; i++) {
+          track.values[i] *= 0.01;
+        }
+      }
+    }
+    
+    const action = mixer.clipAction(clonedClip, scene);
+    controller.actions.set(name, action);
+  }
+  
+  console.log(`[modelLoader] ${race} unit ready: ${controller.actions.size} total actions`);
 
   // Attach weapon mesh to RightHand bone
   const weapon = createWeaponMesh(weaponType);
@@ -1019,11 +1068,11 @@ export async function createAnimatedUnit(race, weaponType) {
   const shieldWeapons = ['sabres', 'runeblade'];
   if (shieldWeapons.includes(weaponType)) {
     const shield = createShieldMesh();
-    shield.rotation.set(-Math.PI / 2, 0, Math.PI); // Face outward
+    shield.rotation.set(-Math.PI / 2, 0, Math.PI);
     attachWeaponToBone(scene, shield, 'LeftHand');
   }
 
-  // Start idle
+  // Start idle animation
   controller.play('idle');
 
   return { scene, mixer, controller };

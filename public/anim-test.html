@@ -105,69 +105,67 @@ try {
 }
 
 async function loadWeaponAnim(mixer, charScene, bones) {
-  log('3. Loading weapon anim: /assets/animations/axe/standing%20idle.glb ...');
+log('3. Loading ANIMATION LIBRARY: /models/animation-library.glb ...');
   try {
     const gltf = await new Promise((res, rej) =>
-      loader.load('/assets/animations/axe/standing%20idle.glb', res, undefined, rej)
+      loader.load('/models/animation-library.glb', res, undefined, rej)
     );
 
-    if (!gltf.animations.length) { log('   NO ANIMATIONS IN FILE'); return; }
+    log('   Animations in library: ' + gltf.animations.length);
+    gltf.animations.forEach(a => log('     ' + a.name + ' (' + a.channels.length + ' channels)'));
 
-    const clip = gltf.animations[0];
-    log('   Loaded: ' + clip.name + ' (' + clip.tracks.length + ' tracks)');
-    log('   Raw track names (first 5):');
-    clip.tracks.slice(0, 5).forEach(t => log('     ' + t.name));
+    // Pick idle animation to test
+    const idleClip = gltf.animations.find(a => a.name === 'idle') || gltf.animations[0];
+    log('\n   Testing: ' + idleClip.name);
+    log('   Track names (first 5):');
+    idleClip.tracks.slice(0, 5).forEach(t => log('     ' + t.name));
 
-    // Remap
-    const ALIASES = { 'Spine1': 'Spine01', 'Spine2': 'Spine02', 'Neck': 'neck', 'HeadTop_End': 'head_end' };
-    for (const track of clip.tracks) {
-      const dot = track.name.indexOf('.');
-      if (dot === -1) continue;
-      let bone = track.name.substring(0, dot);
-      const prop = track.name.substring(dot);
-      if (bone.includes(':')) bone = bone.split(':').pop();
-      if (ALIASES[bone]) bone = ALIASES[bone];
-      track.name = bone + prop;
+    // Scale position tracks (cm to m)
+    for (const track of idleClip.tracks) {
+      if (track.name.endsWith('.position')) {
+        for (let i = 0; i < track.values.length; i++) track.values[i] *= 0.01;
+      }
     }
 
-    log('\n   After remap (first 5):');
-    clip.tracks.slice(0, 5).forEach(t => log('     ' + t.name));
-
-    // Check matches
+    // Check bone name matches
     const boneSet = new Set(bones);
     let matched = 0, unmatched = 0;
     const unmatchedNames = [];
-    for (const t of clip.tracks) {
+    for (const t of idleClip.tracks) {
       const dot = t.name.indexOf('.');
       const boneName = dot > -1 ? t.name.substring(0, dot) : t.name;
       if (boneSet.has(boneName)) matched++;
       else { unmatched++; if (!unmatchedNames.includes(boneName)) unmatchedNames.push(boneName); }
     }
-    log('   Matched: ' + matched + '/' + clip.tracks.length);
-    if (unmatchedNames.length) log('   Unmatched bones: ' + unmatchedNames.join(', '));
+    log('   Matched: ' + matched + '/' + idleClip.tracks.length);
+    if (unmatchedNames.length) log('   Unmatched: ' + unmatchedNames.join(', '));
 
-    // Stop embedded, play weapon anim
+    // Stop embedded anim, play library idle
     mixer.stopAllAction();
-    const action = mixer.clipAction(clip, charScene);
+    const action = mixer.clipAction(idleClip, charScene);
     action.setLoop(THREE.LoopRepeat, Infinity);
     action.play();
-    log('\n   Weapon anim action.isRunning(): ' + action.isRunning());
+    log('\n   Library idle playing: ' + action.isRunning());
 
-    // Check bindings
-    if (action._propertyBindings) {
-      let bound = 0, unbound = 0;
-      const unboundNames = [];
-      action._propertyBindings.forEach((pb, i) => {
-        if (pb && pb.binding && pb.binding.node) bound++;
-        else { unbound++; unboundNames.push(clip.tracks[i]?.name || i); }
-      });
-      log('   Bindings: ' + bound + ' bound, ' + unbound + ' unbound');
-      if (unboundNames.length && unboundNames.length < 10) log('   Unbound: ' + unboundNames.join(', '));
-    }
+    // Cycle through ALL library animations every 3 seconds
+    let animIdx = 0;
+    const allAnims = gltf.animations;
+    setInterval(() => {
+      animIdx = (animIdx + 1) % allAnims.length;
+      const nextClip = allAnims[animIdx].clone();
+      for (const track of nextClip.tracks) {
+        if (track.name.endsWith('.position')) {
+          for (let i = 0; i < track.values.length; i++) track.values[i] *= 0.01;
+        }
+      }
+      mixer.stopAllAction();
+      const nextAction = mixer.clipAction(nextClip, charScene);
+      nextAction.setLoop(THREE.LoopRepeat, Infinity);
+      nextAction.reset().play();
+      log('   Playing: ' + allAnims[animIdx].name);
+    }, 3000);
 
-    log('\n=== DONE ===');
-    log('If character is still in T-pose, the issue is in skeleton cloning.');
-    log('If character moves, the animation system works — issue is in game.js wiring.');
+    log('\n=== CYCLING ANIMATIONS EVERY 3s ===');
 
   } catch (e) {
     log('WEAPON ANIM FAILED: ' + e.message);
