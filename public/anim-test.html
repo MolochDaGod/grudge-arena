@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html><head><title>Animation Diagnostic</title></head>
+<body style="background:#111;color:#0f0;font-family:monospace;margin:0;display:flex;">
+<div id="log" style="white-space:pre;padding:16px;font-size:11px;width:50%;height:100vh;overflow-y:auto;"></div>
+<div id="canvas-wrap" style="width:50%;height:100vh;"></div>
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+
+const logEl = document.getElementById('log');
+const log = (msg) => { logEl.textContent += msg + '\n'; console.log(msg); };
+const loader = new GLTFLoader();
+
+log('=== ANIMATION DIAGNOSTIC ===\n');
+
+// Scene
+const w = window.innerWidth / 2, h = window.innerHeight;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+const camera = new THREE.PerspectiveCamera(50, w / h, 0.01, 100);
+camera.position.set(0, 1.5, 3);
+camera.lookAt(0, 0.8, 0);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(w, h);
+document.getElementById('canvas-wrap').appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const dir = new THREE.DirectionalLight(0xffffff, 1);
+dir.position.set(2, 4, 2);
+scene.add(dir);
+
+// Ground
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshStandardMaterial({ color: 0x333355 }));
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
+
+log('1. Loading /models/human.glb ...');
+try {
+  const gltf = await new Promise((res, rej) => loader.load('/models/human.glb', res, undefined, rej));
+  const charScene = gltf.scene;
+  scene.add(charScene);
+
+  log('   Root scale: ' + charScene.scale.toArray().map(v => v.toFixed(4)).join(', '));
+  log('   Embedded anims: ' + gltf.animations.map(a => `${a.name} (${a.tracks.length} tracks, ${a.duration.toFixed(1)}s)`).join(', '));
+
+  // Bones
+  const bones = [];
+  charScene.traverse(n => { if (n.isBone) bones.push(n.name); });
+  log('   Bones (' + bones.length + '): ' + bones.join(', '));
+
+  // SkinnedMesh info
+  charScene.traverse(n => {
+    if (n.isSkinnedMesh) {
+      log('   SkinnedMesh: ' + n.name + ', skeleton bones: ' + n.skeleton.bones.length);
+      log('   Skeleton bound: ' + (n.skeleton.bones[0]?.parent ? 'yes' : 'NO'));
+    }
+  });
+
+  // Create mixer
+  const mixer = new THREE.AnimationMixer(charScene);
+  log('\n2. Testing EMBEDDED animation...');
+
+  if (gltf.animations.length > 0) {
+    const clip = gltf.animations[0];
+    log('   Clip: ' + clip.name);
+    log('   First 5 tracks:');
+    clip.tracks.slice(0, 5).forEach(t => log('     ' + t.name + ' (' + t.values.length + ' values)'));
+
+    const action = mixer.clipAction(clip);
+    action.play();
+    log('   action.isRunning(): ' + action.isRunning());
+    log('   action.isScheduled(): ' + action.isScheduled());
+
+    // Check bindings
+    if (action._propertyBindings) {
+      let bound = 0, unbound = 0;
+      action._propertyBindings.forEach(pb => {
+        if (pb && pb.binding && pb.binding.node) bound++;
+        else unbound++;
+      });
+      log('   Bindings: ' + bound + ' bound, ' + unbound + ' unbound');
+    }
+  }
+
+  // Run for 2 seconds with embedded, then try weapon anim
+  const clock = new THREE.Clock();
+  let weaponLoaded = false;
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = clock.getDelta();
+    mixer.update(dt);
+    renderer.render(scene, camera);
+
+    // After 2 seconds, load weapon animation
+    if (!weaponLoaded && clock.elapsedTime > 0.5) {
+      weaponLoaded = true;
+      loadWeaponAnim(mixer, charScene, bones);
+    }
+  }
+  animate();
+  log('   Render loop started.\n');
+
+} catch (e) {
+  log('FAILED TO LOAD CHARACTER: ' + e.message);
+}
+
+async function loadWeaponAnim(mixer, charScene, bones) {
+  log('3. Loading weapon anim: /assets/animations/axe/standing%20idle.glb ...');
+  try {
+    const gltf = await new Promise((res, rej) =>
+      loader.load('/assets/animations/axe/standing%20idle.glb', res, undefined, rej)
+    );
+
+    if (!gltf.animations.length) { log('   NO ANIMATIONS IN FILE'); return; }
+
+    const clip = gltf.animations[0];
+    log('   Loaded: ' + clip.name + ' (' + clip.tracks.length + ' tracks)');
+    log('   Raw track names (first 5):');
+    clip.tracks.slice(0, 5).forEach(t => log('     ' + t.name));
+
+    // Remap
+    const ALIASES = { 'Spine1': 'Spine01', 'Spine2': 'Spine02', 'Neck': 'neck', 'HeadTop_End': 'head_end' };
+    for (const track of clip.tracks) {
+      const dot = track.name.indexOf('.');
+      if (dot === -1) continue;
+      let bone = track.name.substring(0, dot);
+      const prop = track.name.substring(dot);
+      if (bone.includes(':')) bone = bone.split(':').pop();
+      if (ALIASES[bone]) bone = ALIASES[bone];
+      track.name = bone + prop;
+    }
+
+    log('\n   After remap (first 5):');
+    clip.tracks.slice(0, 5).forEach(t => log('     ' + t.name));
+
+    // Check matches
+    const boneSet = new Set(bones);
+    let matched = 0, unmatched = 0;
+    const unmatchedNames = [];
+    for (const t of clip.tracks) {
+      const dot = t.name.indexOf('.');
+      const boneName = dot > -1 ? t.name.substring(0, dot) : t.name;
+      if (boneSet.has(boneName)) matched++;
+      else { unmatched++; if (!unmatchedNames.includes(boneName)) unmatchedNames.push(boneName); }
+    }
+    log('   Matched: ' + matched + '/' + clip.tracks.length);
+    if (unmatchedNames.length) log('   Unmatched bones: ' + unmatchedNames.join(', '));
+
+    // Stop embedded, play weapon anim
+    mixer.stopAllAction();
+    const action = mixer.clipAction(clip, charScene);
+    action.setLoop(THREE.LoopRepeat, Infinity);
+    action.play();
+    log('\n   Weapon anim action.isRunning(): ' + action.isRunning());
+
+    // Check bindings
+    if (action._propertyBindings) {
+      let bound = 0, unbound = 0;
+      const unboundNames = [];
+      action._propertyBindings.forEach((pb, i) => {
+        if (pb && pb.binding && pb.binding.node) bound++;
+        else { unbound++; unboundNames.push(clip.tracks[i]?.name || i); }
+      });
+      log('   Bindings: ' + bound + ' bound, ' + unbound + ' unbound');
+      if (unboundNames.length && unboundNames.length < 10) log('   Unbound: ' + unboundNames.join(', '));
+    }
+
+    log('\n=== DONE ===');
+    log('If character is still in T-pose, the issue is in skeleton cloning.');
+    log('If character moves, the animation system works — issue is in game.js wiring.');
+
+  } catch (e) {
+    log('WEAPON ANIM FAILED: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>
