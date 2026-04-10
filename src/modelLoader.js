@@ -523,14 +523,26 @@ export async function loadRaceModel(race) {
 
   // Register embedded animations (remap bone names)
   // Clone clips so cached originals aren't mutated
+  // Also create aliases: 'Running' → register as both 'running' AND 'run'
+  const EMBEDDED_ALIASES = {
+    'running': ['run', 'idle'],   // Running anim doubles as run and idle fallback
+    'walking': ['walk'],
+    'idle':    [],
+  };
   for (const clip of gltf.animations) {
     const clonedClip = clip.clone();
     remapClipBoneNames(clonedClip);
+    const key = clonedClip.name.toLowerCase();
     const action = mixer.clipAction(clonedClip, scene);
-    actions.set(clonedClip.name.toLowerCase(), action);
+    actions.set(key, action);
+    // Register aliases so 'run' and 'idle' resolve to embedded anims
+    const aliases = EMBEDDED_ALIASES[key] || [];
+    for (const alias of aliases) {
+      if (!actions.has(alias)) actions.set(alias, action);
+    }
   }
 
-  console.log(`[modelLoader] Loaded ${race} — scale: ${nativeScale * cfg.scale}, bones: ${scene.children.length > 0 ? 'OK' : 'NONE'}, anims: ${gltf.animations.length} embedded`);
+  console.log(`[modelLoader] Loaded ${race} — scale: ${nativeScale * cfg.scale}, embeddedAnims: [${[...actions.keys()].join(', ')}]`);
   return { scene, mixer, actions, clips: gltf.animations };
 }
 
@@ -542,12 +554,15 @@ export async function loadRaceModel(race) {
  * GLTFLoader is used for everything — no FBXLoader needed.
  */
 export async function loadAnimClip(filePath) {
+  // URL-encode spaces in file paths (Mixamo filenames have spaces)
+  const encodedPath = filePath.replace(/ /g, '%20');
+  
   const cached = clipCache.get(filePath);
   if (cached) return cached.clone();
 
   try {
     const gltf = await new Promise((resolve, reject) => {
-      gltfLoader.load(filePath, resolve, undefined, reject);
+      gltfLoader.load(encodedPath, resolve, undefined, reject);
     });
     if (!gltf.animations || gltf.animations.length === 0) {
       console.warn(`[modelLoader] No animations in ${filePath}`);
@@ -676,11 +691,22 @@ export class AnimationController {
 
   /** Play a named animation state with crossfade */
   play(stateName, opts = {}) {
-    const action = this.actions.get(stateName);
+    let action = this.actions.get(stateName);
     if (!action) {
-      // Fallback: try 'idle' if requested state doesn't exist
-      if (stateName !== 'idle') return this.play('idle', opts);
-      return false;
+      // Fallback chain: requested → idle → running → walking → first available
+      const fallbacks = ['idle', 'running', 'walking', 'run'];
+      if (stateName !== 'idle') {
+        for (const fb of fallbacks) {
+          action = this.actions.get(fb);
+          if (action) { stateName = fb; break; }
+        }
+      }
+      if (!action) {
+        // Last resort: play whatever is first in the map
+        const first = this.actions.entries().next().value;
+        if (first) { action = first[1]; stateName = first[0]; }
+      }
+      if (!action) return false;
     }
 
     if (this.currentState === stateName && this.currentAction?.isRunning()) {
