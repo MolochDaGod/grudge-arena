@@ -571,8 +571,6 @@ export async function loadAnimClip(filePath) {
     const clip = remapClipBoneNames(gltf.animations[0]);
 
     // Strip tracks targeting bones that don't exist on our 24-joint skeleton.
-    // Without this, unmatched finger/eye tracks get a default bind pose that
-    // can distort the mesh or cause invisible bones to hold wrong positions.
     clip.tracks = clip.tracks.filter(track => {
       const dotIdx = track.name.indexOf('.');
       if (dotIdx === -1) return true;
@@ -580,15 +578,9 @@ export async function loadAnimClip(filePath) {
       return VALID_BONES.has(boneName);
     });
 
-    // GLBs converted from Mixamo FBX have position tracks in centimeter space.
-    // Scale them by 0.01 to match our character models' 0.01 root scale.
-    for (const track of clip.tracks) {
-      if (track.name.endsWith('.position')) {
-        for (let i = 0; i < track.values.length; i++) {
-          track.values[i] *= 0.01;
-        }
-      }
-    }
+    // DO NOT scale position tracks. The Armature's 0.01 root scale already
+    // converts centimeter bone positions to world meters. Double-scaling
+    // would sink the character into the ground.
 
     clipCache.set(filePath, clip);
     return clip.clone();
@@ -1041,19 +1033,12 @@ export async function createAnimatedUnit(race, weaponType) {
 
   // Register all animations from the pre-built library
   // These clips have bone names already matching our skeleton (remapped at build time)
+  // DO NOT scale position tracks — the Armature's 0.01 root scale already
+  // converts centimeter bone positions to world meters. Scaling here
+  // would double-convert, sinking the character into the ground.
   for (const [name, clip] of animClips) {
     const clonedClip = clip.clone();
     clonedClip.name = name;
-    
-    // Scale position tracks for centimeter space
-    for (const track of clonedClip.tracks) {
-      if (track.name.endsWith('.position')) {
-        for (let i = 0; i < track.values.length; i++) {
-          track.values[i] *= 0.01;
-        }
-      }
-    }
-    
     const action = mixer.clipAction(clonedClip, scene);
     controller.actions.set(name, action);
   }

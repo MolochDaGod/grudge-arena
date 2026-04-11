@@ -56,23 +56,53 @@ sun.shadow.camera.right = sun.shadow.camera.top = 30;
 sun.shadow.bias = -0.001;
 scene.add(sun);
 
-// Ground
+// ── Collision Layers ────────────────────────────────────────────────
+const Layers = {
+  TERRAIN:     0,  // Ground, walls
+  PLAYER:      1,  // Player character
+  ALLY:        2,  // Allied NPCs
+  ENEMY:       3,  // Enemy NPCs
+  PROJECTILE:  4,  // Spell projectiles
+  ENVIRONMENT: 5,  // Pillars, obstacles
+  TRIGGER:     6,  // Pickup zones, area effects
+};
+
+// Ground (terrain layer)
 const ground = new THREE.Mesh(
   new THREE.CircleGeometry(30, 64),
   new THREE.MeshStandardMaterial({ color: 0x2d3748, roughness: 0.9 })
 );
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
+ground.layers.set(Layers.TERRAIN);
+ground.userData.layer = 'terrain';
 scene.add(ground);
 
-// Ring
+// Ring (environment layer)
 const ring = new THREE.Mesh(
   new THREE.RingGeometry(29, 30, 64),
   new THREE.MeshStandardMaterial({ color: 0xc9a84c, emissive: 0x8b6914, emissiveIntensity: 0.3, metalness: 0.8, roughness: 0.3 })
 );
 ring.rotation.x = -Math.PI / 2;
 ring.position.y = 0.01;
+ring.layers.set(Layers.ENVIRONMENT);
 scene.add(ring);
+
+// Pillars (environment layer, block LoS)
+for (let i = 0; i < 4; i++) {
+  const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+  const pillar = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.2, 1.5, 6, 8),
+    new THREE.MeshStandardMaterial({ color: 0x333355, roughness: 0.6, metalness: 0.4 })
+  );
+  pillar.position.set(Math.cos(angle) * 12, 3, Math.sin(angle) * 12);
+  pillar.castShadow = true;
+  pillar.receiveShadow = true;
+  pillar.layers.set(Layers.ENVIRONMENT);
+  pillar.userData.layer = 'environment';
+  pillar.userData.blocksLoS = true;
+  scene.add(pillar);
+}
 
 // ── Load character + animation library ──────────────────────────────
 const loader = new GLTFLoader();
@@ -83,6 +113,9 @@ const character = charGltf.scene;
 character.traverse(c => {
   if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; c.frustumCulled = false; }
 });
+// Set character on player layer, feet on ground
+character.layers.set(Layers.PLAYER);
+character.userData.layer = 'player';
 scene.add(character);
 
 const mixer = new THREE.AnimationMixer(character);
@@ -100,15 +133,11 @@ const animGltf = await new Promise((r, e) => loader.load('/models/animation-libr
 
 const actions = {};
 for (const clip of animGltf.animations) {
-  // Scale position tracks from cm to match 0.01 root scale
-  for (const track of clip.tracks) {
-    if (track.name.endsWith('.position')) {
-      for (let i = 0; i < track.values.length; i++) {
-        track.values[i] *= 0.01;
-      }
-    }
-  }
-  // Bind to character scene
+  // DO NOT scale position tracks — the Armature's 0.01 root scale
+  // already converts centimeter bone positions to world meters.
+  // Scaling here would DOUBLE the conversion, sinking the character.
+  
+  // Bind clip to the character scene
   const action = mixer.clipAction(clip, character);
   actions[clip.name] = action;
 }

@@ -120,12 +120,7 @@ log('3. Loading ANIMATION LIBRARY: /models/animation-library.glb ...');
     log('   Track names (first 5):');
     idleClip.tracks.slice(0, 5).forEach(t => log('     ' + t.name));
 
-    // Scale position tracks (cm to m)
-    for (const track of idleClip.tracks) {
-      if (track.name.endsWith('.position')) {
-        for (let i = 0; i < track.values.length; i++) track.values[i] *= 0.01;
-      }
-    }
+    // DO NOT scale position tracks — Armature 0.01 root scale handles cm→m
 
     // Check bone name matches
     const boneSet = new Set(bones);
@@ -153,11 +148,6 @@ log('3. Loading ANIMATION LIBRARY: /models/animation-library.glb ...');
     setInterval(() => {
       animIdx = (animIdx + 1) % allAnims.length;
       const nextClip = allAnims[animIdx].clone();
-      for (const track of nextClip.tracks) {
-        if (track.name.endsWith('.position')) {
-          for (let i = 0; i < track.values.length; i++) track.values[i] *= 0.01;
-        }
-      }
       mixer.stopAllAction();
       const nextAction = mixer.clipAction(nextClip, charScene);
       nextAction.setLoop(THREE.LoopRepeat, Infinity);
