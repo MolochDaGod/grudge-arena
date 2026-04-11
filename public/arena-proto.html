@@ -597,22 +597,39 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('keyup', (e) => { holdKey[e.code] = false; });
 
-// LMB = melee auto-attack
+// LMB = light attack, RMB = heavy attack (annihilate: J = attack, hold = charge)
 renderer.domElement.addEventListener('mousedown', (e) => {
   if (e.button === 0 && !isRightMouseDown) {
+    // LMB: light attack (fast combo chain)
     const dist = character.position.distanceTo(enemy.position);
+    // Face enemy
+    facing.set(enemy.position.x - character.position.x, enemy.position.z - character.position.z).normalize();
+    character.rotation.y = -facing.angle() + Math.PI / 2;
+    
+    if (ONE_SHOT_ANIMS.includes(currentName)) {
+      comboNext = true; // Queue next hit (annihilate prepareNext pattern)
+      return;
+    }
+    
+    const lightAttacks = ['attack1', 'attack2', 'attack3'];
+    playOnce(lightAttacks[Math.floor(Math.random() * lightAttacks.length)], 1.4);
     if (dist < 3.5) {
-    const attacks = ['attack1', 'attack2', 'attack3', 'attack4'];
-      playOnce(attacks[Math.floor(Math.random() * attacks.length)], 1.2);
-      // Face enemy on attack
-      facing.set(enemy.position.x - character.position.x, enemy.position.z - character.position.z).normalize();
-      character.rotation.y = -facing.angle() + Math.PI / 2;
-      damageEnemy(45);
-      // Melee VFX
+      damageEnemy(35);
       spawnSlashArc(character.position, facing);
       spawnImpact(enemy.position, 0xffffff);
-    } else {
-      spawnFloatingText(character.position, 'Out of range', '#ffaa00');
+    }
+  }
+  if (e.button === 2 && !isRightMouseDown) {
+    // RMB held = heavy/charged attack
+    facing.set(enemy.position.x - character.position.x, enemy.position.z - character.position.z).normalize();
+    character.rotation.y = -facing.angle() + Math.PI / 2;
+    playOnce('swing', 1.0); // Slower, more damage
+    const dist = character.position.distanceTo(enemy.position);
+    if (dist < 4) {
+      damageEnemy(80);
+      spawnSlashArc(character.position, facing, 0xff6600);
+      spawnImpact(enemy.position, 0xff4400, 1.5);
+      emitParticles(enemy.position.clone().setY(1), 0xff6600, 15, 2, { x: 0, y: 2, z: 0 }, 0.5);
     }
   }
 });
@@ -639,7 +656,19 @@ function processTickInput() {
     character.position.addScaledVector(backDir, 4);
     playOnce('dodge', 2);
   }
-  else if (tickKey.Space) playOnce('jump');
+  else if (tickKey.Space) {
+    // Jump with physics (annihilate: entry ['playJump', 'jump'])
+    if (isGrounded) {
+      velocityY = JUMP_FORCE;
+      isGrounded = false;
+      canDoubleJump = true;
+      playOnce('jump');
+    } else if (canDoubleJump) {
+      velocityY = JUMP_FORCE * 0.8;
+      canDoubleJump = false;
+      playOnce('jump');
+    }
+  }
   else if (tickKey.KeyQ) playOnce('block');
   else if (tickKey.KeyT) playOnce('taunt');
 
@@ -647,12 +676,18 @@ function processTickInput() {
   for (const k of Object.keys(tickKey)) delete tickKey[k];
 }
 
-// ── Movement (annihilate pattern) ────────────────────────────
+// ── Movement + Jump Physics (annihilate pattern) ──────────────
 const direction = new THREE.Vector2(); // may be zero length
 const facing = new THREE.Vector2(0, -1); // NEVER zero length
 const playerSpeed = 0.11; // annihilate default
 const sprintMult = 1.5;
-const ONE_SHOT_ANIMS = ['roll','dodge','jump','attack1','attack2','attack3','attack4','swing','cast','aoe','kick','taunt','block','hurt','stun','dead'];
+const GRAVITY = 20;
+const JUMP_FORCE = 8;
+let velocityY = 0;
+let isGrounded = true;
+let canDoubleJump = true;
+let comboNext = false; // annihilate combo chain flag
+const ONE_SHOT_ANIMS = ['roll','dodge','attack1','attack2','attack3','attack4','swing','cast','aoe','kick','taunt','block','hurt','stun','dead'];
 
 const clock = new THREE.Clock();
 
@@ -677,27 +712,56 @@ function animate() {
   const isMoving = direction.lengthSq() > 0;
   const isPlayingOneShot = ONE_SHOT_ANIMS.includes(currentName);
 
-  // Only move if in a movable state (annihilate: canMove tag)
-  if (isMoving && !isPlayingOneShot) {
-    // Update facing (annihilate pattern: facing copies direction when moving)
-    // Rotate direction by camera yaw so W = forward from camera POV
+  // canMove: idle, run, jump, fall states allow movement (annihilate pattern)
+  const canMove = !isPlayingOneShot || currentName === 'jump';
+  
+  if (isMoving && canMove) {
+    // Rotate direction by camera yaw (W = forward from camera POV)
     const cos = Math.cos(cameraYaw), sin = Math.sin(cameraYaw);
     const worldDirX = direction.x * cos - direction.y * sin;
     const worldDirZ = direction.x * sin + direction.y * cos;
     facing.set(worldDirX, worldDirZ);
 
-    // Rotate mesh (annihilate formula: -facing.angle() + PI/2)
+    // Rotate mesh (annihilate: -facing.angle() + PI/2)
     character.rotation.y = -facing.angle() + Math.PI / 2;
 
-    // Move position (annihilate: position += direction)
+    // Move position
     character.position.x += worldDirX;
     character.position.z += worldDirZ;
 
-    // Play run/sprint animation
-    playAnim((holdKey.ShiftLeft || holdKey.ShiftRight) ? 'sprint' : 'run');
-  } else if (!isMoving && !isPlayingOneShot) {
+    if (isGrounded && !isPlayingOneShot) {
+      playAnim((holdKey.ShiftLeft || holdKey.ShiftRight) ? 'sprint' : 'run');
+    }
+  } else if (!isMoving && isGrounded && !isPlayingOneShot) {
     if (currentName === 'run' || currentName === 'sprint') {
       playAnim('idle');
+    }
+  }
+  
+  // Jump physics (gravity)
+  if (!isGrounded) {
+    velocityY -= GRAVITY * dt;
+    character.position.y += velocityY * dt;
+    // Land detection
+    if (character.position.y <= 0) {
+      character.position.y = 0;
+      velocityY = 0;
+      isGrounded = true;
+      canDoubleJump = true;
+      if (currentName === 'jump') playAnim('idle');
+    }
+  }
+  
+  // Combo chain (annihilate prepareNext pattern)
+  if (comboNext && (currentName === 'idle' || currentName === 'run')) {
+    comboNext = false;
+    const comboAttacks = ['attack2', 'attack3', 'attack4', 'kick'];
+    playOnce(comboAttacks[Math.floor(Math.random() * comboAttacks.length)], 1.5);
+    const dist = character.position.distanceTo(enemy.position);
+    if (dist < 3.5) {
+      damageEnemy(40);
+      spawnSlashArc(character.position, facing, 0xffaa00);
+      spawnImpact(enemy.position, 0xffaa00);
     }
   }
 
