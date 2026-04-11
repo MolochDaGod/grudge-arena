@@ -459,76 +459,113 @@ function updateCamera() {
   camera.lookAt(target);
 }
 
-// ── Input ───────────────────────────────────────────────────────────
-const keys = {};
-document.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
-document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+// ── Input ───────────────────────────────────────────────
+const holdKey = {};
+const tickKey = {};
+document.addEventListener('keydown', (e) => {
+  if (holdKey[e.code]) return; // annihilate pattern: prevent repeat
+  holdKey[e.code] = true;
+  tickKey[e.code] = true;
+});
+document.addEventListener('keyup', (e) => { holdKey[e.code] = false; });
 
-// LMB = auto-attack toward enemy
+// LMB = melee auto-attack
 renderer.domElement.addEventListener('mousedown', (e) => {
   if (e.button === 0 && !isRightMouseDown) {
     const dist = character.position.distanceTo(enemy.position);
-    if (dist < 3) {
-      // Melee range
+    if (dist < 3.5) {
       const attacks = ['attack1', 'attack2', 'attack3', 'attack4'];
       playOnce(attacks[Math.floor(Math.random() * attacks.length)], 1.2);
-      character.lookAt(enemy.position.x, character.position.y, enemy.position.z);
+      // Face enemy on attack
+      facing.set(enemy.position.x - character.position.x, enemy.position.z - character.position.z).normalize();
+      character.rotation.y = -facing.angle() + Math.PI / 2;
       damageEnemy(45);
     } else {
-      // Out of range - face enemy
-      character.lookAt(enemy.position.x, character.position.y, enemy.position.z);
       spawnFloatingText(character.position, 'Out of range', '#ffaa00');
     }
   }
 });
 
-// Skills and movement keys
-document.addEventListener('keydown', (e) => {
-  if (['1','2','3','4','5'].includes(e.key)) useSkill(parseInt(e.key));
-  if (e.key === 'Control') playOnce('roll', 1.5);
-  if (e.key === 'Alt') { e.preventDefault(); playOnce('dodge', 1.5); }
-  if (e.key === ' ') playOnce('jump');
-  if (e.key === 'q') playOnce('block');
-  if (e.key === 't') playOnce('taunt');
-});
+// Tick-based skill/action input (annihilate pattern)
+function processTickInput() {
+  if (tickKey.Digit1 || tickKey.Numpad1) useSkill(1);
+  else if (tickKey.Digit2 || tickKey.Numpad2) useSkill(2);
+  else if (tickKey.Digit3 || tickKey.Numpad3) useSkill(3);
+  else if (tickKey.Digit4 || tickKey.Numpad4) useSkill(4);
+  else if (tickKey.Digit5 || tickKey.Numpad5) useSkill(5);
+  else if (tickKey.ControlLeft || tickKey.ControlRight) {
+    // Dash: snap facing to movement direction, velocity burst
+    if (direction.lengthSq() > 0) facing.copy(direction);
+    character.rotation.y = -facing.angle() + Math.PI / 2;
+    const dashDir = new THREE.Vector3(facing.x, 0, facing.y).normalize();
+    character.position.addScaledVector(dashDir, 6);
+    playOnce('roll', 2);
+    spawnAoE(character.position, 1.5, 0x4488ff, 0.3);
+  }
+  else if (tickKey.AltLeft || tickKey.AltRight) {
+    // Dodge backward
+    const backDir = new THREE.Vector3(-facing.x, 0, -facing.y).normalize();
+    character.position.addScaledVector(backDir, 4);
+    playOnce('dodge', 2);
+  }
+  else if (tickKey.Space) playOnce('jump');
+  else if (tickKey.KeyQ) playOnce('block');
+  else if (tickKey.KeyT) playOnce('taunt');
 
-// ── Game loop ───────────────────────────────────────────────────────
+  // Clear tick keys (annihilate pattern)
+  for (const k of Object.keys(tickKey)) delete tickKey[k];
+}
+
+// ── Movement (annihilate pattern) ────────────────────────────
+const direction = new THREE.Vector2(); // may be zero length
+const facing = new THREE.Vector2(0, -1); // NEVER zero length
+const playerSpeed = 0.11; // annihilate default
+const sprintMult = 1.5;
+const ONE_SHOT_ANIMS = ['roll','dodge','jump','attack1','attack2','attack3','attack4','swing','cast','aoe','kick','taunt','block','hurt','stun','dead'];
+
 const clock = new THREE.Clock();
-const moveSpeed = 5;
 
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.1);
 
-  // Movement
-  let moveX = 0, moveZ = 0;
-  if (keys['w']) moveZ -= 1;
-  if (keys['s']) moveZ += 1;
-  if (keys['a']) moveX -= 1;
-  if (keys['d']) moveX += 1;
+  // Process tick-based inputs first (annihilate pattern)
+  processTickInput();
 
-  const isMoving = moveX !== 0 || moveZ !== 0;
+  // Build direction from held keys (annihilate: Vector2, WASD)
+  direction.set(0, 0);
+  if (holdKey.KeyW || holdKey.ArrowUp)    direction.y -= 1;
+  if (holdKey.KeyS || holdKey.ArrowDown)  direction.y += 1;
+  if (holdKey.KeyA || holdKey.ArrowLeft)  direction.x -= 1;
+  if (holdKey.KeyD || holdKey.ArrowRight) direction.x += 1;
 
-  if (isMoving) {
-    const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
-    moveX /= len; moveZ /= len;
+  // Normalize and apply speed (annihilate: speed * dt * 60)
+  const speed = (holdKey.ShiftLeft || holdKey.ShiftRight) ? playerSpeed * sprintMult : playerSpeed;
+  direction.normalize().multiplyScalar(speed * dt * 60);
 
-    const speed = keys['shift'] ? moveSpeed * 1.5 : moveSpeed;
-    character.position.x += moveX * speed * dt;
-    character.position.z += moveZ * speed * dt;
+  const isMoving = direction.lengthSq() > 0;
+  const isPlayingOneShot = ONE_SHOT_ANIMS.includes(currentName);
 
-    // Face movement direction (relative to camera)
-    const moveAngle = Math.atan2(moveX, moveZ);
-    character.rotation.y = cameraYaw + moveAngle;
+  // Only move if in a movable state (annihilate: canMove tag)
+  if (isMoving && !isPlayingOneShot) {
+    // Update facing (annihilate pattern: facing copies direction when moving)
+    // Rotate direction by camera yaw so W = forward from camera POV
+    const cos = Math.cos(cameraYaw), sin = Math.sin(cameraYaw);
+    const worldDirX = direction.x * cos - direction.y * sin;
+    const worldDirZ = direction.x * sin + direction.y * cos;
+    facing.set(worldDirX, worldDirZ);
 
-    // Animation
-    if (currentName !== 'roll' && currentName !== 'dodge' && currentName !== 'jump'
-        && !currentName.startsWith('attack') && currentName !== 'swing'
-        && currentName !== 'cast' && currentName !== 'aoe') {
-      playAnim(keys['shift'] ? 'sprint' : 'run');
-    }
-  } else {
-    if (currentName === 'run' || currentName === 'sprint' || currentName === 'walk') {
+    // Rotate mesh (annihilate formula: -facing.angle() + PI/2)
+    character.rotation.y = -facing.angle() + Math.PI / 2;
+
+    // Move position (annihilate: position += direction)
+    character.position.x += worldDirX;
+    character.position.z += worldDirZ;
+
+    // Play run/sprint animation
+    playAnim((holdKey.ShiftLeft || holdKey.ShiftRight) ? 'sprint' : 'run');
+  } else if (!isMoving && !isPlayingOneShot) {
+    if (currentName === 'run' || currentName === 'sprint') {
       playAnim('idle');
     }
   }
