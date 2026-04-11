@@ -197,7 +197,230 @@ function playOnce(name, speed = 1) {
 // Start idle
 playAnim('idle');
 
-// ── WoW-style camera ────────────────────────────────────────────────
+// ── Ground raycast (snap character to terrain) ───────────────────
+const groundRaycaster = new THREE.Raycaster();
+const downDir = new THREE.Vector3(0, -1, 0);
+
+function snapToGround(obj) {
+  groundRaycaster.set(new THREE.Vector3(obj.position.x, 10, obj.position.z), downDir);
+  groundRaycaster.layers.set(Layers.TERRAIN);
+  const hits = groundRaycaster.intersectObject(ground);
+  if (hits.length > 0) {
+    obj.position.y = hits[0].point.y;
+  }
+}
+
+// ── Mouse raycast (ground targeting for skills) ───────────────
+const mouseRaycaster = new THREE.Raycaster();
+const mouseNDC = new THREE.Vector2();
+let mouseWorldPos = new THREE.Vector3();
+
+document.addEventListener('mousemove', (e) => {
+  mouseNDC.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouseNDC.y = -(e.clientY / window.innerHeight) * 2 + 1;
+});
+
+function updateMouseWorldPos() {
+  mouseRaycaster.setFromCamera(mouseNDC, camera);
+  const hits = mouseRaycaster.intersectObject(ground);
+  if (hits.length > 0) mouseWorldPos = hits[0].point;
+}
+
+// ── LoS check (raycast through pillars) ──────────────────────
+const losRaycaster = new THREE.Raycaster();
+const losPillars = [];
+scene.traverse(c => { if (c.userData.blocksLoS) losPillars.push(c); });
+
+function hasLineOfSight(from, to) {
+  const dir = new THREE.Vector3().subVectors(to, from).normalize();
+  const dist = from.distanceTo(to);
+  losRaycaster.set(from, dir);
+  losRaycaster.far = dist;
+  const hits = losRaycaster.intersectObjects(losPillars);
+  return hits.length === 0;
+}
+
+// ── Enemy training dummy ───────────────────────────────────
+const enemyGltf = await new Promise((r, e) => loader.load('/models/orc.glb', r, undefined, e));
+const enemy = enemyGltf.scene;
+enemy.traverse(c => { if (c.isMesh) { c.castShadow = true; c.frustumCulled = false; } });
+enemy.position.set(8, 0, 0);
+enemy.rotation.y = -Math.PI / 2;
+enemy.layers.set(Layers.ENEMY);
+enemy.userData.layer = 'enemy';
+enemy.userData.hp = 1000;
+enemy.userData.maxHp = 1000;
+scene.add(enemy);
+
+// Enemy mixer + idle from library
+const enemyMixer = new THREE.AnimationMixer(enemy);
+const enemyIdleClip = animGltf.animations.find(a => a.name === 'idle');
+if (enemyIdleClip) {
+  const ea = enemyMixer.clipAction(enemyIdleClip, enemy);
+  ea.play();
+}
+
+// Enemy HP bar (CSS2D would be better, but keeping it simple)
+const hpBarCanvas = document.createElement('canvas');
+hpBarCanvas.width = 128; hpBarCanvas.height = 16;
+const hpBarTex = new THREE.CanvasTexture(hpBarCanvas);
+const hpBarSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: hpBarTex, depthTest: false }));
+hpBarSprite.scale.set(1.5, 0.2, 1);
+hpBarSprite.position.set(0, 2.2, 0);
+enemy.add(hpBarSprite);
+
+function updateEnemyHPBar() {
+  const ctx = hpBarCanvas.getContext('2d');
+  const pct = Math.max(0, enemy.userData.hp / enemy.userData.maxHp);
+  ctx.clearRect(0, 0, 128, 16);
+  ctx.fillStyle = '#222'; ctx.fillRect(0, 0, 128, 16);
+  ctx.fillStyle = pct > 0.3 ? '#22cc44' : '#cc2222';
+  ctx.fillRect(1, 1, 126 * pct, 14);
+  ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(Math.round(enemy.userData.hp) + ' / ' + enemy.userData.maxHp, 64, 12);
+  hpBarTex.needsUpdate = true;
+}
+updateEnemyHPBar();
+
+// ── VFX helpers ───────────────────────────────────────────
+const projectiles = [];
+const vfxCleanup = [];
+
+function spawnProjectile(from, to, color, speed, damage, onHit) {
+  const geo = new THREE.SphereGeometry(0.15, 8, 8);
+  const mat = new THREE.MeshBasicMaterial({ color });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(from);
+  mesh.position.y += 1;
+  const light = new THREE.PointLight(color, 1, 5);
+  mesh.add(light);
+  scene.add(mesh);
+  const dir = new THREE.Vector3().subVectors(to, from).normalize();
+  projectiles.push({ mesh, dir, speed, damage, life: 3, onHit });
+}
+
+function spawnAoE(pos, radius, color, duration) {
+  const geo = new THREE.RingGeometry(0.1, radius, 32);
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(geo, mat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.copy(pos); ring.position.y = 0.05;
+  scene.add(ring);
+  vfxCleanup.push({ obj: ring, ttl: duration });
+}
+
+function spawnFloatingText(pos, text, color) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 48;
+  const ctx = canvas.getContext('2d');
+  ctx.font = 'bold 28px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#000'; ctx.fillText(text, 65, 33);
+  ctx.fillStyle = color; ctx.fillText(text, 64, 32);
+  const tex = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sprite.position.copy(pos); sprite.position.y += 2.5;
+  sprite.scale.set(1.5, 0.5, 1);
+  scene.add(sprite);
+  vfxCleanup.push({ obj: sprite, ttl: 1.5, floatUp: true });
+}
+
+function damageEnemy(amount) {
+  if (enemy.userData.hp <= 0) return;
+  const variance = 0.8 + Math.random() * 0.4;
+  const dmg = Math.round(amount * variance);
+  enemy.userData.hp = Math.max(0, enemy.userData.hp - dmg);
+  updateEnemyHPBar();
+  spawnFloatingText(enemy.position, '-' + dmg, '#ff4444');
+  // Play hurt on enemy
+  const hurtClip = animGltf.animations.find(a => a.name === 'hurt');
+  if (hurtClip) {
+    enemyMixer.stopAllAction();
+    const ha = enemyMixer.clipAction(hurtClip, enemy);
+    ha.setLoop(THREE.LoopOnce, 1); ha.clampWhenFinished = true;
+    ha.reset().play();
+    setTimeout(() => {
+      if (enemy.userData.hp > 0) {
+        enemyMixer.stopAllAction();
+        const ia = enemyMixer.clipAction(enemyIdleClip, enemy);
+        ia.reset().play();
+      }
+    }, 500);
+  }
+  if (enemy.userData.hp <= 0) {
+    const deadClip = animGltf.animations.find(a => a.name === 'dead');
+    if (deadClip) {
+      enemyMixer.stopAllAction();
+      const da = enemyMixer.clipAction(deadClip, enemy);
+      da.setLoop(THREE.LoopOnce, 1); da.clampWhenFinished = true;
+      da.reset().play();
+    }
+  }
+}
+
+// ── Class Skills (Greatsword — Immortal) ───────────────────────
+const GCD = { timer: 0, duration: 1.5 };
+const cooldowns = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+const SKILLS = {
+  1: { name: 'Fullguard', cd: 7, anim: 'block', effect: () => {
+    // Shield bubble
+    const shield = new THREE.Mesh(
+      new THREE.SphereGeometry(1.2, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.25, side: THREE.DoubleSide })
+    );
+    character.add(shield);
+    vfxCleanup.push({ obj: shield, ttl: 3, parent: character });
+  }},
+  2: { name: 'Charge', cd: 8, anim: 'dash', effect: () => {
+    // Dash toward enemy
+    const dir = new THREE.Vector3().subVectors(enemy.position, character.position).normalize();
+    character.position.addScaledVector(dir, 8);
+    character.lookAt(enemy.position.x, character.position.y, enemy.position.z);
+    damageEnemy(60);
+    spawnAoE(character.position, 2, 0x3366ff, 0.5);
+  }},
+  3: { name: 'Colossus Smash', cd: 5, anim: 'swing', effect: () => {
+    // AoE ground slam
+    damageEnemy(120);
+    spawnAoE(character.position, 4, 0xffaa00, 1);
+    // Screen shake
+    camera.position.y += 0.3;
+    setTimeout(() => camera.position.y -= 0.3, 100);
+  }},
+  4: { name: 'Divine Wind', cd: 1.5, anim: 'cast', effect: () => {
+    // Projectile toward enemy
+    const from = character.position.clone();
+    const to = enemy.position.clone();
+    if (!hasLineOfSight(from.clone().setY(1), to.clone().setY(1))) {
+      spawnFloatingText(character.position, 'No LoS!', '#ff8800');
+      return;
+    }
+    spawnProjectile(from, to, 0x3366ff, 20, 40, () => damageEnemy(40));
+  }},
+  5: { name: 'Berserker Rage', cd: 60, anim: 'taunt', effect: () => {
+    // Buff glow
+    const glow = new THREE.PointLight(0xff3300, 2, 5);
+    glow.position.y = 1;
+    character.add(glow);
+    vfxCleanup.push({ obj: glow, ttl: 8, parent: character });
+    spawnFloatingText(character.position, 'RAGE!', '#ff3300');
+  }},
+};
+
+function useSkill(slot) {
+  if (GCD.timer > 0) return;
+  if (cooldowns[slot] > 0) return;
+  const skill = SKILLS[slot];
+  if (!skill) return;
+  
+  GCD.timer = GCD.duration;
+  cooldowns[slot] = skill.cd;
+  playOnce(skill.anim);
+  skill.effect();
+  animNameEl.textContent = skill.name;
+}
+
+// ── WoW-style camera ────────────────────────────────────────
 let cameraYaw = Math.PI;   // Horizontal angle around character
 let cameraPitch = 0.3;      // Vertical angle (0 = level, PI/2 = top-down)
 let cameraDistance = 6;
@@ -241,18 +464,27 @@ const keys = {};
 document.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
 document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
-// Click = attack
+// LMB = auto-attack toward enemy
 renderer.domElement.addEventListener('mousedown', (e) => {
-  if (e.button === 0) { // LMB
-    const attacks = ['attack1', 'attack2', 'attack3', 'attack4'];
-    playOnce(attacks[Math.floor(Math.random() * attacks.length)], 1.2);
+  if (e.button === 0 && !isRightMouseDown) {
+    const dist = character.position.distanceTo(enemy.position);
+    if (dist < 3) {
+      // Melee range
+      const attacks = ['attack1', 'attack2', 'attack3', 'attack4'];
+      playOnce(attacks[Math.floor(Math.random() * attacks.length)], 1.2);
+      character.lookAt(enemy.position.x, character.position.y, enemy.position.z);
+      damageEnemy(45);
+    } else {
+      // Out of range - face enemy
+      character.lookAt(enemy.position.x, character.position.y, enemy.position.z);
+      spawnFloatingText(character.position, 'Out of range', '#ffaa00');
+    }
   }
 });
 
-// Number keys = specific animations
+// Skills and movement keys
 document.addEventListener('keydown', (e) => {
-  const map = { '1': 'attack1', '2': 'attack2', '3': 'swing', '4': 'cast', '5': 'aoe' };
-  if (map[e.key]) playOnce(map[e.key]);
+  if (['1','2','3','4','5'].includes(e.key)) useSkill(parseInt(e.key));
   if (e.key === 'Control') playOnce('roll', 1.5);
   if (e.key === 'Alt') { e.preventDefault(); playOnce('dodge', 1.5); }
   if (e.key === ' ') playOnce('jump');
@@ -306,13 +538,54 @@ function animate() {
   character.position.x = Math.max(-limit, Math.min(limit, character.position.x));
   character.position.z = Math.max(-limit, Math.min(limit, character.position.z));
 
+  // Snap to ground via raycast
+  snapToGround(character);
+  snapToGround(enemy);
+
+  // Update mouse world position for ground targeting
+  updateMouseWorldPos();
+
+  // GCD + cooldown timers
+  GCD.timer = Math.max(0, GCD.timer - dt);
+  for (const k of Object.keys(cooldowns)) cooldowns[k] = Math.max(0, cooldowns[k] - dt);
+
+  // Update projectiles
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    p.mesh.position.addScaledVector(p.dir, p.speed * dt);
+    p.life -= dt;
+    // Hit check: distance to enemy
+    if (p.mesh.position.distanceTo(enemy.position) < 1.5) {
+      if (p.onHit) p.onHit();
+      scene.remove(p.mesh);
+      projectiles.splice(i, 1);
+      continue;
+    }
+    if (p.life <= 0) { scene.remove(p.mesh); projectiles.splice(i, 1); }
+  }
+
+  // Update VFX cleanup
+  for (let i = vfxCleanup.length - 1; i >= 0; i--) {
+    const v = vfxCleanup[i];
+    v.ttl -= dt;
+    if (v.floatUp) v.obj.position.y += 1.5 * dt;
+    if (v.ttl <= 0) {
+      if (v.parent) v.parent.remove(v.obj);
+      else scene.remove(v.obj);
+      vfxCleanup.splice(i, 1);
+    }
+  }
+
   mixer.update(dt);
+  enemyMixer.update(dt);
   updateCamera();
   renderer.render(scene, camera);
 
   // UI
   const pos = character.position;
-  log(`Pos: ${pos.x.toFixed(1)}, ${pos.z.toFixed(1)} | Anim: ${currentName} | FPS: ${(1/dt).toFixed(0)}`);
+  const cdStr = Object.entries(cooldowns).map(([k,v]) => v > 0 ? k + ':' + v.toFixed(1) : k + ':✓').join(' ');
+  const gcdStr = GCD.timer > 0 ? 'GCD:' + GCD.timer.toFixed(1) : 'GCD:✓';
+  log(`${gcdStr} | ${cdStr} | ${currentName} | FPS: ${(1/dt).toFixed(0)}`);
 }
 animate();
 
