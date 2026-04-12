@@ -23,6 +23,11 @@ export class PlayerController {
     this.facing = new THREE.Vector2(0, -1); // NEVER zero length
     this.speed = 0.11; // annihilate default
 
+    // Double-tap dodge tracking
+    this._lastTapTime = {};  // keyCode → timestamp
+    this._doubleTapWindow = 300; // ms
+    this._doubleTapCooldown = 0; // prevents spam
+
     this._setupListeners();
   }
 
@@ -31,6 +36,21 @@ export class PlayerController {
       if (this.holdKey[e.code]) return; // Annihilate: prevent repeat
       this.holdKey[e.code] = true;
       this.tickKey[e.code] = true;
+
+      // Double-tap detection for WASD dodge
+      const dirKeys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'];
+      if (dirKeys.includes(e.code) && this._doubleTapCooldown <= 0) {
+        const now = performance.now();
+        const last = this._lastTapTime[e.code] || 0;
+        if (now - last < this._doubleTapWindow) {
+          // Double-tap detected! Fire dodge in that direction
+          this._fireDoubleTapDodge(e.code);
+          this._lastTapTime[e.code] = 0; // Reset to prevent triple-tap
+          this._doubleTapCooldown = 0.5; // 500ms cooldown
+        } else {
+          this._lastTapTime[e.code] = now;
+        }
+      }
     });
 
     window.addEventListener('keyup', (e) => {
@@ -100,7 +120,10 @@ export class PlayerController {
 
     const isMoving = this.direction.lengthSq() > 0;
 
-    // ── Movement (only in canMove states) ────────────────────────
+    // Tick double-tap cooldown
+    this._doubleTapCooldown = Math.max(0, this._doubleTapCooldown - dt);
+
+    // ── Movement (only in canMove states) ────────────────────
     if (state.hasTag('canMove') || state.matches('idle')) {
       if (isMoving) {
         // Camera-relative direction
@@ -130,6 +153,68 @@ export class PlayerController {
         service.send('air');
       }
     }
+  }
+
+  /** Double-tap dodge in the pressed direction */
+  _fireDoubleTapDodge(keyCode) {
+    const service = this.char._fsmService;
+    if (!service) return;
+
+    // Map key to dodge direction (camera-relative)
+    const yaw = this.cameraYawRef?.value ?? 0;
+    let dx = 0, dz = 0;
+    switch (keyCode) {
+      case 'KeyW': case 'ArrowUp':    dz = -1; break;
+      case 'KeyS': case 'ArrowDown':  dz = 1;  break;
+      case 'KeyA': case 'ArrowLeft':  dx = -1; break;
+      case 'KeyD': case 'ArrowRight': dx = 1;  break;
+    }
+
+    // Rotate by camera yaw
+    const cos = Math.cos(yaw), sin = Math.sin(yaw);
+    const worldX = dx * cos - dz * sin;
+    const worldZ = dx * sin + dz * cos;
+
+    // Set facing to dodge direction
+    this.facing.set(worldX, worldZ);
+    if (this.char.mesh) {
+      this.char.mesh.rotation.y = -this.facing.angle() + Math.PI / 2;
+    }
+
+    // Determine dodge type based on weapon class
+    const weaponClass = this.char.weaponClass || 'greatsword';
+    const dodgeMap = {
+      greatsword:  'dash',   // Heavy roll
+      swordShield: 'dash',   // Shield dash
+      magic:       'dash',   // Blink/flash
+      longbow:     'dash',   // Quick dodge
+      rifle:       'dash',   // Tactical roll
+    };
+
+    // Use directional dodge anim if available
+    const isBack = (keyCode === 'KeyS' || keyCode === 'ArrowDown');
+    const isLeft = (keyCode === 'KeyA' || keyCode === 'ArrowLeft');
+    const isRight = (keyCode === 'KeyD' || keyCode === 'ArrowRight');
+
+    // Pick best dodge animation
+    if (isBack && this.char.oaction?.dodgeBack) {
+      this.char.fadeToAction('dodgeBack', 0);
+    } else if (isLeft && this.char.oaction?.dodgeLeft) {
+      this.char.fadeToAction('dodgeLeft', 0);
+    } else if (isRight && this.char.oaction?.dodgeRight) {
+      this.char.fadeToAction('dodgeRight', 0);
+    } else {
+      this.char.fadeToAction('roll', 0);
+    }
+
+    // Apply velocity burst in dodge direction (annihilate dash pattern)
+    this.char.body?.dash(worldX, worldZ, 12);
+
+    // Fire FSM event
+    service.send('dash');
+
+    // Callback for VFX
+    this.char.onDash?.();
   }
 
   /** Get camera-relative world direction from input direction */
