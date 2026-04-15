@@ -53,8 +53,8 @@ body { background: var(--void); color: var(--text); font-family: var(--font-ui);
 .auth-btn svg, .auth-btn img { width: 20px; height: 20px; flex-shrink: 0; }
 .auth-btn--phantom { color: #fff; background: linear-gradient(135deg, #ab9ff2, #7c3aed, #4f1d91); box-shadow: 0 4px 20px rgba(124,58,237,0.3); }
 .auth-btn--phantom:hover { box-shadow: 0 6px 28px rgba(124,58,237,0.45); }
-.auth-btn--google { color: var(--void); background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
-.auth-btn--google:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+.auth-btn--puter { color: #fff; background: linear-gradient(135deg, var(--ember), var(--gold-dark)); box-shadow: 0 4px 20px rgba(201,168,76,0.25); }
+.auth-btn--puter:hover { box-shadow: 0 6px 28px rgba(201,168,76,0.4); }
 .auth-btn--guest { color: var(--text); background: rgba(255,255,255,0.06); border: 1px solid var(--border-dim); }
 .auth-btn--guest:hover { border-color: var(--gold); background: rgba(201,168,76,0.06); }
 .auth-divider { display: flex; align-items: center; gap: 12px; margin: 4px 0; font-size: 0.65rem; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }

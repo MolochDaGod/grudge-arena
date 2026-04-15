@@ -18,6 +18,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/src/arena.css">
+  <script src="https://js.puter.com/v2/"></script>
 </head>
 <body>
 
@@ -47,9 +48,9 @@
           Connect Phantom
         </button>
         <div class="auth-divider">or</div>
-        <button class="auth-btn auth-btn--google" id="google-btn">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-          Sign in with Google
+        <button class="auth-btn auth-btn--puter" id="puter-btn">
+          <img src="/grudge-logo.png" alt="" style="width:20px;height:20px;border-radius:50%">
+          Sign in with Grudge ID
         </button>
         <button class="auth-btn auth-btn--guest" id="guest-btn">
           ⚔ Play as Guest
@@ -173,13 +174,9 @@
 
 <script type="module">
 // ── Grudge Auth ───────────────────────────────────────────────
-// This auth implementation follows the shared Grudge Studio auth contract:
-//   - Token key: grudge_auth_token (shared across all Grudge apps for SSO)
-//   - Session key: grudge_session_token (cross-app compat)
-//   - Device ID: grudge_device_id (arena-prefixed)
-//   - API calls via /api/* → Vercel rewrites to id.grudge-studio.com & api.grudge-studio.com
-// Reference: GDevelopAssistant-full/docs/BACKEND_CONNECTION_GUIDE.md
-const ID_URL = 'https://id.grudge-studio.com';
+// Auth contract: Puter SDK for identity, Phantom for wallet, Guest fallback
+// Token key: grudge_auth_token (shared across all Grudge apps for SSO)
+// API calls via /api/* → Vercel rewrites to id.grudge-studio.com & api.grudge-studio.com
 const API_BASE = '/api';
 const WS_URL = 'https://ws.grudge-studio.com';
 let selectedRace = 'human';
@@ -221,7 +218,6 @@ function showLoggedIn(user) {
   document.getElementById('un').textContent = user.displayName || user.username || 'Warlord';
   const gid = (user.grudgeId || user.grudge_id || localStorage.getItem('grudge_id') || '').slice(0, 8).toUpperCase();
   document.getElementById('ug').textContent = gid ? 'GRUDGE-' + gid : '';
-  // Show wallet address if available
   const walletAddr = user.walletAddress || user.serverWalletAddress || '';
   if (walletAddr) {
     document.getElementById('ug').textContent += (gid ? ' · ' : '') + walletAddr.slice(0, 4) + '...' + walletAddr.slice(-4);
@@ -238,7 +234,6 @@ function showLoggedOut() {
   document.getElementById('race-select').classList.remove('show');
 }
 
-// Store auth data from any source
 function storeAuth(token, user) {
   if (token) setToken(token);
   if (user) {
@@ -259,28 +254,26 @@ function clearAuth() {
   localStorage.removeItem('grudge-session');
 }
 
-// Handle auth response from Grudge backend (same shape as GrudgeBuilder)
 function handleAuthData(data) {
   const token = data.sessionToken || data.token;
   const user = data.user || {};
   if (!user.grudgeId && data.grudgeId) user.grudgeId = data.grudgeId;
   if (!user.username && data.username) user.username = data.username;
   storeAuth(token, user);
-  // Also store session for cross-app compat
   try {
     localStorage.setItem('grudge-session', JSON.stringify({
-      type: user.walletAddress ? 'wallet' : (user.isGuest ? 'guest' : 'grudge'),
+      type: user.walletAddress ? 'wallet' : (user.isGuest ? 'guest' : (user.puterUuid ? 'puter' : 'grudge')),
       username: user.username || 'Warlord',
       grudgeId: user.grudgeId,
       accountId: user.id,
       walletAddress: user.walletAddress,
+      puterUuid: user.puterUuid,
       loginTime: Date.now()
     }));
   } catch {}
   return user;
 }
 
-// Fetch full user profile from grudge-id using a token
 async function fetchUserProfile(token) {
   try {
     const r = await fetch(API_BASE + '/auth/user', { headers: { Authorization: 'Bearer ' + token } });
@@ -289,7 +282,6 @@ async function fetchUserProfile(token) {
   } catch { return null; }
 }
 
-// Verify a token is still valid
 async function verifyToken(token) {
   try {
     const r = await fetch(API_BASE + '/auth/verify', {
@@ -302,7 +294,7 @@ async function verifyToken(token) {
   } catch { return false; }
 }
 
-// ── Phantom Wallet Connect ───────────────────────────
+// ── Phantom Wallet Connect (with message signing) ────────────
 function getPhantomProvider() {
   if (window.phantom?.solana?.isPhantom) return window.phantom.solana;
   if (window.solana?.isPhantom) return window.solana;
@@ -312,7 +304,6 @@ function getPhantomProvider() {
 document.getElementById('phantom-btn').addEventListener('click', async () => {
   const provider = getPhantomProvider();
   if (!provider) {
-    // Phantom not installed — open install page
     window.open('https://phantom.app/', '_blank');
     setAuthStatus('Install Phantom wallet extension, then try again');
     return;
@@ -323,29 +314,61 @@ document.getElementById('phantom-btn').addEventListener('click', async () => {
   setAuthStatus('Connecting to Phantom...');
 
   try {
-    // Request wallet connection
     const resp = await provider.connect();
     const walletAddress = resp.publicKey.toString();
-    setAuthStatus('Wallet connected · Signing in...');
+    setAuthStatus('Wallet connected · Verifying ownership...');
 
-    // Auth with Grudge backend — auto-creates account if new
-    const r = await fetch(API_BASE + '/auth/wallet', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallet_address: walletAddress })
-    });
-
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      throw new Error(err.error || 'Backend auth failed');
+    // Sign a message to prove wallet ownership
+    const timestamp = Date.now();
+    const message = `Grudge Arena Login: ${timestamp}`;
+    const encodedMessage = new TextEncoder().encode(message);
+    let signature = null;
+    try {
+      const signResult = await provider.signMessage(encodedMessage, 'utf8');
+      signature = btoa(String.fromCharCode(...signResult.signature));
+    } catch (signErr) {
+      if (signErr.message?.includes('rejected')) {
+        setAuthStatus('Signature cancelled');
+        btn.disabled = false;
+        return;
+      }
+      // If signing fails (older Phantom), proceed without signature
+      console.warn('[arena] signMessage not supported, proceeding without signature');
     }
 
-    const data = await r.json();
-    const user = handleAuthData(data);
-    if (!user.walletAddress) user.walletAddress = walletAddress;
-    storeAuth(null, user);
+    setAuthStatus('Signing in...');
+
+    // Auth with Grudge backend
+    try {
+      const r = await fetch(API_BASE + '/auth/wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet_address: walletAddress, signature, message, timestamp })
+      });
+
+      if (r.ok) {
+        const data = await r.json();
+        const user = handleAuthData(data);
+        if (!user.walletAddress) user.walletAddress = walletAddress;
+        storeAuth(null, user);
+        setAuthStatus('');
+        showLoggedIn(user);
+        return;
+      }
+    } catch (netErr) {
+      console.warn('[arena] Backend unreachable for wallet auth:', netErr.message);
+    }
+
+    // Fallback: offline wallet session (no Grudge ID, play with wallet identity)
+    console.log('[arena] Using offline wallet session');
+    const offlineUser = {
+      username: walletAddress.slice(0, 4) + '...' + walletAddress.slice(-4),
+      walletAddress,
+      isOffline: true,
+    };
+    storeAuth(null, offlineUser);
     setAuthStatus('');
-    showLoggedIn(user);
+    showLoggedIn(offlineUser);
   } catch (err) {
     console.error('[arena] Phantom auth error:', err);
     setAuthStatus(err.message === 'User rejected the request.' ? 'Connection cancelled' : err.message || 'Wallet connection failed');
@@ -353,52 +376,110 @@ document.getElementById('phantom-btn').addEventListener('click', async () => {
   }
 });
 
-// ── Google OAuth ─────────────────────────────────────
-document.getElementById('google-btn').addEventListener('click', () => {
-  setAuthStatus('Redirecting to Google...');
-  // Redirect to Grudge ID Google OAuth (via Vercel rewrite)
-  location.href = API_BASE + '/oauth-google';
+// ── Puter Auth (Grudge ID via Puter SDK) ─────────────────────
+document.getElementById('puter-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('puter-btn');
+  btn.disabled = true;
+  setAuthStatus('Connecting to Grudge ID...');
+
+  try {
+    // Use Puter SDK to authenticate
+    if (typeof puter === 'undefined' || !puter.auth) {
+      throw new Error('Auth service unavailable. Please refresh and try again.');
+    }
+
+    const puterUser = await puter.auth.signIn();
+    if (!puterUser) throw new Error('Sign-in was cancelled');
+
+    const puterUuid = puterUser.uuid || puterUser.id || puterUser.username;
+    const puterUsername = puterUser.username || puterUser.email || 'Warlord';
+    setAuthStatus('Signed in · Linking Grudge ID...');
+
+    // Register/login with Grudge backend using Puter identity
+    try {
+      const r = await fetch(API_BASE + '/auth/puter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ puterUuid, puterUsername })
+      });
+
+      if (r.ok) {
+        const data = await r.json();
+        const user = handleAuthData(data);
+        if (!user.username) user.username = puterUsername;
+        user.puterUuid = puterUuid;
+        storeAuth(null, user);
+        setAuthStatus('');
+        showLoggedIn(user);
+        return;
+      }
+    } catch (netErr) {
+      console.warn('[arena] Backend unreachable for Puter auth:', netErr.message);
+    }
+
+    // Fallback: offline Puter session
+    console.log('[arena] Using offline Puter session');
+    const offlineUser = {
+      username: puterUsername,
+      puterUuid,
+      isOffline: true,
+    };
+    storeAuth(null, offlineUser);
+    setAuthStatus('');
+    showLoggedIn(offlineUser);
+  } catch (err) {
+    console.error('[arena] Puter auth error:', err);
+    setAuthStatus(err.message || 'Sign-in failed');
+    btn.disabled = false;
+  }
 });
 
-// ── Guest Login ──────────────────────────────────────
+// ── Guest Login (client-first, backend registration in background) ──
 document.getElementById('guest-btn').addEventListener('click', async () => {
   const btn = document.getElementById('guest-btn');
   btn.disabled = true;
-  setAuthStatus('Creating guest account...');
+  setAuthStatus('Entering as Guest...');
 
+  const deviceId = getDeviceId();
+  const guestUser = {
+    username: 'Guest',
+    displayName: 'Guest',
+    isGuest: true,
+    deviceId,
+  };
+
+  // Immediately show the game — don't block on backend
+  storeAuth(null, guestUser);
+  setAuthStatus('');
+  showLoggedIn(guestUser);
+
+  // Attempt backend registration in the background (creates Grudge ID for guest)
   try {
     const r = await fetch(API_BASE + '/auth/puter', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        puterUuid: 'guest_' + getDeviceId(),
-        puterUsername: 'Guest'
-      })
+      body: JSON.stringify({ puterUuid: 'guest_' + deviceId, puterUsername: 'Guest' })
     });
-
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      throw new Error(err.error || 'Guest login failed');
+    if (r.ok) {
+      const data = await r.json();
+      const user = handleAuthData(data);
+      user.isGuest = true;
+      user.username = user.username || 'Guest';
+      storeAuth(null, user);
+      grudgeUser = user;
+      // Update GID display if we got one
+      const gid = (user.grudgeId || user.grudge_id || '').slice(0, 8).toUpperCase();
+      if (gid) document.getElementById('ug').textContent = 'GRUDGE-' + gid;
+      console.log('[arena] Guest linked to Grudge ID:', gid);
     }
-
-    const data = await r.json();
-    const user = handleAuthData(data);
-    if (!user.username) user.username = 'Guest';
-    user.isGuest = true;
-    storeAuth(null, user);
-    setAuthStatus('');
-    showLoggedIn(user);
   } catch (err) {
-    console.error('[arena] Guest auth error:', err);
-    setAuthStatus(err.message || 'Guest login failed');
-    btn.disabled = false;
+    console.warn('[arena] Guest backend registration failed (playing offline):', err.message);
   }
 });
 
 // ── Boot auth flow ───────────────────────────────
 (async function initAuth() {
   const params = new URLSearchParams(location.search);
-  // Pick up SSO tokens from redirects (Google OAuth, cross-app SSO, etc.)
   const incomingToken = params.get('token') || params.get('sso_token');
   const incomingGrudgeId = params.get('grudge_id') || params.get('grudgeId');
   const incomingUsername = params.get('grudge_username') || params.get('username');
@@ -406,27 +487,20 @@ document.getElementById('guest-btn').addEventListener('click', async () => {
   // Case 1: Returning from OAuth/SSO with a token in the URL
   if (incomingToken) {
     storeAuth(incomingToken, null);
-    // Store any extra params from the redirect
     if (incomingGrudgeId) localStorage.setItem('grudge_id', incomingGrudgeId);
     if (incomingUsername) localStorage.setItem('grudge_username', incomingUsername);
-    // Fetch full profile
     const user = await fetchUserProfile(incomingToken);
     if (user) {
       storeAuth(incomingToken, user);
     } else {
-      // Build user from URL params
-      storeAuth(incomingToken, {
-        grudgeId: incomingGrudgeId || '',
-        username: incomingUsername || 'Warlord'
-      });
+      storeAuth(incomingToken, { grudgeId: incomingGrudgeId || '', username: incomingUsername || 'Warlord' });
     }
-    // Clean URL
     history.replaceState({}, '', location.pathname);
     showLoggedIn(getUser() || { username: incomingUsername || 'Warlord', grudgeId: incomingGrudgeId || '' });
     return;
   }
 
-  // Case 2: Already have a token in localStorage
+  // Case 2: Existing token in localStorage
   const existingToken = getToken();
   if (existingToken) {
     const valid = await verifyToken(existingToken);
@@ -436,16 +510,40 @@ document.getElementById('guest-btn').addEventListener('click', async () => {
         user = await fetchUserProfile(existingToken);
         if (user) storeAuth(existingToken, user);
       }
-      if (user) {
-        showLoggedIn(user);
-        return;
-      }
+      if (user) { showLoggedIn(user); return; }
     }
-    // Token invalid — clear and show login
     clearAuth();
   }
 
-  // Case 3: No token — show auth gate
+  // Case 3: Existing local user data (offline session from wallet/guest)
+  const localUser = getUser();
+  if (localUser && (localUser.walletAddress || localUser.puterUuid || localUser.isGuest)) {
+    showLoggedIn(localUser);
+    return;
+  }
+
+  // Case 4: Try silent Puter auth if SDK is loaded and user is already signed in
+  try {
+    if (typeof puter !== 'undefined' && puter.auth) {
+      const puterUser = await puter.auth.getUser();
+      if (puterUser && puterUser.uuid) {
+        const user = { username: puterUser.username || 'Warlord', puterUuid: puterUser.uuid };
+        storeAuth(null, user);
+        showLoggedIn(user);
+        // Background: sync with backend
+        fetch(API_BASE + '/auth/puter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ puterUuid: puterUser.uuid, puterUsername: puterUser.username })
+        }).then(r => r.ok ? r.json() : null).then(data => {
+          if (data) { const u = handleAuthData(data); u.puterUuid = puterUser.uuid; storeAuth(null, u); grudgeUser = u; }
+        }).catch(() => {});
+        return;
+      }
+    }
+  } catch { /* Puter SDK not ready or not signed in */ }
+
+  // Case 5: No session — show auth gate
   showLoggedOut();
 })();
 
@@ -466,22 +564,19 @@ window.enterArena = function() {
 // ── PvP Queue ────────────────────────────────────────
 window.joinQueue = async function() {
   const token = getToken();
-  if (!token) return;
+  if (!token && !grudgeUser) return;
   const btn = document.querySelector('.queue-btn');
   btn.textContent = '🔍 Searching for opponent...';
   btn.disabled = true;
 
   try {
-    // Connect to ws.grudge-studio.com/pvp for matchmaking
     const { io } = await import('socket.io-client');
     const pvpSocket = io(WS_URL + '/pvp', {
-      auth: { token },
+      auth: { token: token || 'guest_' + getDeviceId() },
       transports: ['websocket', 'polling'],
     });
 
-    pvpSocket.on('connect', () => {
-      console.log('[arena] Connected to PvP service');
-    });
+    pvpSocket.on('connect', () => console.log('[arena] Connected to PvP service'));
 
     pvpSocket.on('pvp:queue_matched', (data) => {
       console.log('[arena] Match found!', data);
@@ -521,7 +616,6 @@ async function loadArenaGame(race, matchData) {
   setLoadingProgress(10, 'Loading game engine...');
 
   try {
-    // Import the game engine (bundled by Vite from game.js)
     const { GrudgeArena } = await import('./game.js');
     setLoadingProgress(40, 'Initializing arena...');
 
@@ -540,11 +634,9 @@ async function loadArenaGame(race, matchData) {
 
     setLoadingProgress(100, 'Ready!');
 
-    // Update HUD player info
     const hudInfo = document.getElementById('hud-player-info');
     if (hudInfo) hudInfo.textContent = playerName + ' · ' + raceName;
 
-    // Transition: hide loading, show game
     setTimeout(() => {
       document.getElementById('loading-overlay').classList.remove('active');
       root.classList.add('active');
@@ -554,7 +646,6 @@ async function loadArenaGame(race, matchData) {
   } catch (err) {
     console.error('[arena] Failed to load game engine:', err);
     setLoadingProgress(100, 'Loading failed — ' + (err.message || 'unknown error'));
-    // Show retry after 2s
     setTimeout(() => {
       document.getElementById('loading-overlay').classList.remove('active');
       document.getElementById('lobby-overlay').classList.remove('hidden');
