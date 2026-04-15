@@ -282,22 +282,46 @@ function updateEnemyHPBar() {
 }
 updateEnemyHPBar();
 
-// ── Particle + VFX System ────────────────────────────────────
+// ── Particle + VFX System (texture-based sprites) ────────────────
 const projectiles = [];
 const particles = [];
 const vfxCleanup = [];
 
-// Shared geometries for particles (reuse = performance)
-const particleGeo = new THREE.SphereGeometry(0.06, 4, 4);
-const trailGeo = new THREE.SphereGeometry(0.03, 3, 3);
+// Load effect textures from uMMORPG
+const texLoader = new THREE.TextureLoader();
+const TEX = {
+  glow: texLoader.load('/textures/effects/glow.png'),
+  smoke: texLoader.load('/textures/effects/smoke.png'),
+  lightning: texLoader.load('/textures/effects/lightning.png'),
+  darkSmoke: texLoader.load('/textures/effects/dark_magic_smoke.png'),
+};
 
-/** Spawn N particles at position with given color, velocity spread, lifetime */
-function emitParticles(pos, color, count, spread, vel, life, size = 0.06) {
+// Fallback geometry for non-sprite particles
+const particleGeo = new THREE.SphereGeometry(0.06, 4, 4);
+
+/**
+ * Spawn N sprite particles using real textures.
+ * @param {string} texName - 'glow' | 'smoke' | 'lightning' | 'darkSmoke' | 'geo' (fallback geometry)
+ */
+function emitParticles(pos, color, count, spread, vel, life, size = 0.06, texName = 'glow') {
+  const tex = TEX[texName];
   for (let i = 0; i < count; i++) {
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
-    const p = new THREE.Mesh(particleGeo, mat);
+    let p;
+    if (tex && texName !== 'geo') {
+      // Sprite particle (billboard, textured)
+      const mat = new THREE.SpriteMaterial({
+        map: tex, color, transparent: true, opacity: 1,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      p = new THREE.Sprite(mat);
+      p.scale.setScalar(size * 3); // Sprites need larger scale
+    } else {
+      // Geometry fallback
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
+      p = new THREE.Mesh(particleGeo, mat);
+      p.scale.setScalar(size / 0.06);
+    }
     p.position.copy(pos);
-    p.scale.setScalar(size / 0.06);
     const v = new THREE.Vector3(
       (Math.random() - 0.5) * spread + (vel?.x || 0),
       (Math.random() - 0.5) * spread + (vel?.y || 0.5),
@@ -308,21 +332,19 @@ function emitParticles(pos, color, count, spread, vel, life, size = 0.06) {
   }
 }
 
-/** Fireball projectile with ember trail + explosion on hit */
+/** Fireball projectile — glow sprite core + smoke trail */
 function spawnFireball(from, to, damage, onHit) {
   const group = new THREE.Group();
-  // Core
-  const core = new THREE.Mesh(
-    new THREE.SphereGeometry(0.2, 12, 12),
-    new THREE.MeshBasicMaterial({ color: 0xff4400 })
-  );
+  // Core: glow sprite
+  const coreMat = new THREE.SpriteMaterial({ map: TEX.glow, color: 0xff4400, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false });
+  const core = new THREE.Sprite(coreMat);
+  core.scale.setScalar(0.8);
   group.add(core);
-  // Inner glow
-  const glow = new THREE.Mesh(
-    new THREE.SphereGeometry(0.35, 8, 8),
-    new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.4 })
-  );
-  group.add(glow);
+  // Outer haze: smoke sprite
+  const hazeMat = new THREE.SpriteMaterial({ map: TEX.smoke, color: 0xff8800, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.5, depthWrite: false });
+  const haze = new THREE.Sprite(hazeMat);
+  haze.scale.setScalar(1.2);
+  group.add(haze);
   // Light
   group.add(new THREE.PointLight(0xff4400, 2, 6));
   group.position.copy(from); group.position.y += 1.2;
@@ -331,14 +353,20 @@ function spawnFireball(from, to, damage, onHit) {
   projectiles.push({ mesh: group, dir, speed: 15, damage, life: 3, type: 'fireball', onHit });
 }
 
-/** Ice bolt with frost trail + shatter on hit */
+/** Ice bolt — glow sprite (blue) + crystal geometry core */
 function spawnIceBolt(from, to, damage, onHit) {
   const group = new THREE.Group();
+  // Crystal core
   const core = new THREE.Mesh(
     new THREE.OctahedronGeometry(0.15, 0),
     new THREE.MeshStandardMaterial({ color: 0x88ccff, emissive: 0x4488ff, emissiveIntensity: 0.5, metalness: 0.8, roughness: 0.2 })
   );
   group.add(core);
+  // Glow sprite halo
+  const glowMat = new THREE.SpriteMaterial({ map: TEX.glow, color: 0x4488ff, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.6, depthWrite: false });
+  const glow = new THREE.Sprite(glowMat);
+  glow.scale.setScalar(0.8);
+  group.add(glow);
   group.add(new THREE.PointLight(0x4488ff, 1.5, 5));
   group.position.copy(from); group.position.y += 1.2;
   scene.add(group);
@@ -398,9 +426,9 @@ function spawnImpact(pos, color, scale = 1) {
   vfxCleanup.push({ obj: ring, ttl: 0.25, scaleUp: true });
 }
 
-/** Frost nova: expanding ice ring + frost particles */
+/** Frost nova — glow sprites (blue) + ice crystals + expanding ring */
 function spawnFrostNova(pos, radius) {
-  // Expanding ground ring
+  // Ground ring
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.5, radius, 32),
     new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
@@ -409,8 +437,10 @@ function spawnFrostNova(pos, radius) {
   ring.position.copy(pos); ring.position.y = 0.05;
   scene.add(ring);
   vfxCleanup.push({ obj: ring, ttl: 2, fadeOut: true });
-  // Frost particles
-  emitParticles(pos.clone().setY(0.3), 0x88ddff, 40, radius, { x: 0, y: 3, z: 0 }, 1.5, 0.1);
+  // Frost glow sprites (use glow texture tinted blue)
+  emitParticles(pos.clone().setY(0.3), 0x88ddff, 30, radius, { x: 0, y: 3, z: 0 }, 1.5, 0.15, 'glow');
+  // Smoke cloud at center
+  emitParticles(pos.clone().setY(0.5), 0xaaddff, 10, radius * 0.5, { x: 0, y: 1, z: 0 }, 2, 0.2, 'smoke');
   // Ice crystal pillars
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2;
@@ -525,7 +555,8 @@ const SKILLS = {
     spawnFireball(from, to, 70, () => {
       damageEnemy(70);
       spawnImpact(enemy.position, 0xff4400, 2);
-      emitParticles(enemy.position.clone().setY(1), 0xff6600, 25, 3, { x: 0, y: 3, z: 0 }, 0.8);
+      emitParticles(enemy.position.clone().setY(1), 0xff6600, 15, 3, { x: 0, y: 3, z: 0 }, 0.8, 0.15, 'glow');
+      emitParticles(enemy.position.clone().setY(1), 0xff4400, 10, 2, { x: 0, y: 1, z: 0 }, 1.0, 0.2, 'smoke');
     });
   }},
   5: { name: 'Frost Nova', cd: 12, anim: 'aoe', effect: () => {
@@ -787,15 +818,14 @@ function animate() {
     p.mesh.position.addScaledVector(p.dir, p.speed * dt);
     p.life -= dt;
     
-    // Spawn trail particles based on projectile type
+    // Spawn trail particles based on projectile type (using textures)
     if (p.type === 'fireball') {
-      emitParticles(p.mesh.position.clone(), 0xff6600, 2, 0.3, { x: 0, y: 0.5, z: 0 }, 0.4, 0.05);
-      emitParticles(p.mesh.position.clone(), 0xffaa00, 1, 0.2, { x: 0, y: 0.3, z: 0 }, 0.3, 0.03);
+      emitParticles(p.mesh.position.clone(), 0xff6600, 2, 0.3, { x: 0, y: 0.5, z: 0 }, 0.4, 0.08, 'glow');
+      emitParticles(p.mesh.position.clone(), 0xff4400, 1, 0.4, { x: 0, y: 0.3, z: 0 }, 0.6, 0.12, 'smoke');
     } else if (p.type === 'ice') {
-      emitParticles(p.mesh.position.clone(), 0x88ddff, 1, 0.2, { x: 0, y: 0.2, z: 0 }, 0.5, 0.04);
+      emitParticles(p.mesh.position.clone(), 0x88ddff, 1, 0.2, { x: 0, y: 0.2, z: 0 }, 0.5, 0.06, 'glow');
     } else if (p.type === 'arrow') {
-      // Subtle dust trail
-      if (Math.random() > 0.7) emitParticles(p.mesh.position.clone(), 0x886644, 1, 0.1, { x: 0, y: 0.1, z: 0 }, 0.2, 0.02);
+      if (Math.random() > 0.7) emitParticles(p.mesh.position.clone(), 0x886644, 1, 0.1, { x: 0, y: 0.1, z: 0 }, 0.2, 0.04, 'smoke');
     }
     
     // Hit check
