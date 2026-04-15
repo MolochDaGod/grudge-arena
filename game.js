@@ -194,7 +194,9 @@ class GrudgeArena {
       col.position.y = 2; col.castShadow = true; group.add(col);
       const orb = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), createShaderMaterial('frost'));
       orb.position.y = 4.2; group.add(orb);
-      group.add(Object.assign(new THREE.PointLight(0x4488ff, 1, 8, 2), { position: new THREE.Vector3(0, 4.5, 0) }));
+      const pillarLight = new THREE.PointLight(0x4488ff, 1, 8, 2);
+      pillarLight.position.set(0, 4.5, 0);
+      group.add(pillarLight);
       group.position.set(Math.cos(angle) * 35, 0, Math.sin(angle) * 35);
       this.scene.add(group);
     }
