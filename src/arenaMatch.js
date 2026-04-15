@@ -6,6 +6,7 @@
  */
 
 import * as THREE from 'three';
+import { arenaApi, isLoggedIn } from './grudge-api.js';
 
 export const MatchPhase = {
   SETUP:     'setup',
@@ -94,9 +95,11 @@ export class ArenaMatch {
       if (bAlive.length === 0) {
         this.winner = 'A';
         this.setPhase(MatchPhase.VICTORY);
+        this._reportResult();
       } else if (aAlive.length === 0) {
         this.winner = 'B';
         this.setPhase(MatchPhase.VICTORY);
+        this._reportResult();
       } else if (this.matchTimer <= 0) {
         // Time ran out — team with more total HP% wins
         const aHP = aAlive.reduce((s, u) => {
@@ -109,6 +112,7 @@ export class ArenaMatch {
         }, 0);
         this.winner = aHP >= bHP ? 'A' : 'B';
         this.setPhase(MatchPhase.VICTORY);
+        this._reportResult();
       }
       return this.phase;
     }
@@ -161,6 +165,22 @@ export class ArenaMatch {
       el.style.display = 'none';
       if (num) { num.style.color = ''; }
     }, 1200);
+  }
+
+  /** Report match result to Grudge backend (fire-and-forget) */
+  _reportResult() {
+    if (!isLoggedIn()) return;
+    const playerUnit = this.teamA.find(u => u.isPlayer);
+    arenaApi.postMatchResult({
+      winner: this.winner,
+      playerTeam: 'A',
+      playerWon: this.winner === 'A',
+      race: playerUnit?.race || 'human',
+      weapon: playerUnit?.weaponDef?.name || 'greatsword',
+      matchDuration: Math.round(MATCH_TIME_LIMIT - this.matchTimer),
+      teamAComp: this.teamA.map(u => ({ race: u.race, weapon: u.weaponDef?.name })),
+      teamBComp: this.teamB.map(u => ({ race: u.race, weapon: u.weaponDef?.name })),
+    }).catch(err => console.warn('[arena] Failed to report match:', err.message));
   }
 
   _updateTimerHUD() {

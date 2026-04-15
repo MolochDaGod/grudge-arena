@@ -17,290 +17,17 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --void: #07070f; --iron: #111120; --steel: #1a1a2e;
-      --gold: #c9a84c; --gold-light: #f0c060; --gold-dark: #8b6914;
-      --ember: #DB6331; --ember-light: #FAAC47;
-      --text: #e8dcc8; --text-muted: hsl(45,15%,60%); --text-dim: hsl(45,10%,40%);
-      --border: rgba(201,168,76,0.25); --border-dim: rgba(255,255,255,0.08);
-      --blood: #8B0000; --green: #22c55e;
-      --font-heading: 'Cinzel Decorative', 'Cinzel', serif;
-      --font-title: 'Cinzel', serif;
-      --font-ui: 'Inter', system-ui, sans-serif;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: var(--void); color: var(--text); font-family: var(--font-ui); overflow: hidden; height: 100vh; }
-
-    /* ── Auth/Lobby overlay ── */
-    #lobby-overlay {
-      position: fixed; inset: 0; z-index: 100;
-      background: radial-gradient(ellipse at 50% -20%, rgba(219,99,49,0.12) 0%, transparent 60%), var(--void);
-      display: flex; align-items: center; justify-content: center;
-      flex-direction: column; gap: 2rem;
-    }
-    #lobby-overlay.hidden { display: none; }
-
-    .lobby-brand { text-align: center; }
-    .lobby-logo { width: 80px; height: 80px; border-radius: 50%; border: 2px solid rgba(201,168,76,0.3); overflow: hidden; margin: 0 auto 1rem; box-shadow: 0 0 40px rgba(201,168,76,0.15); }
-    .lobby-logo img { width: 100%; height: 100%; object-fit: cover; }
-    .lobby-title { font-family: var(--font-heading); font-size: 2.5rem; font-weight: 900; background: linear-gradient(135deg, var(--gold-light), var(--ember)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 0.08em; }
-    .lobby-sub { font-family: var(--font-ui); font-size: 0.7rem; color: var(--text-dim); letter-spacing: 0.2em; text-transform: uppercase; margin-top: 0.25rem; }
-
-    .lobby-card {
-      background: linear-gradient(160deg, rgba(17,17,32,0.95), rgba(10,10,20,0.98));
-      border: 1px solid var(--border); border-radius: 16px; padding: 2rem;
-      width: 100%; max-width: 520px; box-shadow: 0 12px 48px rgba(0,0,0,0.6);
-    }
-
-    /* Auth gate */
-    #auth-gate { text-align: center; }
-    #auth-gate p { color: var(--text-muted); margin-bottom: 1.25rem; font-size: 0.85rem; }
-    .auth-methods { display: flex; flex-direction: column; gap: 10px; }
-    .auth-btn {
-      display: flex; align-items: center; justify-content: center; gap: 10px;
-      width: 100%; padding: 0.85rem 1.5rem; font-family: var(--font-title); font-size: 0.85rem;
-      font-weight: 700; border: none; border-radius: 10px; cursor: pointer; text-decoration: none;
-      transition: all 0.2s; letter-spacing: 0.03em;
-    }
-    .auth-btn:hover { transform: translateY(-2px); }
-    .auth-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-    .auth-btn svg, .auth-btn img { width: 20px; height: 20px; flex-shrink: 0; }
-    .auth-btn--phantom {
-      color: #fff; background: linear-gradient(135deg, #ab9ff2, #7c3aed, #4f1d91);
-      box-shadow: 0 4px 20px rgba(124,58,237,0.3);
-    }
-    .auth-btn--phantom:hover { box-shadow: 0 6px 28px rgba(124,58,237,0.45); }
-    .auth-btn--google {
-      color: var(--void); background: #fff;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-    }
-    .auth-btn--google:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
-    .auth-btn--guest {
-      color: var(--text); background: rgba(255,255,255,0.06); border: 1px solid var(--border-dim);
-    }
-    .auth-btn--guest:hover { border-color: var(--gold); background: rgba(201,168,76,0.06); }
-    .auth-divider {
-      display: flex; align-items: center; gap: 12px; margin: 4px 0;
-      font-size: 0.65rem; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase;
-    }
-    .auth-divider::before, .auth-divider::after {
-      content: ''; flex: 1; height: 1px; background: var(--border-dim);
-    }
-    .auth-status { font-size: 0.72rem; color: var(--ember-light); margin-top: 8px; min-height: 1.2em; }
-    .auth-wallet-addr {
-      font-size: 0.65rem; color: var(--text-dim); margin-top: 2px;
-      font-family: monospace; letter-spacing: 0;
-    }
-
-    /* Race selection */
-    #race-select { display: none; }
-    #race-select.show { display: block; }
-    .race-title { font-family: var(--font-title); font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); text-align: center; margin-bottom: 1rem; }
-    .race-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1.5rem; }
-    .race-card {
-      padding: 16px 8px; border-radius: 10px; text-align: center; cursor: pointer;
-      background: rgba(0,0,0,0.3); border: 2px solid var(--border-dim); transition: all 0.2s;
-    }
-    .race-card:hover { border-color: var(--gold); background: rgba(201,168,76,0.04); transform: translateY(-2px); }
-    .race-card.selected { border-color: var(--ember); background: rgba(219,99,49,0.08); box-shadow: 0 0 20px rgba(219,99,49,0.15); }
-    .race-icon { font-size: 2rem; margin-bottom: 6px; }
-    .race-name { font-family: var(--font-title); font-size: 0.75rem; font-weight: 700; color: var(--gold-light); }
-    .race-desc { font-size: 0.6rem; color: var(--text-dim); margin-top: 4px; }
-
-    .user-info { display: flex; align-items: center; gap: 10px; margin-bottom: 1.25rem; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 10px; border: 1px solid var(--border-dim); }
-    .user-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--steel); border: 2px solid var(--gold-dark); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: var(--gold); }
-    .user-name { font-family: var(--font-title); font-size: 0.9rem; color: var(--gold-light); }
-    .user-gid { font-size: 0.65rem; color: var(--text-dim); }
-
-    .enter-btn {
-      width: 100%; padding: 0.9rem; font-family: var(--font-title); font-size: 1rem;
-      font-weight: 900; letter-spacing: 0.06em; color: var(--void);
-      background: linear-gradient(135deg, var(--ember-light), var(--ember), var(--gold-dark));
-      border: none; border-radius: 10px; cursor: pointer;
-      box-shadow: 0 4px 20px rgba(219,99,49,0.3); transition: all 0.2s;
-    }
-    .enter-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(219,99,49,0.4); }
-    .enter-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
-    .queue-btn {
-      width: 100%; padding: 0.7rem; margin-top: 0.75rem; font-family: var(--font-ui); font-size: 0.82rem;
-      color: var(--text); background: rgba(0,0,0,0.3); border: 1px solid var(--border-dim);
-      border-radius: 8px; cursor: pointer; transition: 0.2s;
-    }
-    .queue-btn:hover { border-color: var(--gold); background: rgba(201,168,76,0.04); }
-
-    .back-link { display: block; text-align: center; margin-top: 1rem; font-size: 0.72rem; color: var(--text-dim); text-decoration: none; }
-    .back-link:hover { color: var(--gold); }
-
-    /* Game canvas container */
-    #game-root {
-      position: fixed; inset: 0; width: 100vw; height: 100dvh;
-      display: none; overflow: hidden; touch-action: none;
-    }
-    #game-root.active { display: block; }
-    #game-root canvas { display: block; width: 100%; height: 100%; }
-
-    /* Loading overlay */
-    #loading-overlay {
-      position: fixed; inset: 0; z-index: 90;
-      background: var(--void); display: none;
-      flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem;
-    }
-    #loading-overlay.active { display: flex; }
-    .loading-spinner {
-      width: 48px; height: 48px; border: 3px solid var(--border-dim);
-      border-top-color: var(--ember); border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .loading-text {
-      font-family: var(--font-title); font-size: 0.85rem;
-      color: var(--text-muted); letter-spacing: 0.08em;
-    }
-    .loading-progress {
-      width: 200px; height: 3px; background: var(--border-dim); border-radius: 3px; overflow: hidden;
-    }
-    .loading-progress-bar {
-      height: 100%; width: 0%; background: linear-gradient(90deg, var(--ember), var(--gold));
-      transition: width 0.3s ease;
-    }
-
-    /* Game HUD */
-    #gameUI {
-      display: none; position: fixed; inset: 0; z-index: 50;
-      pointer-events: none; font-family: var(--font-ui);
-    }
-    #gameUI > * { pointer-events: auto; }
-    .hud-top-left {
-      position: absolute; top: 16px; left: 16px;
-    }
-    .hud-label {
-      font-family: var(--font-title); font-size: 14px; color: var(--gold-light);
-      letter-spacing: 2px; text-shadow: 0 0 10px rgba(201,168,76,0.3);
-    }
-    .hud-sub {
-      font-size: 11px; color: rgba(232,220,200,0.5); margin-top: 4px;
-    }
-    .hud-bars {
-      position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%);
-      display: flex; flex-direction: column; gap: 4px; width: 320px; max-width: 80vw;
-    }
-    .bar-row { display: flex; align-items: center; gap: 8px; }
-    .bar-label { width: 48px; font-size: 10px; color: var(--text-dim); text-align: right; text-transform: uppercase; letter-spacing: 0.05em; }
-    .bar-track { flex: 1; height: 8px; background: rgba(0,0,0,0.5); border-radius: 4px; overflow: hidden; border: 1px solid var(--border-dim); }
-    .bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }
-    #healthBar { background: linear-gradient(90deg, #8B0000, #cc2222); width: 100%; }
-    #manaBar { background: linear-gradient(90deg, #1a3a8a, #4488ff); width: 100%; }
-    #energyBar { background: linear-gradient(90deg, #8a6e14, #f0c060); width: 100%; }
-    #rageBar { background: linear-gradient(90deg, #6b1010, #ff3333); width: 0%; }
-    .hud-weapons {
-      position: absolute; bottom: 16px; right: 16px;
-      display: flex; gap: 6px;
-    }
-    .weapon-slot {
-      width: 48px; height: 48px; border: 2px solid var(--border-dim); border-radius: 8px;
-      background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center;
-      font-size: 11px; color: var(--text-dim); cursor: pointer; transition: 0.15s;
-    }
-    .weapon-slot.active { border-color: var(--ember); color: var(--gold-light); background: rgba(219,99,49,0.1); }
-    #abilityBar {
-      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
-      display: flex; gap: 6px;
-    }
-    .ability-slot {
-      width: 52px; height: 52px; border: 2px solid var(--border-dim); border-radius: 8px;
-      background: rgba(0,0,0,0.5); display: flex; flex-direction: column;
-      align-items: center; justify-content: center; cursor: pointer; transition: 0.15s;
-    }
-    .ability-slot:hover { border-color: var(--gold); }
-    .ability-key { font-size: 13px; font-weight: 700; color: var(--gold-light); }
-    .ability-name { font-size: 7px; color: var(--text-dim); margin-top: 2px; text-align: center; }
-
-    /* Countdown overlay */
-    #countdown-overlay {
-      position: fixed; inset: 0; z-index: 60;
-      display: none; flex-direction: column;
-      align-items: center; justify-content: center;
-      background: rgba(0,0,0,0.6); pointer-events: none;
-    }
-    .countdown-number {
-      font-family: var(--font-heading); font-size: 8rem; font-weight: 900;
-      color: var(--gold-light); text-shadow: 0 0 60px rgba(201,168,76,0.5);
-      line-height: 1;
-    }
-    .countdown-label {
-      font-family: var(--font-title); font-size: 1.2rem;
-      color: var(--text-muted); letter-spacing: 0.15em; margin-top: 0.5rem;
-    }
-
-    /* Match timer */
-    #match-timer {
-      position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
-      font-family: var(--font-title); font-size: 1.1rem; font-weight: 700;
-      color: var(--gold-light); letter-spacing: 0.08em;
-      text-shadow: 0 0 10px rgba(201,168,76,0.3);
-    }
-
-    /* Team frames */
-    .team-frames {
-      position: absolute; top: 16px; display: flex; flex-direction: column; gap: 4px; width: 180px;
-    }
-    #team-a-frames { left: 16px; }
-    #team-b-frames { right: 16px; }
-    .team-unit-bar {
-      display: flex; flex-direction: column; gap: 2px; padding: 6px 8px;
-      background: rgba(0,0,0,0.5); border-radius: 6px;
-      border: 1px solid var(--border-dim); cursor: pointer; transition: 0.15s;
-    }
-    .team-unit-bar:hover { border-color: var(--gold); }
-    .team-unit-name { font-size: 10px; color: var(--text-muted); font-weight: 600; }
-    #team-a-frames .team-unit-name { color: #66aaff; }
-    #team-b-frames .team-unit-name { color: #ff6666; }
-    .team-unit-hp-track {
-      height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;
-    }
-    .team-unit-hp-fill {
-      height: 100%; background: linear-gradient(90deg, #22c55e, #4ade80);
-      border-radius: 3px; transition: width 0.2s ease; width: 100%;
-    }
-
-    /* Target frame */
-    #target-frame {
-      display: none; position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.6); border: 1px solid var(--border-dim);
-      border-radius: 8px; padding: 8px 16px; min-width: 200px; text-align: center;
-    }
-    .target-name {
-      font-family: var(--font-title); font-size: 13px; font-weight: 700;
-      color: var(--gold-light); letter-spacing: 0.05em;
-    }
-    .target-hp-track {
-      height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px;
-      overflow: hidden; margin-top: 4px;
-    }
-    .target-hp-bar {
-      height: 100%; background: linear-gradient(90deg, #cc2222, #ef4444);
-      border-radius: 3px; transition: width 0.2s ease; width: 100%;
-    }
-    .target-hp-text {
-      font-size: 10px; color: var(--text-dim); margin-top: 2px;
-    }
-
-    /* F-key hints */
-    .fkey-hints {
-      position: absolute; bottom: 76px; right: 16px;
-      display: flex; flex-direction: column; gap: 2px;
-      font-size: 9px; color: var(--text-dim); opacity: 0.6;
-    }
-    .fkey-hints kbd {
-      display: inline-block; padding: 1px 4px; background: rgba(255,255,255,0.1);
-      border-radius: 3px; font-family: var(--font-ui); font-size: 8px;
-      color: var(--text-muted); margin-right: 4px;
-    }
-  </style>
+  <link rel="stylesheet" href="/src/arena.css">
 </head>
 <body>
+
+<!-- ═══ ERROR OVERLAY ═══ -->
+<div id="error-overlay">
+  <div class="error-icon">⚠️</div>
+  <div class="error-title">Engine Load Failed</div>
+  <div class="error-message" id="error-message">An error occurred while loading the arena.</div>
+  <button class="error-retry" onclick="location.reload()">Retry</button>
+</div>
 
 <!-- ═══ LOBBY OVERLAY ═══ -->
 <div id="lobby-overlay">
@@ -445,7 +172,13 @@
 </div>
 
 <script type="module">
-// ── Grudge Auth ──────────────────────────────────────
+// ── Grudge Auth ───────────────────────────────────────────────
+// This auth implementation follows the shared Grudge Studio auth contract:
+//   - Token key: grudge_auth_token (shared across all Grudge apps for SSO)
+//   - Session key: grudge_session_token (cross-app compat)
+//   - Device ID: grudge_device_id (arena-prefixed)
+//   - API calls via /api/* → Vercel rewrites to id.grudge-studio.com & api.grudge-studio.com
+// Reference: GDevelopAssistant-full/docs/BACKEND_CONNECTION_GUIDE.md
 const ID_URL = 'https://id.grudge-studio.com';
 const API_BASE = '/api';
 const WS_URL = 'https://ws.grudge-studio.com';
