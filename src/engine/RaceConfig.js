@@ -1,14 +1,19 @@
 /**
  * RaceConfig — 6 playable races across 3 factions
  *
- * Defines: faction identity, weapon class restrictions, stat modifiers,
- * faction colors (for gear tinting), and mesh prefixes for future FBX support.
+ * Defines: faction identity, faction colors (for gear tinting), and
+ * mesh prefixes for future FBX equipment support.
  *
- * Weapon restrictions follow game design rules:
- *   Warriors (human, barbarian, dwarf): shields, swords, 2h weapons
- *   Mages (elf, undead):                staffs, tomes, maces, wands
- *   Rangers (elf):                      bows, crossbows, guns, daggers, spears
- *   Worge (orc):                        staffs, spears, daggers, bows, hammers, maces
+ * NOTE: Stat scaling comes from equipped gear (Cloth/Leather/Metal × 6 sets)
+ * and the 8-attribute point allocation system with diminishing returns —
+ * NOT from race multipliers. All races start at equal base stats.
+ *
+ * Weapon types (from shared/definitions/types.ts):
+ *   sword, axe, mace, dagger, bow, staff, wand, spear, fist
+ *
+ * Classes (from classSkillTrees.ts): Warrior, Mage, Ranger, Worge
+ * Weapon skills (from weaponSkillsNew.ts): per-weapon skill trees with
+ *   primary/secondary/ability/ultimate slots
  */
 
 // ── Factions ────────────────────────────────────────────────────
@@ -32,19 +37,7 @@ export const Races = {
     name: 'Human',
     faction: Factions.CRUSADE,
     prefix: 'WK_',       // Equipment mesh prefix (for FBX customizable models)
-    role: 'warrior',
-    // Allowed weapon types for this race
-    allowedWeapons: ['greatsword', 'sabres', 'runeblade', 'bow'],
-    // Default weapon when none specified
-    defaultWeapon: 'greatsword',
-    // Stat modifiers (multiplied against base stats)
-    stats: {
-      health: 1.0, damage: 1.0, speed: 1.0, armor: 1.0,
-      attackSpeed: 1.0, mana: 1.0, energy: 1.0, rage: 1.0,
-    },
-    // Visual tint applied to procedural weapon materials
-    gearTint: 0xc9a84c,   // Gold/bronze for Crusade
-    // Scale config (matches RaceScaleConfig in modelLoader)
+    gearTint: 0xc9a84c,  // Gold/bronze for Crusade
     scale: 1.0,
     heightOffset: 0,
   },
@@ -53,13 +46,6 @@ export const Races = {
     name: 'Barbarian',
     faction: Factions.CRUSADE,
     prefix: 'BRB_',
-    role: 'berserker',
-    allowedWeapons: ['greatsword', 'sabres'],
-    defaultWeapon: 'greatsword',
-    stats: {
-      health: 1.2, damage: 1.15, speed: 0.9, armor: 0.85,
-      attackSpeed: 0.9, mana: 0.6, energy: 1.1, rage: 1.3,
-    },
     gearTint: 0xaa5522,   // Dark bronze
     scale: 1.12,
     heightOffset: 0.06,
@@ -69,13 +55,6 @@ export const Races = {
     name: 'Elf',
     faction: Factions.FABLED,
     prefix: 'ELF_',
-    role: 'ranger',
-    allowedWeapons: ['bow', 'sabres', 'scythe', 'runeblade'],
-    defaultWeapon: 'bow',
-    stats: {
-      health: 0.85, damage: 1.05, speed: 1.15, armor: 0.8,
-      attackSpeed: 1.2, mana: 1.15, energy: 1.1, rage: 0.7,
-    },
     gearTint: 0x88ccaa,   // Teal/silver for Fabled
     scale: 1.05,
     heightOffset: 0.02,
@@ -85,13 +64,6 @@ export const Races = {
     name: 'Dwarf',
     faction: Factions.FABLED,
     prefix: 'DWF_',
-    role: 'tank',
-    allowedWeapons: ['greatsword', 'runeblade', 'sabres'],
-    defaultWeapon: 'runeblade',
-    stats: {
-      health: 1.15, damage: 0.95, speed: 0.85, armor: 1.3,
-      attackSpeed: 0.85, mana: 1.1, energy: 0.9, rage: 1.1,
-    },
     gearTint: 0x6688aa,   // Steel blue
     scale: 0.85,
     heightOffset: -0.08,
@@ -101,13 +73,6 @@ export const Races = {
     name: 'Orc',
     faction: Factions.LEGION,
     prefix: 'ORC_',
-    role: 'bruiser',
-    allowedWeapons: ['greatsword', 'sabres', 'bow', 'scythe'],
-    defaultWeapon: 'greatsword',
-    stats: {
-      health: 1.1, damage: 1.2, speed: 0.95, armor: 1.0,
-      attackSpeed: 0.95, mana: 0.8, energy: 1.0, rage: 1.2,
-    },
     gearTint: 0x884422,   // Dark rust for Legion
     scale: 1.08,
     heightOffset: 0.04,
@@ -117,13 +82,6 @@ export const Races = {
     name: 'Undead',
     faction: Factions.LEGION,
     prefix: 'UD_',
-    role: 'caster',
-    allowedWeapons: ['scythe', 'runeblade', 'sabres', 'bow'],
-    defaultWeapon: 'scythe',
-    stats: {
-      health: 0.9, damage: 1.1, speed: 1.0, armor: 0.85,
-      attackSpeed: 1.0, mana: 1.3, energy: 0.9, rage: 0.8,
-    },
     gearTint: 0x664488,   // Dark purple
     scale: 0.95,
     heightOffset: -0.02,
@@ -143,29 +101,13 @@ export function getRaceFactionColors(raceId) {
   return FactionColors[race.faction] || FactionColors[Factions.CRUSADE];
 }
 
-/** Check if a race can use a weapon type */
-export function canRaceUseWeapon(raceId, weaponType) {
-  const race = getRaceConfig(raceId);
-  return race.allowedWeapons.includes(weaponType);
-}
-
-/** Get the best allowed weapon for a race given a preference */
-export function resolveWeapon(raceId, preferred) {
-  const race = getRaceConfig(raceId);
-  if (race.allowedWeapons.includes(preferred)) return preferred;
-  return race.defaultWeapon;
-}
-
-/** Apply race stat modifiers to base component values */
-export function applyRaceStats(raceId, healthMax, baseSpeed) {
-  const race = getRaceConfig(raceId);
-  return {
-    health: Math.round(healthMax * race.stats.health),
-    speed: baseSpeed * race.stats.speed,
-    damage: race.stats.damage,
-    armor: race.stats.armor,
-    attackSpeed: race.stats.attackSpeed,
-  };
+/**
+ * Resolve weapon type — any race can use any weapon.
+ * Class/weapon restrictions are handled by the class skill tree system,
+ * not by race. This just passes through the preferred weapon.
+ */
+export function resolveWeapon(_raceId, preferred) {
+  return preferred;
 }
 
 // ── Equipment tier colors ───────────────────────────────────────

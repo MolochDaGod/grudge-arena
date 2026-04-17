@@ -12,7 +12,7 @@ import * as THREE from 'three';
 // Engine modules
 import { World, Components } from './src/engine/ECS.js';
 import { WeaponTypes, WeaponDefinitions } from './src/engine/WeaponDefinitions.js';
-import { getRaceConfig, resolveWeapon, applyRaceStats } from './src/engine/RaceConfig.js';
+import { getRaceConfig, resolveWeapon } from './src/engine/RaceConfig.js';
 import { ShaderLibrary, createShaderMaterial } from './src/engine/ShaderLibrary.js';
 import { ParticleSystem } from './src/engine/ParticleSystem.js';
 import { CollisionSystem } from './src/engine/CollisionSystem.js';
@@ -250,18 +250,18 @@ class GrudgeArena {
     mesh.position.copy(spawnPos); mesh.rotation.y = facing;
     this.scene.add(mesh);
 
-    // Apply race-specific stat scaling
-    const raceStats = applyRaceStats(comp.race, 1000, 5);
     const actualWeaponDef = WeaponDefinitions[resolvedWeapon] || weaponDef;
 
+    // Base stats are equal for all races — actual stats come from
+    // equipped gear (Cloth/Leather/Metal × 6 sets) and attribute allocation
     const entity = this.world.createEntity()
       .addComponent('Transform', Components.Transform(spawnPos.x, 0, spawnPos.z))
       .addComponent('Velocity', Components.Velocity())
-      .addComponent('Health', Components.Health(raceStats.health))
-      .addComponent('Shield', Components.Shield(Math.round(200 * raceStats.armor)))
+      .addComponent('Health', Components.Health(1000))
+      .addComponent('Shield', Components.Shield(200))
       .addComponent('Resources', Components.Resources())
       .addComponent('Collider', Components.Collider(0.5, 1.8))
-      .addComponent('Movement', Components.Movement(raceStats.speed))
+      .addComponent('Movement', Components.Movement(5))
       .addComponent('WeaponState', Components.WeaponState(resolvedWeapon, resolvedWeapon))
       .addComponent('AbilityState', Components.AbilityState())
       .addComponent('RenderMesh', Components.RenderMesh(mesh))
