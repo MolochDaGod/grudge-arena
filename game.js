@@ -15,7 +15,8 @@ import { WeaponTypes, WeaponDefinitions } from './src/engine/WeaponDefinitions.j
 import { ShaderLibrary, createShaderMaterial } from './src/engine/ShaderLibrary.js';
 import { ParticleSystem } from './src/engine/ParticleSystem.js';
 import { CollisionSystem } from './src/engine/CollisionSystem.js';
-import { ChaseCamera } from './src/engine/ChaseCamera.js';
+import { OrbitCamera } from './src/engine/OrbitCamera.js';
+import { ArenaController } from './src/engine/ArenaController.js';
 import { SpriteSystem, createSkybox } from './src/engine/SpriteSystem.js';
 import { GameTimerSystem } from './src/engine/GameTimer.js';
 
@@ -42,13 +43,13 @@ class GrudgeArena {
     this.collisionSystem = new CollisionSystem();
     this.particleSystem = null;
     this.spriteSystem = null;
-    this.chaseCamera = null;
+    this.orbitCamera = null;
+    this.playerController = null;
     this.gameTimers = new GameTimerSystem();
 
     this.match = null; this.targeting = null; this.arenaAI = null;
     this.playerEntity = null; this.playerUnit = null;
     this.allUnits = [];
-    this.inputState = { keys: {}, mouse: { x: 0, y: 0, leftButton: false, rightButton: false }, abilities: {} };
     this.projectiles = [];
   }
 
@@ -57,7 +58,6 @@ class GrudgeArena {
     this._setupRenderer();
     this._setupScene();
     this._setupLighting();
-    this._setupInput();
 
     this.particleSystem = new ParticleSystem(this.scene);
     this.spriteSystem = new SpriteSystem(this.scene);
@@ -109,7 +109,38 @@ class GrudgeArena {
       for (const u of this.allUnits) { if (!u.isPlayer) this.arenaAI.register(u); }
       this.match.registerTeams(teamAUnits, teamBUnits);
 
-      if (this.playerUnit) this.chaseCamera = new ChaseCamera(this.camera, this.playerUnit.mesh);
+      // Wire up OrbitCamera + ArenaController for the player unit
+      if (this.playerUnit) {
+        this.orbitCamera = new OrbitCamera(this.camera, this.renderer.domElement);
+        this.orbitCamera.setTarget(this.playerUnit.mesh);
+        // Set initial camera yaw to face the player's direction
+        this.orbitCamera.yaw = this.playerUnit.mesh.rotation.y + Math.PI;
+
+        this.playerController = new ArenaController(
+          this.playerUnit.mesh,
+          this.playerUnit.controller,
+          this.orbitCamera
+        );
+        // Wire combat callbacks
+        this.playerController.onAttack = (type) => this._performAttack();
+        this.playerController.onAbility = (idx) => {
+          const keys = ['Q', 'E', 'R', 'F', 'P'];
+          if (idx >= 1 && idx <= 5) this.useAbility(keys[idx - 1]);
+        };
+        this.playerController.onDash = () => {
+          const fwd = this.playerController.getForward();
+          this.particleSystem?.emit({
+            position: this.playerUnit.mesh.position.clone().add(new THREE.Vector3(0, 0.5, 0)),
+            color: new THREE.Color(0x3366ff), count: 20,
+            velocity: fwd.clone().multiplyScalar(-4), spread: 1.5, lifetime: 0.4, size: 0.2
+          });
+        };
+
+        // Wire animation finished → FSM 'finish' event for combo chains
+        this.playerUnit.mixer.addEventListener('finished', () => {
+          this.playerController.send('finish');
+        });
+      }
 
       const gameUI = document.getElementById('gameUI');
       if (gameUI) gameUI.style.display = 'block';
@@ -256,7 +287,8 @@ class GrudgeArena {
 
     this.playerUnit = { entity: this.playerEntity, mesh: player, controller: null, team: 'A', isPlayer: true, weaponDef: WeaponDefinitions[WeaponTypes.GREATSWORD] };
     this.allUnits = [this.playerUnit];
-    this.chaseCamera = new ChaseCamera(this.camera, player);
+    this.orbitCamera = new OrbitCamera(this.camera, this.renderer.domElement);
+    this.orbitCamera.setTarget(player);
     const gameUI = document.getElementById('gameUI');
     if (gameUI) gameUI.style.display = 'block';
   }
@@ -271,43 +303,6 @@ class GrudgeArena {
     setTimeout(() => { if (overlay) overlay.classList.remove('active'); }, 5000);
   }
 
-  // ── Input ──
-
-  _setupInput() {
-    const SKILL_MAP = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, 'e': 2, 'r': 3, 'f': 4 };
-    const ABILITY_KEYS = ['Q', 'E', 'R', 'F', 'P'];
-
-    document.addEventListener('keydown', (e) => {
-      const key = e.key.toLowerCase();
-      if (['w','a','s','d'].includes(key)) this.inputState.keys[key] = true;
-      if (e.key === 'Shift') this.inputState.keys.shift = true;
-      if (e.key === 'Control') { this.inputState.keys.ctrl = true; if (!e.repeat) this._performRoll(1); }
-      if (e.key === 'Alt') { this.inputState.keys.alt = true; e.preventDefault(); if (!e.repeat) this._performRoll(-1); }
-      if (key === ' ') this.inputState.keys.space = true;
-      if (key in SKILL_MAP) { e.preventDefault(); const abilityKey = ABILITY_KEYS[SKILL_MAP[key]]; if (abilityKey) this.useAbility(abilityKey); }
-      if (e.key === 'Escape') this.match?.setPhase?.('paused');
-    });
-    document.addEventListener('keyup', (e) => {
-      const key = e.key.toLowerCase();
-      if (['w','a','s','d'].includes(key)) this.inputState.keys[key] = false;
-      if (e.key === 'Shift') this.inputState.keys.shift = false;
-      if (e.key === 'Control') this.inputState.keys.ctrl = false;
-      if (e.key === 'Alt') this.inputState.keys.alt = false;
-      if (key === ' ') this.inputState.keys.space = false;
-    });
-    document.addEventListener('mousedown', (e) => {
-      if (e.button === 0) this.inputState.mouse.leftButton = true;
-      if (e.button === 2) { this.inputState.mouse.rightButton = true; this._performAttack(); }
-    });
-    document.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.inputState.mouse.leftButton = false;
-      if (e.button === 2) this.inputState.mouse.rightButton = false;
-    });
-    document.addEventListener('contextmenu', e => e.preventDefault());
-    document.addEventListener('wheel', (e) => {
-      if (this.chaseCamera) this.chaseCamera.distance = Math.max(3, Math.min(15, this.chaseCamera.distance + e.deltaY * 0.005));
-    }, { passive: true });
-  }
 
   // ── Combat ──
 
@@ -423,16 +418,6 @@ class GrudgeArena {
     }
   }
 
-  _performRoll(direction) {
-    if (!this.playerUnit || this.playerEntity?.hasTag('dead')) return;
-    const mesh = this.playerUnit.mesh; const ctrl = this.playerUnit.controller;
-    if (!mesh) return;
-    if (ctrl) ctrl.playOnce(ctrl.actions?.has('dodge') ? 'dodge' : 'jump', 1.5);
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(mesh.quaternion);
-    mesh.position.addScaledVector(fwd, 5 * direction);
-    mesh.position.x = Math.max(-35, Math.min(35, mesh.position.x));
-    mesh.position.z = Math.max(-35, Math.min(35, mesh.position.z));
-  }
 
   _createProjectile(config) {
     const { position, direction, speed = 20, damage = 50, color = 0xff4400, shader = null, lifetime = 3, onHit = null } = config;
@@ -447,30 +432,6 @@ class GrudgeArena {
 
   // ── Per-frame updates ──
 
-  _updateMovement(delta) {
-    if (!this.playerUnit) return;
-    const mesh = this.playerUnit.mesh; const ctrl = this.playerUnit.controller;
-    const mov = this.playerEntity?.getComponent('Movement');
-    if (!mesh || !mov) return;
-
-    const speed = this.inputState.keys.shift ? mov.baseSpeed * mov.sprintMultiplier : mov.baseSpeed;
-    let mx = 0, mz = 0;
-    if (this.inputState.keys.w) mz -= 1; if (this.inputState.keys.s) mz += 1;
-    if (this.inputState.keys.a) mx -= 1; if (this.inputState.keys.d) mx += 1;
-
-    if (mx || mz) {
-      const len = Math.hypot(mx, mz); mx /= len; mz /= len;
-      mesh.position.x += mx * speed * delta; mesh.position.z += mz * speed * delta;
-      mesh.rotation.y = Math.atan2(mx, mz);
-      if (ctrl) { if (this.inputState.keys.shift && ctrl.actions?.has('sprint')) ctrl.play('sprint'); else ctrl.play('run'); }
-    } else if (ctrl) {
-      const movStates = ['run', 'runBack', 'sprint', 'walk', 'strafeLeft', 'strafeRight'];
-      if (movStates.includes(ctrl.currentState)) ctrl.play('idle');
-    }
-
-    mesh.position.x = Math.max(-35, Math.min(35, mesh.position.x));
-    mesh.position.z = Math.max(-35, Math.min(35, mesh.position.z));
-  }
 
   _updateCooldowns(delta) {
     const as = this.playerEntity?.getComponent('AbilityState');
@@ -483,7 +444,8 @@ class GrudgeArena {
     if (!res) return;
     res.mana.current = Math.min(res.mana.max, res.mana.current + res.mana.regenRate * delta);
     res.energy.current = Math.min(res.energy.max, res.energy.current + res.energy.regenRate * delta);
-    if (!this.inputState.keys.shift && res.rage.current > 0) res.rage.current = Math.max(0, res.rage.current - res.rage.decayRate * delta);
+    const isSprinting = this.playerController?.holdKey?.ShiftLeft || this.playerController?.holdKey?.ShiftRight;
+    if (!isSprinting && res.rage.current > 0) res.rage.current = Math.max(0, res.rage.current - res.rage.decayRate * delta);
   }
 
   _updateProjectiles(delta) {
@@ -550,14 +512,19 @@ class GrudgeArena {
     const delta = Math.min(this.clock.getDelta(), 0.1);
     if (this.match) this.match.update(delta);
     const active = this.match?.isCombatActive() ?? true;
-    if (active) { this._updateMovement(delta); this._updateCooldowns(delta); this._updateResources(delta); this._updateProjectiles(delta); }
+    if (active) {
+      if (this.playerController) this.playerController.update(delta);
+      this._updateCooldowns(delta);
+      this._updateResources(delta);
+      this._updateProjectiles(delta);
+    }
     this.gameTimers.update(delta, active);
     if (this.arenaAI) this.arenaAI.update(delta, this.allUnits, active);
     this._updateShaders(delta);
     for (const u of this.allUnits) { if (u.controller) u.controller.update(delta); }
     this.particleSystem?.update(delta);
     this.spriteSystem?.update(delta);
-    this.chaseCamera?.update(delta);
+    this.orbitCamera?.update(delta);
     this._updateUI();
     if (this.targeting) { this.targeting.updateTargetFrameHP(); this.targeting.updateTeamFrames(); this.targeting.cleanup(); }
     this.renderer.render(this.scene, this.camera);
