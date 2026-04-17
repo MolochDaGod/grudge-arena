@@ -139,6 +139,7 @@ export class ArenaAI {
           .subVectors(unit.aiTarget.mesh.position, unit.mesh.position)
           .normalize();
         unit.mesh.position.addScaledVector(dir, MOVE_SPEED * delta);
+        this._clampToArena(unit.mesh);
 
         // Face target
         unit.mesh.lookAt(
@@ -217,6 +218,7 @@ export class ArenaAI {
           .subVectors(unit.mesh.position, unit.aiTarget.mesh.position)
           .normalize();
         unit.mesh.position.addScaledVector(awayDir, MOVE_SPEED * 0.8 * delta);
+        this._clampToArena(unit.mesh);
         unit.controller?.play('run');
 
         // Try defensive ability (block, heal, etc.)
@@ -307,6 +309,12 @@ export class ArenaAI {
       return true;
     }
     return false;
+  }
+
+  /** Keep AI units inside the arena ring */
+  _clampToArena(mesh) {
+    mesh.position.x = Math.max(-35, Math.min(35, mesh.position.x));
+    mesh.position.z = Math.max(-35, Math.min(35, mesh.position.z));
   }
 
   _tryDefensiveAbility(unit) {

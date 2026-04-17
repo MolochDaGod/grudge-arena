@@ -36,6 +36,7 @@ class GrudgeArena {
     this.container = config.container || document.getElementById('game-root') || document.body;
     this.scene = null; this.camera = null; this.renderer = null;
     this.clock = new THREE.Clock();
+    this._disposed = false;
 
     this.world = new World();
     this.collisionSystem = new CollisionSystem();
@@ -114,6 +115,7 @@ class GrudgeArena {
       if (gameUI) gameUI.style.display = 'block';
       setProgress(100, 'Ready!');
       this.match.start();
+      this.updateWeaponUI();
       console.log('[arena] 3v3 Arena loaded — race:', race);
     } catch (err) {
       console.error('[arena] Failed to load arena systems:', err);
@@ -137,6 +139,7 @@ class GrudgeArena {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     if (!existingCanvas) { this.renderer.domElement.style.display = 'block'; this.container.appendChild(this.renderer.domElement); }
     window.addEventListener('resize', () => {
       const w = this.container.clientWidth || window.innerWidth;
@@ -413,7 +416,8 @@ class GrudgeArena {
           }
         }
       }
-      this.particleSystem?.emit({ position: pos.clone().add(fwd.multiplyScalar(weapon.range / 2)).add(new THREE.Vector3(0, 1, 0)), color: new THREE.Color(0xffffff), count: 10, velocity: fwd.clone(), spread: 0.5, lifetime: 0.2, size: 0.1 });
+      const slashPos = pos.clone().add(fwd.clone().multiplyScalar(weapon.range / 2)).add(new THREE.Vector3(0, 1, 0));
+      this.particleSystem?.emit({ position: slashPos, color: new THREE.Color(0xffffff), count: 10, velocity: fwd.clone(), spread: 0.5, lifetime: 0.2, size: 0.1 });
       const res = this.playerEntity?.getComponent('Resources');
       if (res) res.rage.current = Math.min(res.rage.max, res.rage.current + 10);
     }
@@ -492,6 +496,11 @@ class GrudgeArena {
       if (p.lifetime <= 0 || p.mesh.position.distanceTo(p.startPos) > 50) {
         if (p.onHit) p.onHit(null, p.mesh.position.clone());
         this.scene.remove(p.mesh);
+        // Dispose GPU resources
+        p.mesh.traverse(child => {
+          if (child.isMesh) { child.geometry?.dispose(); child.material?.dispose(); }
+          if (child.isLight) child.dispose?.();
+        });
         this.projectiles.splice(i, 1);
       }
     }
@@ -536,6 +545,7 @@ class GrudgeArena {
   // ── Game loop ──
 
   _animate() {
+    if (this._disposed) return;
     requestAnimationFrame(() => this._animate());
     const delta = Math.min(this.clock.getDelta(), 0.1);
     if (this.match) this.match.update(delta);
@@ -555,7 +565,7 @@ class GrudgeArena {
 
   /** Clean dispose — release all GPU resources and DOM elements */
   dispose() {
-    // Stop game loop (next rAF will find no instance)
+    this._disposed = true;
     this.clock.stop();
 
     // Dispose subsystems
