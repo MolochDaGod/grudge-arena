@@ -12,6 +12,7 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { getRaceConfig, getRaceFactionColors, resolveWeapon, TierConfig } from './engine/RaceConfig.js';
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
 
@@ -1017,9 +1018,21 @@ async function loadAnimationLibrary() {
  * Load a race model + animation library + weapon mesh, return ready-to-use unit.
  * @param {string} race - 'human', 'barbarian', etc.
  * @param {string} weaponType - 'greatsword', 'bow', etc.
- * @returns {{ scene, mixer, controller: AnimationController }}
+ * @param {Object} [opts] - { tier: 1-8 }
+ * @returns {{ scene, mixer, controller: AnimationController, raceConfig }}
  */
-export async function createAnimatedUnit(race, weaponType) {
+export async function createAnimatedUnit(race, weaponType, opts = {}) {
+  const raceConfig = getRaceConfig(race);
+  const factionColors = getRaceFactionColors(race);
+  const tier = opts.tier || 1;
+  const tierCfg = TierConfig[tier] || TierConfig[1];
+
+  // Validate weapon against race restrictions (fall back to default)
+  const resolvedWeapon = resolveWeapon(race, weaponType);
+  if (resolvedWeapon !== weaponType) {
+    console.warn(`[modelLoader] ${raceConfig.name} can't use ${weaponType}, using ${resolvedWeapon}`);
+  }
+
   // Load character model and animation library in parallel
   const [{ scene, mixer, actions: embeddedActions }, animClips] = await Promise.all([
     loadRaceModel(race),
@@ -1032,10 +1045,6 @@ export async function createAnimatedUnit(race, weaponType) {
   controller.registerActions(embeddedActions);
 
   // Register all animations from the pre-built library
-  // These clips have bone names already matching our skeleton (remapped at build time)
-  // DO NOT scale position tracks — the Armature's 0.01 root scale already
-  // converts centimeter bone positions to world meters. Scaling here
-  // would double-convert, sinking the character into the ground.
   for (const [name, clip] of animClips) {
     const clonedClip = clip.clone();
     clonedClip.name = name;
@@ -1043,16 +1052,18 @@ export async function createAnimatedUnit(race, weaponType) {
     controller.actions.set(name, action);
   }
   
-  console.log(`[modelLoader] ${race} unit ready: ${controller.actions.size} total actions`);
+  console.log(`[modelLoader] ${raceConfig.name} (${raceConfig.faction}) unit ready: ${controller.actions.size} anims, weapon: ${resolvedWeapon}, tier: ${tierCfg.name}`);
 
-  // Attach weapon mesh to RightHand bone
-  const weapon = createWeaponMesh(weaponType);
+  // Create and attach weapon mesh with race faction tint + tier glow
+  const weapon = createWeaponMesh(resolvedWeapon);
+  tintWeaponMesh(weapon, raceConfig.gearTint, factionColors.emissive, tierCfg);
   attachWeaponToBone(scene, weapon, 'RightHand');
 
   // Attach shield to LeftHand for sword+shield weapons
   const shieldWeapons = ['sabres', 'runeblade'];
-  if (shieldWeapons.includes(weaponType)) {
+  if (shieldWeapons.includes(resolvedWeapon)) {
     const shield = createShieldMesh();
+    tintWeaponMesh(shield, raceConfig.gearTint, factionColors.emissive, tierCfg);
     shield.rotation.set(-Math.PI / 2, 0, Math.PI);
     attachWeaponToBone(scene, shield, 'LeftHand');
   }
@@ -1060,5 +1071,32 @@ export async function createAnimatedUnit(race, weaponType) {
   // Start idle animation
   controller.play('idle');
 
-  return { scene, mixer, controller };
+  return { scene, mixer, controller, raceConfig, resolvedWeapon, tier };
+}
+
+/**
+ * Apply race faction tint and tier glow to a procedural weapon/shield mesh.
+ * Traverses all MeshStandardMaterial children, blending the faction color
+ * into metallic/guard pieces and adding tier-based emissive glow.
+ */
+function tintWeaponMesh(group, raceTint, factionEmissive, tierCfg) {
+  const tintColor = new THREE.Color(raceTint);
+  const emissiveColor = new THREE.Color(tierCfg.emissive || factionEmissive);
+
+  group.traverse(child => {
+    if (!child.isMesh || !child.material) return;
+    const mat = child.material;
+    if (!mat.isMeshStandardMaterial) return;
+
+    // Metallic parts (guards, bosses, rims) get the faction tint
+    if (mat.metalness > 0.5) {
+      mat.color.lerp(tintColor, 0.4);
+    }
+
+    // Add tier emissive glow to all parts
+    if (tierCfg.emissiveIntensity > 0) {
+      mat.emissive.copy(emissiveColor);
+      mat.emissiveIntensity = Math.max(mat.emissiveIntensity, tierCfg.emissiveIntensity);
+    }
+  });
 }

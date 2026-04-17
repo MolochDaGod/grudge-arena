@@ -12,6 +12,7 @@ import * as THREE from 'three';
 // Engine modules
 import { World, Components } from './src/engine/ECS.js';
 import { WeaponTypes, WeaponDefinitions } from './src/engine/WeaponDefinitions.js';
+import { getRaceConfig, resolveWeapon, applyRaceStats } from './src/engine/RaceConfig.js';
 import { ShaderLibrary, createShaderMaterial } from './src/engine/ShaderLibrary.js';
 import { ParticleSystem } from './src/engine/ParticleSystem.js';
 import { CollisionSystem } from './src/engine/CollisionSystem.js';
@@ -83,15 +84,16 @@ class GrudgeArena {
       this.arenaAI = new aiMod.ArenaAI();
 
       const race = this.config.race || 'human';
+      const playerWeapon = resolveWeapon(race, this.config.weapon || 'greatsword');
       const TEAM_A = [
-        { race, weapon: 'greatsword', isPlayer: true },
-        { race: 'elf', weapon: 'bow', isPlayer: false },
-        { race: 'undead', weapon: 'scythe', isPlayer: false },
+        { race, weapon: playerWeapon, isPlayer: true, tier: 3 },
+        { race: 'elf', weapon: 'bow', isPlayer: false, tier: 2 },
+        { race: 'dwarf', weapon: 'runeblade', isPlayer: false, tier: 2 },
       ];
       const TEAM_B = [
-        { race: 'orc', weapon: 'greatsword', isPlayer: false },
-        { race: 'barbarian', weapon: 'sabres', isPlayer: false },
-        { race: 'dwarf', weapon: 'runeblade', isPlayer: false },
+        { race: 'orc', weapon: 'greatsword', isPlayer: false, tier: 2 },
+        { race: 'barbarian', weapon: 'greatsword', isPlayer: false, tier: 2 },
+        { race: 'undead', weapon: 'scythe', isPlayer: false, tier: 3 },
       ];
 
       setProgress(30, 'Loading Team A models...');
@@ -244,31 +246,36 @@ class GrudgeArena {
     const uuid = crypto?.randomUUID?.() || `unit_${teamId}_${slot}_${Date.now()}`;
     const weaponDef = WeaponDefinitions[comp.weapon] || WeaponDefinitions[WeaponTypes.GREATSWORD];
 
-    const { scene: mesh, mixer, controller } = await modelMod.createAnimatedUnit(comp.race, comp.weapon);
+    const { scene: mesh, mixer, controller, raceConfig, resolvedWeapon } = await modelMod.createAnimatedUnit(comp.race, comp.weapon, { tier: comp.tier || 1 });
     mesh.position.copy(spawnPos); mesh.rotation.y = facing;
     this.scene.add(mesh);
+
+    // Apply race-specific stat scaling
+    const raceStats = applyRaceStats(comp.race, 1000, 5);
+    const actualWeaponDef = WeaponDefinitions[resolvedWeapon] || weaponDef;
 
     const entity = this.world.createEntity()
       .addComponent('Transform', Components.Transform(spawnPos.x, 0, spawnPos.z))
       .addComponent('Velocity', Components.Velocity())
-      .addComponent('Health', Components.Health(1000))
-      .addComponent('Shield', Components.Shield(200))
+      .addComponent('Health', Components.Health(raceStats.health))
+      .addComponent('Shield', Components.Shield(Math.round(200 * raceStats.armor)))
       .addComponent('Resources', Components.Resources())
       .addComponent('Collider', Components.Collider(0.5, 1.8))
-      .addComponent('Movement', Components.Movement(5))
-      .addComponent('WeaponState', Components.WeaponState(comp.weapon, comp.weapon))
+      .addComponent('Movement', Components.Movement(raceStats.speed))
+      .addComponent('WeaponState', Components.WeaponState(resolvedWeapon, resolvedWeapon))
       .addComponent('AbilityState', Components.AbilityState())
       .addComponent('RenderMesh', Components.RenderMesh(mesh))
       .addComponent('TargetInfo', {
-        displayName: `${comp.race.charAt(0).toUpperCase() + comp.race.slice(1)} ${weaponDef.title || ''}`.trim(),
-        race: comp.race, weaponType: comp.weapon, team: teamId,
+        displayName: `${raceConfig.name} ${actualWeaponDef.title || ''}`.trim(),
+        race: comp.race, weaponType: resolvedWeapon, team: teamId,
+        faction: raceConfig.faction, role: raceConfig.role,
       });
 
     if (comp.isPlayer) entity.addTag('player');
     entity.addTag(teamId === 'A' ? 'teamA' : 'teamB');
     this.collisionSystem.addCollider(mesh, teamId === 'A' ? 'ally' : 'enemy', { entity, uuid });
 
-    return { entity, mesh, mixer, controller, team: teamId, isPlayer: !!comp.isPlayer, weaponDef, race: comp.race, uuid };
+    return { entity, mesh, mixer, controller, team: teamId, isPlayer: !!comp.isPlayer, weaponDef: actualWeaponDef, race: comp.race, raceConfig, uuid };
   }
 
   _createFallbackPlayer() {
