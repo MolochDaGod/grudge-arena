@@ -853,8 +853,6 @@ class GrudgeArena {
   // ── Per-frame updates ──
 
   _updateCooldowns(delta) {
-    // Shared GCD (WoW-style 1.5s)
-    if (this._gcdTimer > 0) this._gcdTimer = Math.max(0, this._gcdTimer - delta);
     const as = this.playerEntity?.getComponent("AbilityState");
     if (!as) return;
     for (const key of Object.keys(as.cooldowns)) {
@@ -970,7 +968,6 @@ class GrudgeArena {
       if (this.playerController) this.playerController.update(delta);
       this._updateCooldowns(delta);
       this._updateResources(delta);
-      this._updateAutoAttack(delta);
       this._updateProjectiles(delta);
     }
     this.gameTimers.update(delta, active);

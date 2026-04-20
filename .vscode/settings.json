@@ -1,0 +1,13 @@
+{
+    "serverpulse.services": [
+        {
+            "name": "grudge-arena (nodejs)",
+            "type": "nodejs",
+            "port": 8000,
+            "healthCheckPath": "",
+            "enableHealthCheck": true,
+            "healthCheckInterval": 300000
+        }
+    ],
+    "serverpulse.ai.optInShown": true
+}

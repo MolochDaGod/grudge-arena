@@ -1061,50 +1061,15 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   // Register embedded animations from the character GLB (Running, Walking)
   controller.registerActions(embeddedActions);
 
-  // Resolve the weapon's animation class so we can expose its clips under
-  // bare names (e.g. 'greatsword__attack1' → also 'attack1'). This is what
-  // lets CharacterFSM / arenaAI / game.js call play('attack1'), play('hurt'),
-  // play('dodge'), etc. without knowing the weapon class.
-  const animClass = WeaponToAnimClass[resolvedWeapon] || 'greatsword';
-  const prefix = `${animClass}__`;
-
-  // Register all animations from the pre-built library. For clips matching
-  // this unit's weapon class, also register under the bare state name so
-  // calls like play('attack1') resolve to greatsword__attack1.
-  let bareRegistered = 0;
+  // Register all animations from the pre-built library
   for (const [name, clip] of animClips) {
     const clonedClip = clip.clone();
     clonedClip.name = name;
     const action = mixer.clipAction(clonedClip, scene);
     controller.actions.set(name, action);
-    if (name.startsWith(prefix)) {
-      const bare = name.slice(prefix.length);
-      if (!controller.actions.has(bare)) {
-        controller.actions.set(bare, action);
-        bareRegistered++;
-      }
-    }
   }
-
-  // Aliases the FSM / AI commonly use that map to slightly differently-named
-  // clips inside the library. Only set if the alias isn't already bound.
-  const CLIP_ALIASES = {
-    death: ['dead', 'deadBack', 'hurt'],     // FSM 'playDead' uses 'death'
-    hit:   ['hurt', 'stun'],                  // FSM 'playHit' uses 'hit'
-    dodge: ['roll', 'dodgeBack'],             // ArenaController/FSM 'playDash' uses 'dodge'/'roll'
-    heavy: ['swing', 'attack3', 'attack2'],   // FSM 'playHeavy'
-    fall:  ['fallLoop', 'jump'],              // FSM 'playFall'
-    land:  ['jumpLand', 'idle'],
-  };
-  for (const [alias, candidates] of Object.entries(CLIP_ALIASES)) {
-    if (controller.actions.has(alias)) continue;
-    for (const c of candidates) {
-      const act = controller.actions.get(c);
-      if (act) { controller.actions.set(alias, act); break; }
-    }
-  }
-
-  console.log(`[modelLoader] ${raceConfig.name} (${raceConfig.faction}) unit ready: ${controller.actions.size} anims (${bareRegistered} bare-aliased from '${animClass}'), weapon: ${resolvedWeapon}, tier: ${tierCfg.name}`);
+  
+  console.log(`[modelLoader] ${raceConfig.name} (${raceConfig.faction}) unit ready: ${controller.actions.size} anims, weapon: ${resolvedWeapon}, tier: ${tierCfg.name}`);
 
   // Create and attach weapon mesh with race faction tint + tier glow
   const weapon = createWeaponMesh(resolvedWeapon);

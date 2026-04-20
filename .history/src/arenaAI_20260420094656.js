@@ -182,31 +182,15 @@ export class ArenaAI {
         }
 
         const dist = unit.mesh.position.distanceTo(unit.aiTarget.mesh.position);
-        const isRanged = (unit.weaponDef?.range ?? 0) > 5;
-        const weaponRange = isRanged ? RANGED_RANGE : MELEE_RANGE;
+        const weaponRange = unit.weaponDef?.range > 5 ? RANGED_RANGE : MELEE_RANGE;
 
-        // If target moved out of range, re-approach (melee) or close the gap (ranged)
+        // If target moved out of range, re-approach
         if (dist > weaponRange * 1.3) {
           unit.aiState = AI_STATES.APPROACH;
           return;
         }
-        // If a ranged unit got melee'd, kite back into the optimal band
-        if (isRanged && dist < RANGED_KITE_MIN * 0.75) {
-          unit.aiState = AI_STATES.APPROACH;
-          return;
-        }
 
-        // Melee sticks glued to target — close residual gap every frame so
-        // a moving enemy doesn't slip out of melee range.
-        if (!isRanged && dist > MELEE_RANGE * 0.8) {
-          const dir = new THREE.Vector3()
-            .subVectors(unit.aiTarget.mesh.position, unit.mesh.position)
-            .normalize();
-          unit.mesh.position.addScaledVector(dir, MOVE_SPEED * delta);
-          this._clampToArena(unit.mesh);
-        }
-
-        // Always face target before swinging (WoW snap-to-target)
+        // Face target
         unit.mesh.lookAt(
           unit.aiTarget.mesh.position.x,
           unit.mesh.position.y,

@@ -18,14 +18,18 @@
 export class AbilitySystem {
   constructor(character) {
     this.char = character;
-    this.abilities = {}; // slot → AbilityDef
-    this.cooldowns = {}; // slot → remaining seconds
+    this.abilities = {};  // slot → AbilityDef
+    this.cooldowns = {};  // slot → remaining seconds
     this.gcd = { timer: 0, duration: 1.5 };
 
     // Cast state
-    this.casting = null; // { slot, ability, progress, duration }
+    this.casting = null;  // { slot, ability, progress, duration }
     this.interrupted = false;
     this.schoolLockout = {}; // school → remaining seconds
+
+    // Register in updates
+    if (!window.updates) window.updates = [];
+    window.updates.push(this);
   }
 
   /** Define abilities for slots 1-5 */

@@ -19,9 +19,6 @@ const AI_STATES = {
 const ENGAGE_RANGE = 25;
 const MELEE_RANGE = 2.5;
 const RANGED_RANGE = 18;
-// Ranged kite: back off if enemy is closer than this (creates an optimal
-// firing zone between RANGED_KITE_MIN and RANGED_RANGE).
-const RANGED_KITE_MIN = 8;
 const RETREAT_HP_THRESHOLD = 0.25;
 const ATTACK_COOLDOWN = 1.5; // base seconds between attacks
 const ABILITY_CHECK_INTERVAL = 2.0;
@@ -130,34 +127,21 @@ export class ArenaAI {
         }
 
         const dist = unit.mesh.position.distanceTo(unit.aiTarget.mesh.position);
-        const isRanged = (unit.weaponDef?.range ?? 0) > 5;
-        const weaponRange = isRanged ? RANGED_RANGE : MELEE_RANGE;
+        const weaponRange = unit.weaponDef?.range > 5 ? RANGED_RANGE : MELEE_RANGE;
 
-        // Enter ATTACK once in optimal band:
-        //   melee  → dist <= MELEE_RANGE
-        //   ranged → dist in [RANGED_KITE_MIN, RANGED_RANGE]
-        if (isRanged) {
-          if (dist <= RANGED_RANGE && dist >= RANGED_KITE_MIN) {
-            unit.aiState = AI_STATES.ATTACK;
-            return;
-          }
-        } else if (dist <= weaponRange) {
+        if (dist <= weaponRange) {
           unit.aiState = AI_STATES.ATTACK;
           return;
         }
 
-        // Determine movement direction:
-        //   too far          → approach target
-        //   too close (ranged) → back off to optimal band
-        const toTarget = new THREE.Vector3()
-          .subVectors(unit.aiTarget.mesh.position, unit.mesh.position);
-        const moveDir = toTarget.clone().normalize();
-        if (isRanged && dist < RANGED_KITE_MIN) moveDir.multiplyScalar(-1);
-
-        unit.mesh.position.addScaledVector(moveDir, MOVE_SPEED * delta);
+        // Move toward target
+        const dir = new THREE.Vector3()
+          .subVectors(unit.aiTarget.mesh.position, unit.mesh.position)
+          .normalize();
+        unit.mesh.position.addScaledVector(dir, MOVE_SPEED * delta);
         this._clampToArena(unit.mesh);
 
-        // Always face target (even when backpedalling — WoW strafe feel)
+        // Face target
         unit.mesh.lookAt(
           unit.aiTarget.mesh.position.x,
           unit.mesh.position.y,
@@ -182,31 +166,15 @@ export class ArenaAI {
         }
 
         const dist = unit.mesh.position.distanceTo(unit.aiTarget.mesh.position);
-        const isRanged = (unit.weaponDef?.range ?? 0) > 5;
-        const weaponRange = isRanged ? RANGED_RANGE : MELEE_RANGE;
+        const weaponRange = unit.weaponDef?.range > 5 ? RANGED_RANGE : MELEE_RANGE;
 
-        // If target moved out of range, re-approach (melee) or close the gap (ranged)
+        // If target moved out of range, re-approach
         if (dist > weaponRange * 1.3) {
           unit.aiState = AI_STATES.APPROACH;
           return;
         }
-        // If a ranged unit got melee'd, kite back into the optimal band
-        if (isRanged && dist < RANGED_KITE_MIN * 0.75) {
-          unit.aiState = AI_STATES.APPROACH;
-          return;
-        }
 
-        // Melee sticks glued to target — close residual gap every frame so
-        // a moving enemy doesn't slip out of melee range.
-        if (!isRanged && dist > MELEE_RANGE * 0.8) {
-          const dir = new THREE.Vector3()
-            .subVectors(unit.aiTarget.mesh.position, unit.mesh.position)
-            .normalize();
-          unit.mesh.position.addScaledVector(dir, MOVE_SPEED * delta);
-          this._clampToArena(unit.mesh);
-        }
-
-        // Always face target before swinging (WoW snap-to-target)
+        // Face target
         unit.mesh.lookAt(
           unit.aiTarget.mesh.position.x,
           unit.mesh.position.y,

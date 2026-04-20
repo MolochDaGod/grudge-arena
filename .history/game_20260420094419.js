@@ -162,9 +162,8 @@ class GrudgeArena {
           this.playerUnit.controller,
           this.orbitCamera,
         );
-        // Wire combat callbacks. RMB toggles auto-attack (WoW-style) —
-        // _performAttack is driven by _updateAutoAttack each frame.
-        this.playerController.onAttack = (_type) => this._toggleAutoAttack();
+        // Wire combat callbacks
+        this.playerController.onAttack = (type) => this._performAttack();
         this.playerController.onAbility = (idx) => {
           const keys = ["Q", "E", "R", "F", "P"];
           if (idx >= 1 && idx <= 5) this.useAbility(keys[idx - 1]);
@@ -783,32 +782,6 @@ class GrudgeArena {
     }
   }
 
-  /**
-   * Drive auto-attack each frame. Swings at the current target on the
-   * weapon's attackSpeed cadence, provided target is alive and in range.
-   */
-  _updateAutoAttack(delta) {
-    this._autoAttackTimer = Math.max(0, this._autoAttackTimer - delta);
-    if (!this._autoAttackOn) return;
-    if (!this.playerUnit || this.playerEntity?.hasTag("dead")) return;
-    const target = this.targeting?.currentTarget;
-    if (
-      !target ||
-      target.team === this.playerUnit.team ||
-      target.entity?.hasTag("dead")
-    ) {
-      return;
-    }
-    const weapon = this.getCurrentWeapon();
-    if (!weapon) return;
-    const dist = this.playerUnit.mesh.position.distanceTo(target.mesh.position);
-    const range = weapon.range ?? 5;
-    if (dist > range + (range > 5 ? 2 : 1)) return;
-    if (this._autoAttackTimer > 0) return;
-    this._performAttack();
-    this._autoAttackTimer = 1 / (weapon.attackSpeed || 1);
-  }
-
   _createProjectile(config) {
     const {
       position,
@@ -853,8 +826,6 @@ class GrudgeArena {
   // ── Per-frame updates ──
 
   _updateCooldowns(delta) {
-    // Shared GCD (WoW-style 1.5s)
-    if (this._gcdTimer > 0) this._gcdTimer = Math.max(0, this._gcdTimer - delta);
     const as = this.playerEntity?.getComponent("AbilityState");
     if (!as) return;
     for (const key of Object.keys(as.cooldowns)) {
@@ -970,7 +941,6 @@ class GrudgeArena {
       if (this.playerController) this.playerController.update(delta);
       this._updateCooldowns(delta);
       this._updateResources(delta);
-      this._updateAutoAttack(delta);
       this._updateProjectiles(delta);
     }
     this.gameTimers.update(delta, active);

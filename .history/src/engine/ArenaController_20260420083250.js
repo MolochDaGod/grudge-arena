@@ -70,6 +70,7 @@ export class ArenaController {
     this.onAttack = null;    // (type: number|string) => void
     this.onAbility = null;   // (skillIndex: number) => void
     this.onDash = null;      // () => void
+    this.onBlock = null;     // () => void
 
     this._setupListeners();
   }
@@ -196,41 +197,32 @@ export class ArenaController {
     this._doubleTapCooldown = Math.max(0, this._doubleTapCooldown - delta);
 
     // ── Process tick keys (one-shot actions) ──
-    // RMB → toggle auto-attack (WoW-style). Swing anims are driven by
-    // game.js _performAttack inside the auto-attack loop, so we don't
-    // dispatch the FSM 'attack' event here.
     if (this.tickKey._RMB) {
-      this.onAttack?.("toggle");
+      fsm.send('attack');
     } else if (this.tickKey.Space) {
-      fsm.send("jump");
+      fsm.send('jump');
     } else if (this.tickKey.ControlLeft || this.tickKey.ControlRight) {
-      fsm.send("dash");
+      fsm.send('dash');
     } else if (this.tickKey.KeyQ) {
-      fsm.send("block");
+      fsm.send('block');
     } else if (this.tickKey.Digit1 || this.tickKey.Numpad1) {
-      this._activeSkill = 1;
-      fsm.send("skill");
+      this._activeSkill = 1; fsm.send('skill');
     } else if (this.tickKey.Digit2 || this.tickKey.Numpad2) {
-      this._activeSkill = 2;
-      fsm.send("skill");
+      this._activeSkill = 2; fsm.send('skill');
     } else if (this.tickKey.Digit3 || this.tickKey.Numpad3) {
-      this._activeSkill = 3;
-      fsm.send("skill");
+      this._activeSkill = 3; fsm.send('skill');
     } else if (this.tickKey.Digit4 || this.tickKey.Numpad4) {
-      this._activeSkill = 4;
-      fsm.send("skill");
+      this._activeSkill = 4; fsm.send('skill');
     } else if (this.tickKey.Digit5 || this.tickKey.Numpad5) {
-      this._activeSkill = 5;
-      fsm.send("skill");
+      this._activeSkill = 5; fsm.send('skill');
     }
     this.tickKey = {};
 
     // ── Build input direction from held keys ──
-    let ix = 0,
-      iz = 0;
-    if (this.holdKey.KeyW || this.holdKey.ArrowUp) iz -= 1;
-    if (this.holdKey.KeyS || this.holdKey.ArrowDown) iz += 1;
-    if (this.holdKey.KeyA || this.holdKey.ArrowLeft) ix -= 1;
+    let ix = 0, iz = 0;
+    if (this.holdKey.KeyW || this.holdKey.ArrowUp)    iz -= 1;
+    if (this.holdKey.KeyS || this.holdKey.ArrowDown)  iz += 1;
+    if (this.holdKey.KeyA || this.holdKey.ArrowLeft)  ix -= 1;
     if (this.holdKey.KeyD || this.holdKey.ArrowRight) ix += 1;
 
     const hasInput = ix !== 0 || iz !== 0;
@@ -238,32 +230,21 @@ export class ArenaController {
     const maxSpeed = isSprint ? MOVE_SPEED * SPRINT_MULTIPLIER : MOVE_SPEED;
 
     // ── Camera-relative direction ──
-    let worldDirX = 0,
-      worldDirZ = 0;
+    let worldDirX = 0, worldDirZ = 0;
     if (hasInput) {
       const len = Math.sqrt(ix * ix + iz * iz);
-      ix /= len;
-      iz /= len;
+      ix /= len; iz /= len;
       const yaw = this.camera.getYaw();
-      const cos = Math.cos(yaw),
-        sin = Math.sin(yaw);
+      const cos = Math.cos(yaw), sin = Math.sin(yaw);
       worldDirX = ix * cos - iz * sin;
       worldDirZ = ix * sin + iz * cos;
     }
 
     // ── Movement (only when FSM allows) ──
-    // Only dispatch 'run'/'stop' when the FSM is in idle/run (not mid-attack,
-    // mid-jump, etc.) AND only on state-change boundaries to avoid spamming
-    // XState with events it won't act on anyway.
-    const fsmValue = fsm.getSnapshot().value;
-
     if (this.canMove) {
       if (hasInput) {
         // Accelerate
-        this.currentSpeed = Math.min(
-          maxSpeed,
-          this.currentSpeed + ACCEL_RATE * delta,
-        );
+        this.currentSpeed = Math.min(maxSpeed, this.currentSpeed + ACCEL_RATE * delta);
 
         // Compute target facing angle from movement direction
         this.targetYaw = Math.atan2(worldDirX, worldDirZ);
@@ -276,14 +257,14 @@ export class ArenaController {
         // Update FSM bridge facing
         this._fsmChar.facing.set(worldDirX, worldDirZ);
 
-        // Only enter 'run' state from idle — avoids flooding XState
-        if (fsmValue === "idle") fsm.send("run");
+        // Tell FSM we're running
+        fsm.send('run');
       } else {
         // Decelerate
         this.currentSpeed = Math.max(0, this.currentSpeed - DECEL_RATE * delta);
         if (this.currentSpeed < 0.01) {
           this.currentSpeed = 0;
-          if (fsmValue === "run") fsm.send("stop");
+          fsm.send('stop');
         }
       }
     } else {

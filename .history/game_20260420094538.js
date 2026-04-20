@@ -970,7 +970,6 @@ class GrudgeArena {
       if (this.playerController) this.playerController.update(delta);
       this._updateCooldowns(delta);
       this._updateResources(delta);
-      this._updateAutoAttack(delta);
       this._updateProjectiles(delta);
     }
     this.gameTimers.update(delta, active);
