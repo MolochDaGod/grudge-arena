@@ -149,17 +149,6 @@ class GrudgeArena {
       this.playerUnit = this.allUnits.find((u) => u.isPlayer);
       this.playerEntity = this.playerUnit?.entity;
 
-      // Hydrate the player's persistent inventory (backend → localStorage → memory).
-      // Fire-and-forget: the match can start before the network resolves; the UI
-      // will re-render once the inventory component version bumps.
-      if (this.playerEntity) {
-        inventorySystem
-          .loadForPlayer(this.playerEntity)
-          .catch((e) =>
-            console.warn("[GrudgeArena] inventory load failed:", e.message),
-          );
-      }
-
       this.targeting = new targetMod.TargetSystem(
         this.camera,
         this.scene,
@@ -425,11 +414,8 @@ class GrudgeArena {
   async _loadUnit(comp, teamId, slot, teamSize, modelMod) {
     const spawnPos = ArenaMatchStatic.getSpawnPosition(teamId, slot, teamSize);
     const facing = ArenaMatchStatic.getSpawnFacing(teamId);
-    // Grudge UUID so unit identity is cross-app compatible (mob logs, match replay, etc.)
-    const uuid = generateGrudgeUuid(
-      comp.isPlayer ? "character" : "mob",
-      `${teamId}-${slot}`,
-    );
+    const uuid =
+      crypto?.randomUUID?.() || `unit_${teamId}_${slot}_${Date.now()}`;
     const weaponDef =
       WeaponDefinitions[comp.weapon] ||
       WeaponDefinitions[WeaponTypes.GREATSWORD];
@@ -496,14 +482,7 @@ class GrudgeArena {
         role: raceConfig.role,
       });
 
-    if (comp.isPlayer) {
-      entity.addTag("player");
-      // Persistent gear/inventory lives on the player entity only; AI units are ephemeral.
-      entity
-        .addComponent("Inventory", Components.Inventory(40))
-        .addComponent("Equipment", Components.Equipment())
-        .addComponent("SkillBar", Components.SkillBar(9));
-    }
+    if (comp.isPlayer) entity.addTag("player");
     entity.addTag(teamId === "A" ? "teamA" : "teamB");
     this.collisionSystem.addCollider(mesh, teamId === "A" ? "ally" : "enemy", {
       entity,

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Grudge Arena — PvP Combat</title>
   <meta name="description" content="Grudge Arena — 3D PvP combat arena with 6 playable races, 5 weapon classes, and real-time multiplayer. Built on Grudge Studio.">
   <meta name="theme-color" content="#07070f">
@@ -70,10 +70,10 @@
       </div>
 
       <div class="race-title">Create Arena Champion</div>
-      
+
       <div class="builder-grid">
-        <div class="builder-column">
-          <div class="builder-section-title">Race</div>
+      <div class="builder-column">
+      <div class="builder-section-title">Race</div>
       <div class="race-grid">
         <div class="race-card selected" data-race="human" onclick="selectRace(this)">
           <div class="race-icon">🛡️</div>
@@ -126,7 +126,7 @@
           <div class="class-desc">Stealth opener + execute</div>
         </div>
       </div>
-      
+
       <div class="builder-section-title">Weapon</div>
       <div class="weapon-grid" id="weapon-grid">
         <button class="weapon-pill active" data-weapon="greatsword" onclick="selectWeaponPill(this)">Greatsword</button>
@@ -136,39 +136,39 @@
         <button class="weapon-pill" data-weapon="scythe" onclick="selectWeaponPill(this)">Scythe</button>
       </div>
       </div>
-      
+
       <div class="builder-column">
-        <div class="builder-section-title">Ring of Titans</div>
-        <div class="ring-panel">
-          <label class="ring-label" for="ring-tier-select">Titan Tier</label>
-          <select id="ring-tier-select" class="ring-tier-select">
-            <option value="iron">Iron Ring</option>
-            <option value="bronze">Bronze Ring</option>
-            <option value="mythic" selected>Mythic Ring</option>
-            <option value="ascendant">Ascendant Ring</option>
-          </select>
-          <div class="ring-perks" id="ring-perks"></div>
-        </div>
-      
-        <div class="builder-section-title">Attributes (160)</div>
-        <div class="builder-points" id="builder-points">160 / 160</div>
-        <div class="attribute-builder" id="attribute-builder"></div>
-        <div class="builder-actions">
-          <button class="builder-btn" onclick="applyBuildPreset('tank')">Tank Preset</button>
-          <button class="builder-btn" onclick="applyBuildPreset('burst')">Burst Preset</button>
-          <button class="builder-btn" onclick="applyBuildPreset('control')">Control Preset</button>
-          <button class="builder-btn" onclick="randomizeBuildAttributes()">Randomize</button>
-        </div>
+      <div class="builder-section-title">Ring of Titans</div>
+      <div class="ring-panel">
+        <label class="ring-label" for="ring-tier-select">Titan Tier</label>
+        <select id="ring-tier-select" class="ring-tier-select">
+          <option value="iron">Iron Ring</option>
+          <option value="bronze">Bronze Ring</option>
+          <option value="mythic" selected>Mythic Ring</option>
+          <option value="ascendant">Ascendant Ring</option>
+        </select>
+        <div class="ring-perks" id="ring-perks"></div>
+      </div>
+
+      <div class="builder-section-title">Attributes (160)</div>
+      <div class="builder-points" id="builder-points">160 / 160</div>
+      <div class="attribute-builder" id="attribute-builder"></div>
+      <div class="builder-actions">
+        <button class="builder-btn" onclick="applyBuildPreset('tank')">Tank Preset</button>
+        <button class="builder-btn" onclick="applyBuildPreset('burst')">Burst Preset</button>
+        <button class="builder-btn" onclick="applyBuildPreset('control')">Control Preset</button>
+        <button class="builder-btn" onclick="randomizeBuildAttributes()">Randomize</button>
       </div>
       </div>
-      
+      </div>
+
       <div class="build-summary" id="build-summary">
         <div class="build-power"><span>Combat Power</span><strong id="builder-power">0</strong></div>
         <div class="build-rank"><span>Build Rating</span><strong id="builder-rating">D</strong></div>
         <div class="build-meta" id="builder-meta">Human Warlord · Greatsword · Mythic Ring</div>
         <div class="build-advice" id="builder-advice">Balanced setup ready for arena skirmishes.</div>
       </div>
-      
+
       <div class="builder-share-row">
         <button class="builder-btn builder-btn-share" onclick="shareBuildCode()">Share Build</button>
       </div>
@@ -250,47 +250,47 @@
 const API_BASE = '/api';
 const WS_URL = 'https://ws.grudge-studio.com';
 let selectedRace = 'human';
-  let selectedClass = 'warlord';
-  let selectedWeapon = 'greatsword';
+let selectedClass = 'warlord';
+let selectedWeapon = 'greatsword';
 let grudgeUser = null;
 
-  const ATTRIBUTE_TOTAL = 160;
-  const ATTRIBUTE_KEYS = ['Strength', 'Intellect', 'Vitality', 'Dexterity', 'Endurance', 'Wisdom', 'Agility', 'Tactics'];
-  const BUILD_STORAGE_KEY = 'grudge_arena_character_build_v1';
+const ATTRIBUTE_TOTAL = 160;
+const ATTRIBUTE_KEYS = ['Strength', 'Intellect', 'Vitality', 'Dexterity', 'Endurance', 'Wisdom', 'Agility', 'Tactics'];
+const BUILD_STORAGE_KEY = 'grudge_arena_character_build_v1';
 
-  const CLASS_WEAPON_DEFAULTS = {
-    warlord: 'greatsword',
-    arcanist: 'scythe',
-    ranger: 'bow',
-    assassin: 'sabres',
-  };
+const CLASS_WEAPON_DEFAULTS = {
+  warlord: 'greatsword',
+  arcanist: 'scythe',
+  ranger: 'bow',
+  assassin: 'sabres',
+};
 
-  const RING_TIERS = {
-    iron: { power: 1, hp: 0, speed: 0 },
-    bronze: { power: 1.04, hp: 30, speed: 0.1 },
-    mythic: { power: 1.09, hp: 70, speed: 0.2 },
-    ascendant: { power: 1.16, hp: 120, speed: 0.35 },
-  };
+const RING_TIERS = {
+  iron: { power: 1, hp: 0, speed: 0 },
+  bronze: { power: 1.04, hp: 30, speed: 0.1 },
+  mythic: { power: 1.09, hp: 70, speed: 0.2 },
+  ascendant: { power: 1.16, hp: 120, speed: 0.35 },
+};
 
-  const RING_PERKS = [
-    { id: 'valor', label: 'Valor Core', bonus: 'Damage +8%' },
-    { id: 'aegis', label: 'Aegis Mesh', bonus: 'Shield +12%' },
-    { id: 'celerity', label: 'Celerity Pulse', bonus: 'Move +6%' },
-    { id: 'focus', label: 'Focus Sigil', bonus: 'CDR +10%' },
-  ];
+const RING_PERKS = [
+  { id: 'valor', label: 'Valor Core', bonus: 'Damage +8%' },
+  { id: 'aegis', label: 'Aegis Mesh', bonus: 'Shield +12%' },
+  { id: 'celerity', label: 'Celerity Pulse', bonus: 'Move +6%' },
+  { id: 'focus', label: 'Focus Sigil', bonus: 'CDR +10%' },
+];
 
-  let attributePoints = {
-    Strength: 20,
-    Intellect: 20,
-    Vitality: 20,
-    Dexterity: 20,
-    Endurance: 20,
-    Wisdom: 20,
-    Agility: 20,
-    Tactics: 20,
-  };
-  let selectedRingTier = 'mythic';
-  let selectedRingPerks = ['valor', 'focus'];
+let attributePoints = {
+  Strength: 20,
+  Intellect: 20,
+  Vitality: 20,
+  Dexterity: 20,
+  Endurance: 20,
+  Wisdom: 20,
+  Agility: 20,
+  Tactics: 20,
+};
+let selectedRingTier = 'mythic';
+let selectedRingPerks = ['valor', 'focus'];
 
 // ── LocalStorage keys (cross-app SSO compatible with GrudgeBuilder) ──
 const AUTH_TOKEN_KEY = 'grudge_auth_token';
@@ -321,95 +321,95 @@ function setAuthStatus(msg) {
   if (el) el.textContent = msg;
 }
 
-  function getPointsSpent() {
-    return Object.values(attributePoints).reduce((sum, value) => sum + value, 0);
-  }
+function getPointsSpent() {
+  return Object.values(attributePoints).reduce((sum, value) => sum + value, 0);
+}
 
-  function saveBuildToStorage() {
-    try {
-      localStorage.setItem(BUILD_STORAGE_KEY, JSON.stringify({
-        race: selectedRace,
-        classId: selectedClass,
-        weapon: selectedWeapon,
-        ringTier: selectedRingTier,
-        ringPerks: selectedRingPerks,
-        attributes: attributePoints,
-      }));
-    } catch { }
-  }
+function saveBuildToStorage() {
+  try {
+    localStorage.setItem(BUILD_STORAGE_KEY, JSON.stringify({
+      race: selectedRace,
+      classId: selectedClass,
+      weapon: selectedWeapon,
+      ringTier: selectedRingTier,
+      ringPerks: selectedRingPerks,
+      attributes: attributePoints,
+    }));
+  } catch {}
+}
 
-  function loadBuildFromStorage() {
-    try {
-      const raw = localStorage.getItem(BUILD_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (parsed?.race) selectedRace = parsed.race;
-      if (parsed?.classId) selectedClass = parsed.classId;
-      if (parsed?.weapon) selectedWeapon = parsed.weapon;
-      if (parsed?.ringTier && RING_TIERS[parsed.ringTier]) selectedRingTier = parsed.ringTier;
-      if (Array.isArray(parsed?.ringPerks)) selectedRingPerks = parsed.ringPerks.slice(0, 3);
-      if (parsed?.attributes && typeof parsed.attributes === 'object') {
-        for (const key of ATTRIBUTE_KEYS) {
-          const val = Number(parsed.attributes[key]);
-          if (!Number.isNaN(val) && val >= 0) attributePoints[key] = Math.floor(val);
-        }
-        normalizeAttributes();
+function loadBuildFromStorage() {
+  try {
+    const raw = localStorage.getItem(BUILD_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed?.race) selectedRace = parsed.race;
+    if (parsed?.classId) selectedClass = parsed.classId;
+    if (parsed?.weapon) selectedWeapon = parsed.weapon;
+    if (parsed?.ringTier && RING_TIERS[parsed.ringTier]) selectedRingTier = parsed.ringTier;
+    if (Array.isArray(parsed?.ringPerks)) selectedRingPerks = parsed.ringPerks.slice(0, 3);
+    if (parsed?.attributes && typeof parsed.attributes === 'object') {
+      for (const key of ATTRIBUTE_KEYS) {
+        const val = Number(parsed.attributes[key]);
+        if (!Number.isNaN(val) && val >= 0) attributePoints[key] = Math.floor(val);
       }
-    } catch { }
-  }
-
-  function normalizeAttributes() {
-    for (const key of ATTRIBUTE_KEYS) {
-      attributePoints[key] = Math.max(0, Math.min(160, Number(attributePoints[key] || 0)));
+      normalizeAttributes();
     }
-    let total = getPointsSpent();
-    if (total === ATTRIBUTE_TOTAL) return;
-    const order = [...ATTRIBUTE_KEYS];
-    if (total > ATTRIBUTE_TOTAL) {
-      let overflow = total - ATTRIBUTE_TOTAL;
-      for (const key of order) {
-        if (overflow <= 0) break;
-        const cut = Math.min(overflow, attributePoints[key]);
-        attributePoints[key] -= cut;
-        overflow -= cut;
-      }
-    } else {
-      let remain = ATTRIBUTE_TOTAL - total;
-      for (const key of order) {
-        if (remain <= 0) break;
-        attributePoints[key] += 1;
-        remain -= 1;
-      }
+  } catch {}
+}
+
+function normalizeAttributes() {
+  for (const key of ATTRIBUTE_KEYS) {
+    attributePoints[key] = Math.max(0, Math.min(160, Number(attributePoints[key] || 0)));
+  }
+  let total = getPointsSpent();
+  if (total === ATTRIBUTE_TOTAL) return;
+  const order = [...ATTRIBUTE_KEYS];
+  if (total > ATTRIBUTE_TOTAL) {
+    let overflow = total - ATTRIBUTE_TOTAL;
+    for (const key of order) {
+      if (overflow <= 0) break;
+      const cut = Math.min(overflow, attributePoints[key]);
+      attributePoints[key] -= cut;
+      overflow -= cut;
+    }
+  } else {
+    let remain = ATTRIBUTE_TOTAL - total;
+    for (const key of order) {
+      if (remain <= 0) break;
+      attributePoints[key] += 1;
+      remain -= 1;
     }
   }
+}
 
-  function setAttributeValue(attr, next) {
-    const oldVal = attributePoints[attr] || 0;
-    let newVal = Math.max(0, Math.min(160, Number(next) || 0));
-    const diff = newVal - oldVal;
-    if (diff > 0) {
-      const remaining = ATTRIBUTE_TOTAL - getPointsSpent();
-      if (diff > remaining) newVal = oldVal + remaining;
-    }
-    attributePoints[attr] = newVal;
-    renderAttributeEditor();
-    updateBuildSummary();
-    saveBuildToStorage();
+function setAttributeValue(attr, next) {
+  const oldVal = attributePoints[attr] || 0;
+  let newVal = Math.max(0, Math.min(160, Number(next) || 0));
+  const diff = newVal - oldVal;
+  if (diff > 0) {
+    const remaining = ATTRIBUTE_TOTAL - getPointsSpent();
+    if (diff > remaining) newVal = oldVal + remaining;
   }
+  attributePoints[attr] = newVal;
+  renderAttributeEditor();
+  updateBuildSummary();
+  saveBuildToStorage();
+}
 
-  function renderAttributeEditor() {
-    const root = document.getElementById('attribute-builder');
-    const points = document.getElementById('builder-points');
-    if (!root || !points) return;
-    root.innerHTML = '';
-    const spent = getPointsSpent();
-    points.textContent = `${spent} / ${ATTRIBUTE_TOTAL}`;
-    points.classList.toggle('complete', spent === ATTRIBUTE_TOTAL);
+function renderAttributeEditor() {
+  const root = document.getElementById('attribute-builder');
+  const points = document.getElementById('builder-points');
+  if (!root || !points) return;
+  root.innerHTML = '';
+  const spent = getPointsSpent();
+  points.textContent = `${spent} / ${ATTRIBUTE_TOTAL}`;
+  points.classList.toggle('complete', spent === ATTRIBUTE_TOTAL);
 
-    for (const attr of ATTRIBUTE_KEYS) {
-      const row = document.createElement('div');
-      row.className = 'attribute-row';
-      row.innerHTML = `
+  for (const attr of ATTRIBUTE_KEYS) {
+    const row = document.createElement('div');
+    row.className = 'attribute-row';
+    row.innerHTML = `
       <div class="attribute-row-head">
         <span>${attr}</span>
         <strong>${attributePoints[attr]}</strong>
@@ -419,225 +419,225 @@ function setAuthStatus(msg) {
         <input type="number" min="0" max="160" value="${attributePoints[attr]}" data-attr="${attr}">
       </div>
     `;
-      root.appendChild(row);
-    }
-
-    root.querySelectorAll('input[type="range"]').forEach((slider) => {
-      slider.addEventListener('input', (event) => setAttributeValue(event.target.dataset.attr, event.target.value));
-    });
-    root.querySelectorAll('input[type="number"]').forEach((field) => {
-      field.addEventListener('change', (event) => setAttributeValue(event.target.dataset.attr, event.target.value));
-    });
+    root.appendChild(row);
   }
 
-  function renderRingPerks() {
-    const root = document.getElementById('ring-perks');
-    if (!root) return;
-    root.innerHTML = '';
-    for (const perk of RING_PERKS) {
-      const active = selectedRingPerks.includes(perk.id);
-      const btn = document.createElement('button');
-      btn.className = `ring-perk ${active ? 'active' : ''}`;
-      btn.type = 'button';
-      btn.innerHTML = `<span>${perk.label}</span><small>${perk.bonus}</small>`;
-      btn.addEventListener('click', () => {
-        if (selectedRingPerks.includes(perk.id)) {
-          selectedRingPerks = selectedRingPerks.filter((id) => id !== perk.id);
-        } else {
-          if (selectedRingPerks.length >= 3) selectedRingPerks.shift();
-          selectedRingPerks.push(perk.id);
-        }
-        renderRingPerks();
-        updateBuildSummary();
-        saveBuildToStorage();
-      });
-      root.appendChild(btn);
-    }
-  }
+  root.querySelectorAll('input[type="range"]').forEach((slider) => {
+    slider.addEventListener('input', (event) => setAttributeValue(event.target.dataset.attr, event.target.value));
+  });
+  root.querySelectorAll('input[type="number"]').forEach((field) => {
+    field.addEventListener('change', (event) => setAttributeValue(event.target.dataset.attr, event.target.value));
+  });
+}
 
-  function classTargetVector(classId) {
-    const map = {
-      warlord: ['Strength', 'Vitality', 'Endurance'],
-      arcanist: ['Intellect', 'Wisdom', 'Tactics'],
-      ranger: ['Dexterity', 'Agility', 'Tactics'],
-      assassin: ['Dexterity', 'Agility', 'Strength'],
-    };
-    return map[classId] || map.warlord;
-  }
-
-  function calculateBuildPower() {
-    const ring = RING_TIERS[selectedRingTier] || RING_TIERS.iron;
-    const attr = attributePoints;
-    const offense = (attr.Strength * 2.1) + (attr.Dexterity * 2.0) + (attr.Intellect * 2.2) + (attr.Tactics * 1.8);
-    const defense = (attr.Vitality * 2.6) + (attr.Endurance * 2.1) + (attr.Wisdom * 1.6);
-    const utility = (attr.Agility * 1.4) + (attr.Tactics * 1.5) + (attr.Wisdom * 1.1);
-
-    const perks = new Set(selectedRingPerks);
-    const perkMult =
-      (perks.has('valor') ? 1.08 : 1) *
-      (perks.has('aegis') ? 1.05 : 1) *
-      (perks.has('celerity') ? 1.04 : 1) *
-      (perks.has('focus') ? 1.05 : 1);
-
-    const base = (offense * 2.5) + (defense * 1.9) + (utility * 1.4) + (ring.hp * 2.2);
-    return Math.floor(base * ring.power * perkMult);
-  }
-
-  function updateBuildSummary() {
-    const power = calculateBuildPower();
-    const meta = document.getElementById('builder-meta');
-    const advice = document.getElementById('builder-advice');
-    const powerEl = document.getElementById('builder-power');
-    const ratingEl = document.getElementById('builder-rating');
-    if (!meta || !advice || !powerEl || !ratingEl) return;
-
-    const target = classTargetVector(selectedClass);
-    const focusScore = target.reduce((sum, key) => sum + (attributePoints[key] || 0), 0);
-    const spent = getPointsSpent();
-
-    let rating = 'D';
-    if (power > 4800) rating = 'S';
-    else if (power > 4100) rating = 'A';
-    else if (power > 3400) rating = 'B';
-    else if (power > 2700) rating = 'C';
-
-    if (spent < ATTRIBUTE_TOTAL) rating = '?';
-    powerEl.textContent = power.toLocaleString();
-    ratingEl.textContent = rating;
-    meta.textContent = `${selectedRace[0].toUpperCase() + selectedRace.slice(1)} ${selectedClass[0].toUpperCase() + selectedClass.slice(1)} · ${selectedWeapon[0].toUpperCase() + selectedWeapon.slice(1)} · ${selectedRingTier[0].toUpperCase() + selectedRingTier.slice(1)} Ring`;
-
-    if (spent < ATTRIBUTE_TOTAL) {
-      advice.textContent = `Allocate all ${ATTRIBUTE_TOTAL} points to finalize your champion profile.`;
-    } else if (focusScore < 70) {
-      advice.textContent = 'Your stat spread is broad. Focus harder on class core stats for stronger arena pressure.';
-    } else if (rating === 'S' || rating === 'A') {
-      advice.textContent = 'Elite profile. Strong synergy between class path, weapon curve, and Titan ring perks.';
-    } else {
-      advice.textContent = 'Stable build. Push more points into your class triad for higher burst or survivability.';
-    }
-  }
-
-  function getCurrentBuildConfig() {
-    return {
-      race: selectedRace,
-      classId: selectedClass,
-      weapon: selectedWeapon,
-      ringTier: selectedRingTier,
-      ringPerks: [...selectedRingPerks],
-      attributes: { ...attributePoints },
-      combatPower: calculateBuildPower(),
-    };
-  }
-
-  window.applyBuildPreset = function (type) {
-    const preset = {
-      Strength: 20,
-      Intellect: 20,
-      Vitality: 20,
-      Dexterity: 20,
-      Endurance: 20,
-      Wisdom: 20,
-      Agility: 20,
-      Tactics: 20,
-    };
-    if (type === 'tank') {
-      Object.assign(preset, { Strength: 30, Intellect: 8, Vitality: 34, Dexterity: 12, Endurance: 32, Wisdom: 14, Agility: 8, Tactics: 22 });
-      selectedClass = 'warlord';
-      selectedWeapon = 'greatsword';
-    } else if (type === 'burst') {
-      Object.assign(preset, { Strength: 14, Intellect: 34, Vitality: 10, Dexterity: 20, Endurance: 8, Wisdom: 26, Agility: 14, Tactics: 34 });
-      selectedClass = 'arcanist';
-      selectedWeapon = 'scythe';
-    } else if (type === 'control') {
-      Object.assign(preset, { Strength: 10, Intellect: 24, Vitality: 14, Dexterity: 24, Endurance: 12, Wisdom: 28, Agility: 22, Tactics: 26 });
-      selectedClass = 'ranger';
-      selectedWeapon = 'bow';
-    }
-    attributePoints = preset;
-    normalizeAttributes();
-    syncBuilderSelectionUI();
-    renderAttributeEditor();
-    updateBuildSummary();
-    saveBuildToStorage();
-  };
-
-  window.randomizeBuildAttributes = function () {
-    const next = {};
-    ATTRIBUTE_KEYS.forEach((key) => { next[key] = 0; });
-    let points = ATTRIBUTE_TOTAL;
-    while (points > 0) {
-      const key = ATTRIBUTE_KEYS[Math.floor(Math.random() * ATTRIBUTE_KEYS.length)];
-      next[key] += 1;
-      points -= 1;
-    }
-    attributePoints = next;
-    renderAttributeEditor();
-    updateBuildSummary();
-    saveBuildToStorage();
-  };
-
-  window.shareBuildCode = async function () {
-    const build = getCurrentBuildConfig();
-    const code = btoa(JSON.stringify(build));
-    const url = `${window.location.origin}${window.location.pathname}?build=${encodeURIComponent(code)}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setAuthStatus('Build URL copied to clipboard');
-      setTimeout(() => setAuthStatus(''), 1800);
-    } catch {
-      setAuthStatus(`Build code: ${code.slice(0, 40)}...`);
-    }
-  };
-
-  function hydrateBuildFromURL() {
-    const params = new URLSearchParams(window.location.search);
-    const payload = params.get('build');
-    if (!payload) return;
-    try {
-      const build = JSON.parse(atob(payload));
-      if (build.race) selectedRace = build.race;
-      if (build.classId) selectedClass = build.classId;
-      if (build.weapon) selectedWeapon = build.weapon;
-      if (build.ringTier && RING_TIERS[build.ringTier]) selectedRingTier = build.ringTier;
-      if (Array.isArray(build.ringPerks)) selectedRingPerks = build.ringPerks.slice(0, 3);
-      if (build.attributes && typeof build.attributes === 'object') {
-        for (const key of ATTRIBUTE_KEYS) {
-          const value = Number(build.attributes[key]);
-          if (!Number.isNaN(value) && value >= 0) attributePoints[key] = Math.floor(value);
-        }
-        normalizeAttributes();
+function renderRingPerks() {
+  const root = document.getElementById('ring-perks');
+  if (!root) return;
+  root.innerHTML = '';
+  for (const perk of RING_PERKS) {
+    const active = selectedRingPerks.includes(perk.id);
+    const btn = document.createElement('button');
+    btn.className = `ring-perk ${active ? 'active' : ''}`;
+    btn.type = 'button';
+    btn.innerHTML = `<span>${perk.label}</span><small>${perk.bonus}</small>`;
+    btn.addEventListener('click', () => {
+      if (selectedRingPerks.includes(perk.id)) {
+        selectedRingPerks = selectedRingPerks.filter((id) => id !== perk.id);
+      } else {
+        if (selectedRingPerks.length >= 3) selectedRingPerks.shift();
+        selectedRingPerks.push(perk.id);
       }
-    } catch (err) {
-      console.warn('[arena] Failed to decode build from URL:', err);
+      renderRingPerks();
+      updateBuildSummary();
+      saveBuildToStorage();
+    });
+    root.appendChild(btn);
+  }
+}
+
+function classTargetVector(classId) {
+  const map = {
+    warlord: ['Strength', 'Vitality', 'Endurance'],
+    arcanist: ['Intellect', 'Wisdom', 'Tactics'],
+    ranger: ['Dexterity', 'Agility', 'Tactics'],
+    assassin: ['Dexterity', 'Agility', 'Strength'],
+  };
+  return map[classId] || map.warlord;
+}
+
+function calculateBuildPower() {
+  const ring = RING_TIERS[selectedRingTier] || RING_TIERS.iron;
+  const attr = attributePoints;
+  const offense = (attr.Strength * 2.1) + (attr.Dexterity * 2.0) + (attr.Intellect * 2.2) + (attr.Tactics * 1.8);
+  const defense = (attr.Vitality * 2.6) + (attr.Endurance * 2.1) + (attr.Wisdom * 1.6);
+  const utility = (attr.Agility * 1.4) + (attr.Tactics * 1.5) + (attr.Wisdom * 1.1);
+
+  const perks = new Set(selectedRingPerks);
+  const perkMult =
+    (perks.has('valor') ? 1.08 : 1) *
+    (perks.has('aegis') ? 1.05 : 1) *
+    (perks.has('celerity') ? 1.04 : 1) *
+    (perks.has('focus') ? 1.05 : 1);
+
+  const base = (offense * 2.5) + (defense * 1.9) + (utility * 1.4) + (ring.hp * 2.2);
+  return Math.floor(base * ring.power * perkMult);
+}
+
+function updateBuildSummary() {
+  const power = calculateBuildPower();
+  const meta = document.getElementById('builder-meta');
+  const advice = document.getElementById('builder-advice');
+  const powerEl = document.getElementById('builder-power');
+  const ratingEl = document.getElementById('builder-rating');
+  if (!meta || !advice || !powerEl || !ratingEl) return;
+
+  const target = classTargetVector(selectedClass);
+  const focusScore = target.reduce((sum, key) => sum + (attributePoints[key] || 0), 0);
+  const spent = getPointsSpent();
+
+  let rating = 'D';
+  if (power > 4800) rating = 'S';
+  else if (power > 4100) rating = 'A';
+  else if (power > 3400) rating = 'B';
+  else if (power > 2700) rating = 'C';
+
+  if (spent < ATTRIBUTE_TOTAL) rating = '?';
+  powerEl.textContent = power.toLocaleString();
+  ratingEl.textContent = rating;
+  meta.textContent = `${selectedRace[0].toUpperCase() + selectedRace.slice(1)} ${selectedClass[0].toUpperCase() + selectedClass.slice(1)} · ${selectedWeapon[0].toUpperCase() + selectedWeapon.slice(1)} · ${selectedRingTier[0].toUpperCase() + selectedRingTier.slice(1)} Ring`;
+
+  if (spent < ATTRIBUTE_TOTAL) {
+    advice.textContent = `Allocate all ${ATTRIBUTE_TOTAL} points to finalize your champion profile.`;
+  } else if (focusScore < 70) {
+    advice.textContent = 'Your stat spread is broad. Focus harder on class core stats for stronger arena pressure.';
+  } else if (rating === 'S' || rating === 'A') {
+    advice.textContent = 'Elite profile. Strong synergy between class path, weapon curve, and Titan ring perks.';
+  } else {
+    advice.textContent = 'Stable build. Push more points into your class triad for higher burst or survivability.';
+  }
+}
+
+function getCurrentBuildConfig() {
+  return {
+    race: selectedRace,
+    classId: selectedClass,
+    weapon: selectedWeapon,
+    ringTier: selectedRingTier,
+    ringPerks: [...selectedRingPerks],
+    attributes: { ...attributePoints },
+    combatPower: calculateBuildPower(),
+  };
+}
+
+window.applyBuildPreset = function(type) {
+  const preset = {
+    Strength: 20,
+    Intellect: 20,
+    Vitality: 20,
+    Dexterity: 20,
+    Endurance: 20,
+    Wisdom: 20,
+    Agility: 20,
+    Tactics: 20,
+  };
+  if (type === 'tank') {
+    Object.assign(preset, { Strength: 30, Intellect: 8, Vitality: 34, Dexterity: 12, Endurance: 32, Wisdom: 14, Agility: 8, Tactics: 22 });
+    selectedClass = 'warlord';
+    selectedWeapon = 'greatsword';
+  } else if (type === 'burst') {
+    Object.assign(preset, { Strength: 14, Intellect: 34, Vitality: 10, Dexterity: 20, Endurance: 8, Wisdom: 26, Agility: 14, Tactics: 34 });
+    selectedClass = 'arcanist';
+    selectedWeapon = 'scythe';
+  } else if (type === 'control') {
+    Object.assign(preset, { Strength: 10, Intellect: 24, Vitality: 14, Dexterity: 24, Endurance: 12, Wisdom: 28, Agility: 22, Tactics: 26 });
+    selectedClass = 'ranger';
+    selectedWeapon = 'bow';
+  }
+  attributePoints = preset;
+  normalizeAttributes();
+  syncBuilderSelectionUI();
+  renderAttributeEditor();
+  updateBuildSummary();
+  saveBuildToStorage();
+};
+
+window.randomizeBuildAttributes = function() {
+  const next = {};
+  ATTRIBUTE_KEYS.forEach((key) => { next[key] = 0; });
+  let points = ATTRIBUTE_TOTAL;
+  while (points > 0) {
+    const key = ATTRIBUTE_KEYS[Math.floor(Math.random() * ATTRIBUTE_KEYS.length)];
+    next[key] += 1;
+    points -= 1;
+  }
+  attributePoints = next;
+  renderAttributeEditor();
+  updateBuildSummary();
+  saveBuildToStorage();
+};
+
+window.shareBuildCode = async function() {
+  const build = getCurrentBuildConfig();
+  const code = btoa(JSON.stringify(build));
+  const url = `${window.location.origin}${window.location.pathname}?build=${encodeURIComponent(code)}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    setAuthStatus('Build URL copied to clipboard');
+    setTimeout(() => setAuthStatus(''), 1800);
+  } catch {
+    setAuthStatus(`Build code: ${code.slice(0, 40)}...`);
+  }
+};
+
+function hydrateBuildFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  const payload = params.get('build');
+  if (!payload) return;
+  try {
+    const build = JSON.parse(atob(payload));
+    if (build.race) selectedRace = build.race;
+    if (build.classId) selectedClass = build.classId;
+    if (build.weapon) selectedWeapon = build.weapon;
+    if (build.ringTier && RING_TIERS[build.ringTier]) selectedRingTier = build.ringTier;
+    if (Array.isArray(build.ringPerks)) selectedRingPerks = build.ringPerks.slice(0, 3);
+    if (build.attributes && typeof build.attributes === 'object') {
+      for (const key of ATTRIBUTE_KEYS) {
+        const value = Number(build.attributes[key]);
+        if (!Number.isNaN(value) && value >= 0) attributePoints[key] = Math.floor(value);
+      }
+      normalizeAttributes();
     }
+  } catch (err) {
+    console.warn('[arena] Failed to decode build from URL:', err);
   }
+}
 
-  function syncBuilderSelectionUI() {
-    document.querySelectorAll('.race-card').forEach((card) => card.classList.toggle('selected', card.dataset.race === selectedRace));
-    document.querySelectorAll('.class-card').forEach((card) => card.classList.toggle('selected', card.dataset.class === selectedClass));
-    document.querySelectorAll('.weapon-pill').forEach((pill) => pill.classList.toggle('active', pill.dataset.weapon === selectedWeapon));
-    const ringSelect = document.getElementById('ring-tier-select');
-    if (ringSelect) ringSelect.value = selectedRingTier;
+function syncBuilderSelectionUI() {
+  document.querySelectorAll('.race-card').forEach((card) => card.classList.toggle('selected', card.dataset.race === selectedRace));
+  document.querySelectorAll('.class-card').forEach((card) => card.classList.toggle('selected', card.dataset.class === selectedClass));
+  document.querySelectorAll('.weapon-pill').forEach((pill) => pill.classList.toggle('active', pill.dataset.weapon === selectedWeapon));
+  const ringSelect = document.getElementById('ring-tier-select');
+  if (ringSelect) ringSelect.value = selectedRingTier;
+}
+
+function setupCharacterBuilder() {
+  loadBuildFromStorage();
+  hydrateBuildFromURL();
+  normalizeAttributes();
+  syncBuilderSelectionUI();
+  renderAttributeEditor();
+  renderRingPerks();
+  updateBuildSummary();
+
+  const ringSelect = document.getElementById('ring-tier-select');
+  if (ringSelect) {
+    ringSelect.addEventListener('change', (event) => {
+      selectedRingTier = event.target.value;
+      updateBuildSummary();
+      saveBuildToStorage();
+    });
   }
-
-  function setupCharacterBuilder() {
-    loadBuildFromStorage();
-    hydrateBuildFromURL();
-    normalizeAttributes();
-    syncBuilderSelectionUI();
-    renderAttributeEditor();
-    renderRingPerks();
-    updateBuildSummary();
-
-    const ringSelect = document.getElementById('ring-tier-select');
-    if (ringSelect) {
-      ringSelect.addEventListener('change', (event) => {
-        selectedRingTier = event.target.value;
-        updateBuildSummary();
-        saveBuildToStorage();
-      });
-    }
-  }
+}
 
 function showLoggedIn(user) {
   grudgeUser = user;
@@ -980,29 +980,29 @@ window.selectRace = function(el) {
   document.querySelectorAll('.race-card').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
   selectedRace = el.dataset.race;
-      updateBuildSummary();
-      saveBuildToStorage();
-    };
+  updateBuildSummary();
+  saveBuildToStorage();
+};
 
-    window.selectClassCard = function (el) {
-      document.querySelectorAll('.class-card').forEach((card) => card.classList.remove('selected'));
-      el.classList.add('selected');
-      selectedClass = el.dataset.class;
-      const preferred = CLASS_WEAPON_DEFAULTS[selectedClass];
-      if (preferred) {
-        selectedWeapon = preferred;
-        syncBuilderSelectionUI();
-      }
-      updateBuildSummary();
-      saveBuildToStorage();
-    };
+window.selectClassCard = function(el) {
+  document.querySelectorAll('.class-card').forEach((card) => card.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedClass = el.dataset.class;
+  const preferred = CLASS_WEAPON_DEFAULTS[selectedClass];
+  if (preferred) {
+    selectedWeapon = preferred;
+    syncBuilderSelectionUI();
+  }
+  updateBuildSummary();
+  saveBuildToStorage();
+};
 
-    window.selectWeaponPill = function (el) {
-      document.querySelectorAll('.weapon-pill').forEach((pill) => pill.classList.remove('active'));
-      el.classList.add('active');
-      selectedWeapon = el.dataset.weapon;
-      updateBuildSummary();
-      saveBuildToStorage();
+window.selectWeaponPill = function(el) {
+  document.querySelectorAll('.weapon-pill').forEach((pill) => pill.classList.remove('active'));
+  el.classList.add('active');
+  selectedWeapon = el.dataset.weapon;
+  updateBuildSummary();
+  saveBuildToStorage();
 };
 
 // ── Enter Arena ──────────────────────────────
@@ -1067,7 +1067,7 @@ function setLoadingProgress(pct, text) {
   if (label && text) label.textContent = text;
 }
 
-  async function loadArenaGame(race, matchData, buildConfig) {
+async function loadArenaGame(race, matchData, buildConfig) {
   const root = document.getElementById('game-root');
   const playerName = grudgeUser?.username || 'Warlord';
   const raceName = race.charAt(0).toUpperCase() + race.slice(1);
@@ -1115,7 +1115,7 @@ function setLoadingProgress(pct, text) {
   }
 }
 
-  setupCharacterBuilder();
+setupCharacterBuilder();
 </script>
 </body>
 </html>

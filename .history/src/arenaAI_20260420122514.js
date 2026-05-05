@@ -305,11 +305,11 @@ export class ArenaAI {
     const shuffled = entries.sort(() => Math.random() - 0.5);
 
     for (const [key, ability] of shuffled) {
-      if (key === "P") continue; // Save ultimate
+      if (key === 'P') continue; // Save ultimate
       if (unit.aiCooldowns[key] > 0) continue;
 
       // Check resource cost
-      const resources = unit.entity.getComponent("Resources");
+      const resources = unit.entity.getComponent('Resources');
       if (ability.costType && resources) {
         const pool = resources[ability.costType];
         if (pool && pool.current < (ability.cost || 0)) continue;
@@ -324,27 +324,19 @@ export class ArenaAI {
         if (pool) pool.current -= ability.cost || 0;
       }
 
-      // Play the ability's declared skillAnim, then fall back to a
-      // sensible cast/slash anim that exists on this weapon.
-      const candidates = [
-        ability.skillAnim,
-        "cast",
-        "swing",
-        "aoe",
-        "attack1",
-      ].filter(Boolean);
-      const anim =
-        candidates.find((a) => unit.controller?.actions.has(a)) || "attack1";
+      // Play cast/attack animation
+      const castAnims = ['cast', 'attack1', 'spin', 'aoe'];
+      const anim = castAnims.find(a => unit.controller?.actions.has(a)) || 'attack1';
       unit.controller?.playOnce(anim, 1);
 
       // Apply ability damage to target
       if (ability.damage && unit.aiTarget) {
-        const hp = unit.aiTarget.entity.getComponent("Health");
+        const hp = unit.aiTarget.entity.getComponent('Health');
         if (hp && !hp.invulnerable) {
           hp.current = Math.max(0, hp.current - ability.damage);
           if (hp.current <= 0) {
-            unit.aiTarget.entity.addTag("dead");
-            unit.aiTarget.controller?.play("death", { loop: false });
+            unit.aiTarget.entity.addTag('dead');
+            unit.aiTarget.controller?.play('death', { loop: false });
           }
         }
       }

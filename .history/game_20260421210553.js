@@ -149,17 +149,6 @@ class GrudgeArena {
       this.playerUnit = this.allUnits.find((u) => u.isPlayer);
       this.playerEntity = this.playerUnit?.entity;
 
-      // Hydrate the player's persistent inventory (backend → localStorage → memory).
-      // Fire-and-forget: the match can start before the network resolves; the UI
-      // will re-render once the inventory component version bumps.
-      if (this.playerEntity) {
-        inventorySystem
-          .loadForPlayer(this.playerEntity)
-          .catch((e) =>
-            console.warn("[GrudgeArena] inventory load failed:", e.message),
-          );
-      }
-
       this.targeting = new targetMod.TargetSystem(
         this.camera,
         this.scene,

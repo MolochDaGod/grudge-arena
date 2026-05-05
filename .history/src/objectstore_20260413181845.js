@@ -112,58 +112,6 @@ export async function getGameData(name) {
   return fetchWithFallback(`/v1/game-data/${name}`, `${name}.json`);
 }
 
-// ── Items catalog (3,425 unified items) ─────────────────────────
-
-let _itemsIndex = null; // { all: [...], byId: Map, byCategory: Map }
-
-function _buildItemsIndex(raw) {
-  const all = Array.isArray(raw?.items) ? raw.items : [];
-  const byId = new Map();
-  const byCategory = new Map();
-  for (const item of all) {
-    if (!item?.id) continue;
-    byId.set(item.id, item);
-    const cat = item.category || 'misc';
-    if (!byCategory.has(cat)) byCategory.set(cat, []);
-    byCategory.get(cat).push(item);
-  }
-  return { all, byId, byCategory, categories: raw?.categories || [...byCategory.keys()] };
-}
-
-/** Fetch and index the full items catalog. Cached + idempotent. */
-export async function getItems() {
-  if (_itemsIndex) return _itemsIndex;
-  const raw = await fetchWithFallback('/v1/game-data/items-database', 'items-database.json');
-  _itemsIndex = _buildItemsIndex(raw || { items: [] });
-  return _itemsIndex;
-}
-
-/** Lookup a single catalog item by its slug id (e.g. "bone-dagger"). */
-export async function getItemById(itemSlug) {
-  const idx = await getItems();
-  return idx.byId.get(itemSlug) || null;
-}
-
-/** Get all items in a category (weapon, armor, consumable, offhand, relic, ring, skill, material). */
-export async function getItemsByCategory(category) {
-  const idx = await getItems();
-  return idx.byCategory.get(category) || [];
-}
-
-/** Case-insensitive name/id search. Returns up to `limit` entries. */
-export async function searchItems(query, { category, limit = 50 } = {}) {
-  const idx = await getItems();
-  const q = (query || '').toLowerCase();
-  let pool = category ? (idx.byCategory.get(category) || []) : idx.all;
-  if (q) {
-    pool = pool.filter(it =>
-      it.name?.toLowerCase().includes(q) ||
-      it.id?.toLowerCase().includes(q)
-    );
-  }
-  return pool.slice(0, limit);
-}
-
 // ── Prefetch ─────────────────────────────────────────────────────
 
 /** Warm the cache with core arena data */
@@ -173,14 +121,11 @@ export async function prefetchArenaData() {
     getClasses(),
     getRaces(),
     getEnemies(),
-    getItems(),
   ]);
   console.log('[ObjectStore] Arena data prefetched');
 }
 
 export default {
   getWeaponSkills, getWeaponSkillTree, getClassWeapons, getSkillById,
-  getEnemies, getClasses, getRaces, getWeapons, getGameData,
-  getItems, getItemById, getItemsByCategory, searchItems,
-  prefetchArenaData,
+  getEnemies, getClasses, getRaces, getWeapons, getGameData, prefetchArenaData,
 };
