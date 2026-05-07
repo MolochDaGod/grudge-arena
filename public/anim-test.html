@@ -1,166 +1,236 @@
 <!DOCTYPE html>
-<html><head><title>Animation Diagnostic</title></head>
-<body style="background:#111;color:#0f0;font-family:monospace;margin:0;display:flex;">
-<div id="log" style="white-space:pre;padding:16px;font-size:11px;width:50%;height:100vh;overflow-y:auto;"></div>
-<div id="canvas-wrap" style="width:50%;height:100vh;"></div>
-<script type="module">
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+<html lang="en">
 
-const logEl = document.getElementById('log');
-const log = (msg) => { logEl.textContent += msg + '\n'; console.log(msg); };
-const loader = new GLTFLoader();
+<head>
+    <meta charset="UTF-8">
+    <title>Grudge Arena · Animation Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
 
-log('=== ANIMATION DIAGNOSTIC ===\n');
+        body {
+            background: #0a0a0f;
+            color: #e8dcc8;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            overflow: hidden
+        }
 
-// Scene
-const w = window.innerWidth / 2, h = window.innerHeight;
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a2e);
-const camera = new THREE.PerspectiveCamera(50, w / h, 0.01, 100);
-camera.position.set(0, 1.5, 3);
-camera.lookAt(0, 0.8, 0);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(w, h);
-document.getElementById('canvas-wrap').appendChild(renderer.domElement);
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-const dir = new THREE.DirectionalLight(0xffffff, 1);
-dir.position.set(2, 4, 2);
-scene.add(dir);
+        #toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.75);
+            border-bottom: 1px solid rgba(201, 168, 76, 0.3);
+            backdrop-filter: blur(8px)
+        }
 
-// Ground
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshStandardMaterial({ color: 0x333355 }));
-ground.rotation.x = -Math.PI / 2;
-scene.add(ground);
+        #toolbar a {
+            color: #c9a84c;
+            text-decoration: none;
+            font-size: 11px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase
+        }
 
-log('1. Loading /models/human.glb ...');
-try {
-  const gltf = await new Promise((res, rej) => loader.load('/models/human.glb', res, undefined, rej));
-  const charScene = gltf.scene;
-  scene.add(charScene);
+        #toolbar select,
+        #toolbar button {
+            background: rgba(20, 20, 30, 0.9);
+            color: #e8dcc8;
+            border: 1px solid rgba(201, 168, 76, 0.4);
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-family: inherit;
+            cursor: pointer
+        }
 
-  log('   Root scale: ' + charScene.scale.toArray().map(v => v.toFixed(4)).join(', '));
-  log('   Embedded anims: ' + gltf.animations.map(a => `${a.name} (${a.tracks.length} tracks, ${a.duration.toFixed(1)}s)`).join(', '));
+        #toolbar select:hover,
+        #toolbar button:hover {
+            border-color: #c9a84c
+        }
 
-  // Bones
-  const bones = [];
-  charScene.traverse(n => { if (n.isBone) bones.push(n.name); });
-  log('   Bones (' + bones.length + '): ' + bones.join(', '));
+        #toolbar .label {
+            color: rgba(232, 220, 200, 0.6);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em
+        }
 
-  // SkinnedMesh info
-  charScene.traverse(n => {
-    if (n.isSkinnedMesh) {
-      log('   SkinnedMesh: ' + n.name + ', skeleton bones: ' + n.skeleton.bones.length);
-      log('   Skeleton bound: ' + (n.skeleton.bones[0]?.parent ? 'yes' : 'NO'));
-    }
-  });
+        #toolbar .spacer {
+            flex: 1
+        }
 
-  // Create mixer
-  const mixer = new THREE.AnimationMixer(charScene);
-  log('\n2. Testing EMBEDDED animation...');
+        #toolbar #anim-name {
+            color: #c9a84c;
+            font-weight: 700;
+            font-size: 12px;
+            min-width: 140px
+        }
 
-  if (gltf.animations.length > 0) {
-    const clip = gltf.animations[0];
-    log('   Clip: ' + clip.name);
-    log('   First 5 tracks:');
-    clip.tracks.slice(0, 5).forEach(t => log('     ' + t.name + ' (' + t.values.length + ' values)'));
+        #stage {
+            position: fixed;
+            inset: 42px 0 0 0;
+            display: flex
+        }
 
-    const action = mixer.clipAction(clip);
-    action.play();
-    log('   action.isRunning(): ' + action.isRunning());
-    log('   action.isScheduled(): ' + action.isScheduled());
+        #log {
+            width: 42%;
+            padding: 14px;
+            font-family: ui-monospace, Consolas, monospace;
+            font-size: 10.5px;
+            color: #5fcf7a;
+            background: #06060a;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            border-right: 1px solid rgba(201, 168, 76, 0.2)
+        }
 
-    // Check bindings
-    if (action._propertyBindings) {
-      let bound = 0, unbound = 0;
-      action._propertyBindings.forEach(pb => {
-        if (pb && pb.binding && pb.binding.node) bound++;
-        else unbound++;
-      });
-      log('   Bindings: ' + bound + ' bound, ' + unbound + ' unbound');
-    }
-  }
+        #canvas-wrap {
+            flex: 1;
+            position: relative
+        }
 
-  // Run for 2 seconds with embedded, then try weapon anim
-  const clock = new THREE.Clock();
-  let weaponLoaded = false;
+        #canvas-wrap canvas {
+            display: block
+        }
+    </style>
+</head>
 
-  function animate() {
-    requestAnimationFrame(animate);
-    const dt = clock.getDelta();
-    mixer.update(dt);
-    renderer.render(scene, camera);
+<body>
 
-    // After 2 seconds, load weapon animation
-    if (!weaponLoaded && clock.elapsedTime > 0.5) {
-      weaponLoaded = true;
-      loadWeaponAnim(mixer, charScene, bones);
-    }
-  }
-  animate();
-  log('   Render loop started.\n');
+<div id="toolbar">
+    <a href="/">← Arena</a>
+    <span class="label">Race</span>
+    <select id="race-sel"></select>
+    <span class="label">Clip</span>
+    <select id="anim-sel">
+        <option value="">— cycling —</option>
+    </select>
+    <button id="prev-btn">◀ Prev</button>
+    <button id="next-btn">Next ▶</button>
+    <button id="cycle-btn" title="Auto-cycle every 3s">⏯ Auto</button>
+    <span class="spacer"></span>
+    <span id="anim-name">loading…</span>
+</div>
 
-} catch (e) {
-  log('FAILED TO LOAD CHARACTER: ' + e.message);
-}
+<div id="stage">
+    <div id="log"></div>
+    <div id="canvas-wrap"></div>
+</div>
 
-async function loadWeaponAnim(mixer, charScene, bones) {
-log('3. Loading ANIMATION LIBRARY: /models/animation-library.glb ...');
-  try {
-    const gltf = await new Promise((res, rej) =>
-      loader.load('/models/animation-library.glb', res, undefined, rej)
-    );
-
-    log('   Animations in library: ' + gltf.animations.length);
-    gltf.animations.forEach(a => log('     ' + a.name + ' (' + a.channels.length + ' channels)'));
-
-    // Pick idle animation to test
-    const idleClip = gltf.animations.find(a => a.name === 'idle') || gltf.animations[0];
-    log('\n   Testing: ' + idleClip.name);
-    log('   Track names (first 5):');
-    idleClip.tracks.slice(0, 5).forEach(t => log('     ' + t.name));
-
-    // DO NOT scale position tracks — Armature 0.01 root scale handles cm→m
-
-    // Check bone name matches
-    const boneSet = new Set(bones);
-    let matched = 0, unmatched = 0;
-    const unmatchedNames = [];
-    for (const t of idleClip.tracks) {
-      const dot = t.name.indexOf('.');
-      const boneName = dot > -1 ? t.name.substring(0, dot) : t.name;
-      if (boneSet.has(boneName)) matched++;
-      else { unmatched++; if (!unmatchedNames.includes(boneName)) unmatchedNames.push(boneName); }
-    }
-    log('   Matched: ' + matched + '/' + idleClip.tracks.length);
-    if (unmatchedNames.length) log('   Unmatched: ' + unmatchedNames.join(', '));
-
-    // Stop embedded anim, play library idle
-    mixer.stopAllAction();
-    const action = mixer.clipAction(idleClip, charScene);
-    action.setLoop(THREE.LoopRepeat, Infinity);
-    action.play();
-    log('\n   Library idle playing: ' + action.isRunning());
-
-    // Cycle through ALL library animations every 3 seconds
-    let animIdx = 0;
-    const allAnims = gltf.animations;
-    setInterval(() => {
-      animIdx = (animIdx + 1) % allAnims.length;
-      const nextClip = allAnims[animIdx].clone();
-      mixer.stopAllAction();
-      const nextAction = mixer.clipAction(nextClip, charScene);
-      nextAction.setLoop(THREE.LoopRepeat, Infinity);
-      nextAction.reset().play();
-      log('   Playing: ' + allAnims[animIdx].name);
-    }, 3000);
-
-    log('\n=== CYCLING ANIMATIONS EVERY 3s ===');
-
-  } catch (e) {
-    log('WEAPON ANIM FAILED: ' + e.message);
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
   }
 }
 </script>
+<script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const RACES = ['barbarian', 'dwarf', 'elf', 'human', 'orc', 'undead'];
+    const params = new URLSearchParams(location.search);
+    const initialRace = RACES.includes(params.get('race')) ? params.get('race') : 'human';
+    const initialWeapon = params.get('weapon') || '';
+
+    const logEl = document.getElementById('log');
+    const animNameEl = document.getElementById('anim-name');
+    const raceSel = document.getElementById('race-sel');
+    const animSel = document.getElementById('anim-sel');
+    RACES.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r; opt.textContent = r[0].toUpperCase() + r.slice(1);
+        if (r === initialRace) opt.selected = true;
+        raceSel.appendChild(opt);
+    });
+    const log = (m) => { logEl.textContent += m + '\n'; logEl.scrollTop = logEl.scrollHeight; };
+
+    const wrap = document.getElementById('canvas-wrap');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 100);
+    camera.position.set(0, 1.4, 3.2);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    wrap.appendChild(renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1.0, 0);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+    dir.position.set(3, 5, 2); scene.add(dir);
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(4, 48), new THREE.MeshStandardMaterial({ color: 0x2a2a3a }));
+    ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+    function resize() { const w = wrap.clientWidth, h = wrap.clientHeight; camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h, false); }
+    window.addEventListener('resize', resize); resize();
+
+    const loader = new GLTFLoader();
+    const clock = new THREE.Clock();
+    let mixer = null, currentChar = null, currentBones = [], libraryClips = [], cycleTimer = null, cycleIdx = 0, autoCycle = true;
+
+    function setActiveClip(clip) {
+        if (!mixer || !clip) return;
+        mixer.stopAllAction();
+        const action = mixer.clipAction(clip, currentChar);
+        action.setLoop(THREE.LoopRepeat, Infinity);
+        action.reset().play();
+        animNameEl.textContent = clip.name;
+        log('▶ ' + clip.name);
+}
+    function startCycle() { stopCycle(); if (!libraryClips.length) return; cycleTimer = setInterval(() => { cycleIdx = (cycleIdx + 1) % libraryClips.length; setActiveClip(libraryClips[cycleIdx]); animSel.value = libraryClips[cycleIdx].name; }, 3000); }
+    function stopCycle() { if (cycleTimer) { clearInterval(cycleTimer); cycleTimer = null; } }
+
+    async function loadRace(race) {
+        stopCycle();
+        if (currentChar) scene.remove(currentChar);
+        mixer = null; currentChar = null; currentBones = []; libraryClips = []; animSel.innerHTML = '<option value="">— cycling —</option>';
+        log('\n=== ' + race.toUpperCase() + ' ===' + (initialWeapon ? (' / ' + initialWeapon) : ''));
+        log('1. /models/' + race + '.glb');
+  try {
+        const gltf = await new Promise((res, rej) => loader.load('/models/' + race + '.glb', res, undefined, rej));
+        currentChar = gltf.scene; scene.add(currentChar);
+        log('  scale: ' + currentChar.scale.toArray().map(v => v.toFixed(3)).join(','));
+        currentChar.traverse(n => { if (n.isBone) currentBones.push(n.name); });
+        log('  bones: ' + currentBones.length + (gltf.animations.length ? (' · embedded clips: ' + gltf.animations.length) : ' · no embedded clips'));
+        mixer = new THREE.AnimationMixer(currentChar);
+        log('2. /models/animation-library.glb');
+        const lib = await new Promise((res, rej) => loader.load('/models/animation-library.glb', res, undefined, rej));
+        libraryClips = lib.animations;
+        log('  clips: ' + libraryClips.length);
+        libraryClips.forEach(c => { const o = document.createElement('option'); o.value = c.name; o.textContent = c.name; animSel.appendChild(o); });
+        const boneSet = new Set(currentBones);
+        const sample = libraryClips.find(a => a.name === 'idle') || libraryClips[0];
+        if (sample) {
+            let matched = 0; for (const t of sample.tracks) { const b = t.name.split('.')[0]; if (boneSet.has(b)) matched++; }
+            log('  idle clip: ' + matched + '/' + sample.tracks.length + ' bones bound');
+            cycleIdx = libraryClips.indexOf(sample);
+            setActiveClip(sample); animSel.value = sample.name;
+        }
+        if (autoCycle) startCycle();
+    } catch (e) { log('FAIL: ' + e.message); animNameEl.textContent = 'error'; }
+}
+
+    raceSel.addEventListener('change', () => loadRace(raceSel.value));
+    animSel.addEventListener('change', () => { const c = libraryClips.find(x => x.name === animSel.value); if (c) { stopCycle(); cycleIdx = libraryClips.indexOf(c); setActiveClip(c); } });
+    document.getElementById('prev-btn').addEventListener('click', () => { if (!libraryClips.length) return; stopCycle(); cycleIdx = (cycleIdx - 1 + libraryClips.length) % libraryClips.length; setActiveClip(libraryClips[cycleIdx]); animSel.value = libraryClips[cycleIdx].name; });
+    document.getElementById('next-btn').addEventListener('click', () => { if (!libraryClips.length) return; stopCycle(); cycleIdx = (cycleIdx + 1) % libraryClips.length; setActiveClip(libraryClips[cycleIdx]); animSel.value = libraryClips[cycleIdx].name; });
+    document.getElementById('cycle-btn').addEventListener('click', () => { autoCycle = !autoCycle; if (autoCycle) startCycle(); else stopCycle(); document.getElementById('cycle-btn').style.borderColor = autoCycle ? '#5fcf7a' : ''; });
+
+    (function tick() { requestAnimationFrame(tick); const dt = clock.getDelta(); if (mixer) mixer.update(dt); controls.update(); renderer.render(scene, camera); })();
+    loadRace(initialRace);
+</script>
 </body>
 </html>
+

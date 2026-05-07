@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { getRaceConfig, getRaceFactionColors, resolveWeapon, TierConfig } from './engine/RaceConfig.js';
 import { EquipmentManager, isD1ModularScene } from "./EquipmentManager.js";
+import { assetUrl, charUrl, animUrl } from "./assetConfig.js";
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
 
@@ -621,12 +622,11 @@ const HUMAN_BASEMESH_ANIM_SOURCE = charUrl(
 );
 
 function raceModelPaths(race) {
+  // Primary: charUrl() → R2 in prod, /assets/characters/... in dev.
+  // Fallback: /models/${race}.glb served from /public/models/ on Vercel + dev.
+  // (Removed the legacy /api/assets/models/characters/... rewrite — it 404s.)
   const local = RACE_CHARACTER_PATHS[race];
-  return [
-    local,
-    `/api/assets/models/characters/${race}.glb`,
-    `/models/${race}.glb`,
-  ].filter(Boolean);
+  return [local, `/models/${race}.glb`].filter(Boolean);
 }
 
 async function loadCharacterManifest() {

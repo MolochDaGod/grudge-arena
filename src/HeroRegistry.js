@@ -34,8 +34,9 @@ export const Archetypes = {
 
 // ── Hero Definitions ─────────────────────────────────────────────────────────
 
-// Legacy fallback base (kept for reference)
-const CLOUDFLARE_MODEL_BASE = "/api/assets/models/characters";
+// Local fallback — Vercel serves /public/models/${race}.glb as a static asset.
+// (The previous /api/assets rewrite went to Cloudflare R2 which 404s for these paths.)
+const LOCAL_MODEL_BASE = "/models";
 
 export const HeroRegistry = {
   // ── CRUSADE ────────────────────────────────────────────────────────────────
@@ -48,7 +49,7 @@ export const HeroRegistry = {
     faction: Factions.CRUSADE,
     archetype: Archetypes.WARRIOR,
     modelPath: charUrl("human/WK_Characters.glb"),
-    fallbackModel: `${CLOUDFLARE_MODEL_BASE}/human.glb`,
+    fallbackModel: `${LOCAL_MODEL_BASE}/human.glb`,
     equipmentBase: charUrl("human/equipment/"),
     pack: "d1_modular",
     equipPrefix: "WK_",
@@ -67,7 +68,7 @@ export const HeroRegistry = {
     faction: Factions.CRUSADE,
     archetype: Archetypes.WARRIOR,
     modelPath: charUrl("barbarian/BRB_Characters.glb"),
-    fallbackModel: `${CLOUDFLARE_MODEL_BASE}/barbarian.glb`,
+    fallbackModel: `${LOCAL_MODEL_BASE}/barbarian.glb`,
     equipmentBase: charUrl("barbarian/equipment/"),
     pack: "d1_modular",
     equipPrefix: "BRB_",
@@ -86,7 +87,7 @@ export const HeroRegistry = {
     faction: Factions.FABLED,
     archetype: Archetypes.RANGER,
     modelPath: charUrl("elf/ELF_Characters.glb"),
-    fallbackModel: `${CLOUDFLARE_MODEL_BASE}/elf.glb`,
+    fallbackModel: `${LOCAL_MODEL_BASE}/elf.glb`,
     equipmentBase: charUrl("elf/equipment/"),
     pack: "d1_modular",
     equipPrefix: "ELF_",
@@ -107,7 +108,7 @@ export const HeroRegistry = {
     faction: Factions.FABLED,
     archetype: Archetypes.WARRIOR,
     modelPath: charUrl("dwarf/DWF_Characters.glb"),
-    fallbackModel: `${CLOUDFLARE_MODEL_BASE}/dwarf.glb`,
+    fallbackModel: `${LOCAL_MODEL_BASE}/dwarf.glb`,
     equipmentBase: charUrl("dwarf/equipment/"),
     pack: "d1_modular",
     equipPrefix: "DWF_",
@@ -128,7 +129,7 @@ export const HeroRegistry = {
     faction: Factions.LEGION,
     archetype: Archetypes.WARRIOR,
     modelPath: charUrl("orc/ORC_Characters.glb"),
-    fallbackModel: `${CLOUDFLARE_MODEL_BASE}/orc.glb`,
+    fallbackModel: `${LOCAL_MODEL_BASE}/orc.glb`,
     equipmentBase: charUrl("orc/equipment/"),
     pack: "d1_modular",
     equipPrefix: "ORC_",
@@ -147,7 +148,7 @@ export const HeroRegistry = {
     faction: Factions.LEGION,
     archetype: Archetypes.MAGE,
     modelPath: charUrl("undead/UD_Characters.glb"),
-    fallbackModel: `${CLOUDFLARE_MODEL_BASE}/undead.glb`,
+    fallbackModel: `${LOCAL_MODEL_BASE}/undead.glb`,
     equipmentBase: charUrl("undead/equipment/"),
     pack: "d1_modular",
     equipPrefix: "UD_",

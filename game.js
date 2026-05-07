@@ -460,20 +460,37 @@ class GrudgeArena {
       WeaponDefinitions[comp.weapon] ||
       WeaponDefinitions[WeaponTypes.GREATSWORD];
 
-    // Use hero prefab if heroId is specified, otherwise fall back to race/weapon
+    // Use hero prefab if heroId is specified, otherwise fall back to race/weapon.
+    // If hero asset loading fails (e.g. 404 in production), fall through to the
+    // generic race model instead of letting the whole team load reject.
     let unitResult;
     if (comp.heroId) {
       const hero = getHero(comp.heroId);
       if (hero) {
-        unitResult = await modelMod.createHeroUnit(hero, comp.weapon || null, {
-          tier: comp.tier || 1,
-        });
+        try {
+          unitResult = await modelMod.createHeroUnit(
+            hero,
+            comp.weapon || null,
+            {
+              tier: comp.tier || 1,
+            },
+          );
+        } catch (err) {
+          console.warn(
+            `[arena] hero "${comp.heroId}" model load failed; falling back to race model:`,
+            err.message,
+          );
+        }
       }
     }
     if (!unitResult) {
-      unitResult = await modelMod.createAnimatedUnit(comp.race, comp.weapon, {
-        tier: comp.tier || 1,
-      });
+      unitResult = await modelMod.createAnimatedUnit(
+        comp.race ||
+          (comp.heroId ? getHero(comp.heroId)?.race : null) ||
+          "human",
+        comp.weapon,
+        { tier: comp.tier || 1 },
+      );
     }
 
     const {
