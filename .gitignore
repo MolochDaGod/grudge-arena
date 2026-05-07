@@ -4,3 +4,13 @@ dist
 .history
 .venv
 .venv-1
+
+# Character assets live on Cloudflare R2 (assets.grudge-studio.com/arena/)
+# Run: node scripts/sync-assets-r2.mjs to upload
+# Run: node scripts/sync-assets-r2.mjs --dry-run to preview
+public/assets/characters/*/
+public/assets/maps/*/
+
+# Animation packs are large — also on R2
+# public/assets/animations/ is kept in git (small JSON manifests only)
+

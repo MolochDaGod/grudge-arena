@@ -20,143 +20,142 @@
  */
 
 import { Factions } from './engine/RaceConfig.js';
+import { charUrl } from "./assetConfig.js";
 
 // ── Archetypes ──────────────────────────────────────────────────────────────
 // Drives AI decision-making, preferred engagement range, and ability usage.
 export const Archetypes = {
-  WARRIOR: 'warrior', // heavy melee, sustain fighter
-  RANGER:  'ranger',  // ranged primary, mobile
-  MAGE:    'mage',    // caster, glass cannon
-  ROGUE:   'rogue',   // melee burst, gap-closing
-  HYBRID:  'hybrid',  // melee + casting mix
+  WARRIOR: "warrior", // heavy melee, sustain fighter
+  RANGER: "ranger", // ranged primary, mobile
+  MAGE: "mage", // caster, glass cannon
+  ROGUE: "rogue", // melee burst, gap-closing
+  HYBRID: "hybrid", // melee + casting mix
 };
 
 // ── Hero Definitions ─────────────────────────────────────────────────────────
 
-const CLOUDFLARE_MODEL_BASE = '/api/assets/models/characters';
-// ── Local character paths (pre-scaled by build-character-library.mjs) ───────
-const CHAR_BASE = '/assets/characters';
+// Legacy fallback base (kept for reference)
+const CLOUDFLARE_MODEL_BASE = "/api/assets/models/characters";
 
 export const HeroRegistry = {
-
   // ── CRUSADE ────────────────────────────────────────────────────────────────
 
   human: {
-    id: 'human',
-    displayName: 'Human',
-    title: 'The Ironwall',
-    race: 'human',
+    id: "human",
+    displayName: "Human",
+    title: "The Ironwall",
+    race: "human",
     faction: Factions.CRUSADE,
     archetype: Archetypes.WARRIOR,
-    modelPath: `${CHAR_BASE}/human/WK_Characters.glb`,
+    modelPath: charUrl("human/WK_Characters.glb"),
     fallbackModel: `${CLOUDFLARE_MODEL_BASE}/human.glb`,
-    equipmentBase: `${CHAR_BASE}/human/equipment/`,
-    pack: 'd1_modular',
-    equipPrefix: 'WK_',
-    weapons: ['greatsword', 'sabres', 'runeblade', 'bow', 'scythe'],
-    defaultWeapon: 'greatsword',
-    scale: 1.0,   // GLB already normalised to 1.75 m by build script
+    equipmentBase: charUrl("human/equipment/"),
+    pack: "d1_modular",
+    equipPrefix: "WK_",
+    weapons: ["greatsword", "sabres", "runeblade", "bow", "scythe"],
+    defaultWeapon: "greatsword",
+    scale: 1.0, // GLB already normalised to 1.75 m by build script
     heightOffset: 0,
-    lore: 'A veteran of a hundred crusades. His shield has never broken.',
+    lore: "A veteran of a hundred crusades. His shield has never broken.",
   },
 
   barbarian: {
-    id: 'barbarian',
-    displayName: 'Barbarian',
-    title: 'The Immortal',
-    race: 'barbarian',
+    id: "barbarian",
+    displayName: "Barbarian",
+    title: "The Immortal",
+    race: "barbarian",
     faction: Factions.CRUSADE,
     archetype: Archetypes.WARRIOR,
-    modelPath: `${CHAR_BASE}/barbarian/BRB_Characters.glb`,
+    modelPath: charUrl("barbarian/BRB_Characters.glb"),
     fallbackModel: `${CLOUDFLARE_MODEL_BASE}/barbarian.glb`,
-    equipmentBase: `${CHAR_BASE}/barbarian/equipment/`,
-    pack: 'd1_modular',
-    equipPrefix: 'BRB_',
-    weapons: ['greatsword', 'scythe', 'sabres', 'bow'],
-    defaultWeapon: 'greatsword',
+    equipmentBase: charUrl("barbarian/equipment/"),
+    pack: "d1_modular",
+    equipPrefix: "BRB_",
+    weapons: ["greatsword", "scythe", "sabres", "bow"],
+    defaultWeapon: "greatsword",
     scale: 1.0,
     heightOffset: 0,
-    lore: 'Rage is his armor. Death is his offering.',
+    lore: "Rage is his armor. Death is his offering.",
   },
 
   elf: {
-    id: 'elf',
-    displayName: 'Elf',
-    title: 'The Assassin',
-    race: 'elf',
+    id: "elf",
+    displayName: "Elf",
+    title: "The Assassin",
+    race: "elf",
     faction: Factions.FABLED,
     archetype: Archetypes.RANGER,
-    modelPath: `${CHAR_BASE}/elf/ELF_Characters.glb`,
+    modelPath: charUrl("elf/ELF_Characters.glb"),
     fallbackModel: `${CLOUDFLARE_MODEL_BASE}/elf.glb`,
-    equipmentBase: `${CHAR_BASE}/elf/equipment/`,
-    pack: 'd1_modular',
-    equipPrefix: 'ELF_',
-    weapons: ['bow', 'sabres', 'runeblade', 'scythe'],
-    defaultWeapon: 'bow',
+    equipmentBase: charUrl("elf/equipment/"),
+    pack: "d1_modular",
+    equipPrefix: "ELF_",
+    weapons: ["bow", "sabres", "runeblade", "scythe"],
+    defaultWeapon: "bow",
     scale: 1.0,
     heightOffset: 0,
-    lore: 'Shadows are her home. Silence is her weapon.',
+    lore: "Shadows are her home. Silence is her weapon.",
   },
 
   // ── FABLED ─────────────────────────────────────────────────────────────────
 
   dwarf: {
-    id: 'dwarf',
-    displayName: 'Dwarf',
-    title: 'The Wall',
-    race: 'dwarf',
+    id: "dwarf",
+    displayName: "Dwarf",
+    title: "The Wall",
+    race: "dwarf",
     faction: Factions.FABLED,
     archetype: Archetypes.WARRIOR,
-    modelPath: `${CHAR_BASE}/dwarf/DWF_Characters.glb`,
+    modelPath: charUrl("dwarf/DWF_Characters.glb"),
     fallbackModel: `${CLOUDFLARE_MODEL_BASE}/dwarf.glb`,
-    equipmentBase: `${CHAR_BASE}/dwarf/equipment/`,
-    pack: 'd1_modular',
-    equipPrefix: 'DWF_',
-    weapons: ['greatsword', 'runeblade', 'sabres', 'scythe'],
-    defaultWeapon: 'greatsword',
-    scale: 1.0,   // Dwarves scaled to 1.75 m — use heightOffset to shorten visually
+    equipmentBase: charUrl("dwarf/equipment/"),
+    pack: "d1_modular",
+    equipPrefix: "DWF_",
+    weapons: ["greatsword", "runeblade", "sabres", "scythe"],
+    defaultWeapon: "greatsword",
+    scale: 1.0, // Dwarves scaled to 1.75 m — use heightOffset to shorten visually
     heightOffset: -0.15, // Render slightly lower than human eye-line
-    lore: 'Built like stone. Hits like a mountain.',
+    lore: "Built like stone. Hits like a mountain.",
   },
 
   // ── LEGION ─────────────────────────────────────────────────────────────────
 
   orc: {
-    id: 'orc',
-    displayName: 'Orc',
-    title: 'The Crusher',
-    race: 'orc',
+    id: "orc",
+    displayName: "Orc",
+    title: "The Crusher",
+    race: "orc",
     faction: Factions.LEGION,
     archetype: Archetypes.WARRIOR,
-    modelPath: `${CHAR_BASE}/orc/ORC_Characters.glb`,
+    modelPath: charUrl("orc/ORC_Characters.glb"),
     fallbackModel: `${CLOUDFLARE_MODEL_BASE}/orc.glb`,
-    equipmentBase: `${CHAR_BASE}/orc/equipment/`,
-    pack: 'd1_modular',
-    equipPrefix: 'ORC_',
-    weapons: ['greatsword', 'scythe', 'sabres', 'bow'],
-    defaultWeapon: 'greatsword',
+    equipmentBase: charUrl("orc/equipment/"),
+    pack: "d1_modular",
+    equipPrefix: "ORC_",
+    weapons: ["greatsword", "scythe", "sabres", "bow"],
+    defaultWeapon: "greatsword",
     scale: 1.0,
     heightOffset: 0,
-    lore: 'His army follows. Everything else burns.',
+    lore: "His army follows. Everything else burns.",
   },
 
   undead: {
-    id: 'undead',
-    displayName: 'Undead',
-    title: 'The Weaver of Souls',
-    race: 'undead',
+    id: "undead",
+    displayName: "Undead",
+    title: "The Weaver of Souls",
+    race: "undead",
     faction: Factions.LEGION,
     archetype: Archetypes.MAGE,
-    modelPath: `${CHAR_BASE}/undead/UD_Characters.glb`,
+    modelPath: charUrl("undead/UD_Characters.glb"),
     fallbackModel: `${CLOUDFLARE_MODEL_BASE}/undead.glb`,
-    equipmentBase: `${CHAR_BASE}/undead/equipment/`,
-    pack: 'd1_modular',
-    equipPrefix: 'UD_',
-    weapons: ['scythe', 'runeblade', 'bow', 'greatsword'],
-    defaultWeapon: 'scythe',
+    equipmentBase: charUrl("undead/equipment/"),
+    pack: "d1_modular",
+    equipPrefix: "UD_",
+    weapons: ["scythe", "runeblade", "bow", "greatsword"],
+    defaultWeapon: "scythe",
     scale: 1.0,
     heightOffset: 0,
-    lore: 'Death is merely the beginning of service.',
+    lore: "Death is merely the beginning of service.",
   },
 };
 

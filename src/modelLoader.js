@@ -608,16 +608,17 @@ let _humanBasemeshAnimPromise = null;
 const _raceTextureCache = new Map();
 
 const RACE_CHARACTER_PATHS = {
-  human: "/assets/characters/human/WK_Characters.glb",
-  barbarian: "/assets/characters/barbarian/BRB_Characters.glb",
-  elf: "/assets/characters/elf/ELF_Characters.glb",
-  dwarf: "/assets/characters/dwarf/DWF_Characters.glb",
-  orc: "/assets/characters/orc/ORC_Characters.glb",
-  undead: "/assets/characters/undead/UD_Characters.glb",
+  human: charUrl("human/WK_Characters.glb"),
+  barbarian: charUrl("barbarian/BRB_Characters.glb"),
+  elf: charUrl("elf/ELF_Characters.glb"),
+  dwarf: charUrl("dwarf/DWF_Characters.glb"),
+  orc: charUrl("orc/ORC_Characters.glb"),
+  undead: charUrl("undead/UD_Characters.glb"),
 };
 
-const HUMAN_BASEMESH_ANIM_SOURCE =
-  "/assets/characters/human_basemesh/HumanBaseMesh_WithEquips.glb";
+const HUMAN_BASEMESH_ANIM_SOURCE = charUrl(
+  "human_basemesh/HumanBaseMesh_WithEquips.glb",
+);
 
 function raceModelPaths(race) {
   const local = RACE_CHARACTER_PATHS[race];
@@ -976,7 +977,7 @@ export async function preloadWeaponAnims(weaponType, mixer, root) {
     return new Map();
   }
 
-  const basePath = `/assets/animations/${packName}/`;
+  const basePath = animUrl(`${packName}/`);
   const entries = Object.entries(fileMap);
   const results = await Promise.allSettled(
     entries.map(([state, file]) =>
