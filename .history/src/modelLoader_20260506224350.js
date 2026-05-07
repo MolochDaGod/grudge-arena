@@ -687,10 +687,10 @@ export class AnimationController {
     this.root = root;
     this.actions = new Map(); // stateName → AnimationAction
     this.currentAction = null;
-    this.currentState = "";
+    this.currentState = '';
     this._onFinish = null;
 
-    this.mixer.addEventListener("finished", () => {
+    this.mixer.addEventListener('finished', () => {
       if (this._onFinish) this._onFinish();
     });
   }
@@ -707,14 +707,14 @@ export class AnimationController {
     let action = this.actions.get(stateName);
     if (!action) {
       const requestFallbacks = {
-        swing: ["attack3", "attack2", "attack1"],
-        combo3: ["combo2", "combo1", "attack3"],
-        combo2: ["combo1", "attack3", "attack2"],
-        combo1: ["attack3", "attack2", "attack1"],
-        jumpAttack: ["dash", "attack3", "jump"],
-        cast2H: ["cast", "attack3", "attack2"],
-        aoe2: ["aoe", "cast", "attack3"],
-        powerUp: ["taunt", "cast", "attack2"],
+        swing: ['attack3', 'attack2', 'attack1'],
+        combo3: ['combo2', 'combo1', 'attack3'],
+        combo2: ['combo1', 'attack3', 'attack2'],
+        combo1: ['attack3', 'attack2', 'attack1'],
+        jumpAttack: ['dash', 'attack3', 'jump'],
+        cast2H: ['cast', 'attack3', 'attack2'],
+        aoe2: ['aoe', 'cast', 'attack3'],
+        powerUp: ['taunt', 'cast', 'attack2'],
       };
       for (const fb of requestFallbacks[stateName] || []) {
         action = this.actions.get(fb);
@@ -725,23 +725,17 @@ export class AnimationController {
       }
 
       // Fallback chain: requested → idle → running → walking → first available
-      const fallbacks = ["idle", "running", "walking", "run"];
-      if (!action && stateName !== "idle") {
+      const fallbacks = ['idle', 'running', 'walking', 'run'];
+      if (!action && stateName !== 'idle') {
         for (const fb of fallbacks) {
           action = this.actions.get(fb);
-          if (action) {
-            stateName = fb;
-            break;
-          }
+          if (action) { stateName = fb; break; }
         }
       }
       if (!action) {
         // Last resort: play whatever is first in the map
         const first = this.actions.entries().next().value;
-        if (first) {
-          action = first[1];
-          stateName = first[0];
-        }
+        if (first) { action = first[1]; stateName = first[0]; }
       }
       if (!action) return false;
     }
@@ -750,21 +744,13 @@ export class AnimationController {
       return true;
     }
 
-    const isLoop =
-      opts.loop !== undefined
-        ? opts.loop
-        : (CORE_ANIMS[stateName]?.loop ?? true);
+    const isLoop = opts.loop !== undefined ? opts.loop
+      : (CORE_ANIMS[stateName]?.loop ?? true);
     const speed = opts.speed ?? 1;
     const fadeDuration = opts.fadeDuration ?? 0.15;
 
     this._onFinish = opts.onFinish ?? null;
-    this.currentAction = fadeToAction(
-      this.currentAction,
-      action,
-      fadeDuration,
-      isLoop,
-      speed,
-    );
+    this.currentAction = fadeToAction(this.currentAction, action, fadeDuration, isLoop, speed);
     this.currentState = stateName;
     return true;
   }
@@ -774,7 +760,7 @@ export class AnimationController {
     return this.play(stateName, {
       loop: false,
       speed,
-      onFinish: () => this.play("idle"),
+      onFinish: () => this.play('idle'),
     });
   }
 
@@ -785,7 +771,7 @@ export class AnimationController {
   stop() {
     this.mixer.stopAllAction();
     this.currentAction = null;
-    this.currentState = "";
+    this.currentState = '';
   }
 
   dispose() {
@@ -803,7 +789,7 @@ export class AnimationController {
  */
 function createWeaponMesh(weaponType) {
   const group = new THREE.Group();
-  group.name = "__weapon";
+  group.name = '__weapon';
 
   // Weapon meshes are in centimeter space (matching the 0.01 root scale).
   // Since they're children of a hand bone inside the scaled armature,
@@ -811,16 +797,12 @@ function createWeaponMesh(weaponType) {
   const S = 100; // scale factor to compensate for 0.01 root
 
   switch (weaponType) {
-    case "greatsword":
-    case "scythe": {
+    case 'greatsword':
+    case 'scythe': {
       // Blade
       const blade = new THREE.Mesh(
         new THREE.BoxGeometry(0.06 * S, 1.2 * S, 0.015 * S),
-        new THREE.MeshStandardMaterial({
-          color: 0xaabbcc,
-          metalness: 0.9,
-          roughness: 0.2,
-        }),
+        new THREE.MeshStandardMaterial({ color: 0xaabbcc, metalness: 0.9, roughness: 0.2 })
       );
       blade.position.y = 0.8 * S;
       blade.castShadow = true;
@@ -829,13 +811,7 @@ function createWeaponMesh(weaponType) {
       // Edge highlight
       const edge = new THREE.Mesh(
         new THREE.BoxGeometry(0.065 * S, 1.2 * S, 0.003 * S),
-        new THREE.MeshStandardMaterial({
-          color: 0xffffff,
-          emissive: 0xaaddff,
-          emissiveIntensity: 0.3,
-          metalness: 1,
-          roughness: 0.1,
-        }),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xaaddff, emissiveIntensity: 0.3, metalness: 1, roughness: 0.1 })
       );
       edge.position.y = 0.8 * S;
       edge.position.z = 0.008 * S;
@@ -844,11 +820,7 @@ function createWeaponMesh(weaponType) {
       // Guard
       const guard = new THREE.Mesh(
         new THREE.BoxGeometry(0.18 * S, 0.03 * S, 0.04 * S),
-        new THREE.MeshStandardMaterial({
-          color: 0x8b6914,
-          metalness: 0.7,
-          roughness: 0.3,
-        }),
+        new THREE.MeshStandardMaterial({ color: 0x8b6914, metalness: 0.7, roughness: 0.3 })
       );
       guard.position.y = 0.18 * S;
       guard.castShadow = true;
@@ -857,7 +829,7 @@ function createWeaponMesh(weaponType) {
       // Handle
       const handle = new THREE.Mesh(
         new THREE.CylinderGeometry(0.015 * S, 0.018 * S, 0.25 * S, 8),
-        new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.9 }),
+        new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.9 })
       );
       handle.position.y = 0.05 * S;
       group.add(handle);
@@ -865,27 +837,19 @@ function createWeaponMesh(weaponType) {
       // Pommel
       const pommel = new THREE.Mesh(
         new THREE.SphereGeometry(0.025 * S, 8, 8),
-        new THREE.MeshStandardMaterial({
-          color: 0x8b6914,
-          metalness: 0.8,
-          roughness: 0.2,
-        }),
+        new THREE.MeshStandardMaterial({ color: 0x8b6914, metalness: 0.8, roughness: 0.2 })
       );
       pommel.position.y = -0.08 * S;
       group.add(pommel);
       break;
     }
 
-    case "sabres":
-    case "runeblade": {
+    case 'sabres':
+    case 'runeblade': {
       // Main sword (shorter, one-handed)
       const sblade = new THREE.Mesh(
         new THREE.BoxGeometry(0.04 * S, 0.7 * S, 0.012 * S),
-        new THREE.MeshStandardMaterial({
-          color: 0xccddee,
-          metalness: 0.9,
-          roughness: 0.15,
-        }),
+        new THREE.MeshStandardMaterial({ color: 0xccddee, metalness: 0.9, roughness: 0.15 })
       );
       sblade.position.y = 0.5 * S;
       sblade.castShadow = true;
@@ -894,11 +858,7 @@ function createWeaponMesh(weaponType) {
       // Guard
       const sguard = new THREE.Mesh(
         new THREE.BoxGeometry(0.12 * S, 0.025 * S, 0.035 * S),
-        new THREE.MeshStandardMaterial({
-          color: 0xc9a84c,
-          metalness: 0.8,
-          roughness: 0.2,
-        }),
+        new THREE.MeshStandardMaterial({ color: 0xc9a84c, metalness: 0.8, roughness: 0.2 })
       );
       sguard.position.y = 0.15 * S;
       group.add(sguard);
@@ -906,22 +866,16 @@ function createWeaponMesh(weaponType) {
       // Handle
       const shandle = new THREE.Mesh(
         new THREE.CylinderGeometry(0.013 * S, 0.016 * S, 0.18 * S, 8),
-        new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.9 }),
+        new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.9 })
       );
       shandle.position.y = 0.05 * S;
       group.add(shandle);
 
       // Rune glow for runeblade
-      if (weaponType === "runeblade") {
+      if (weaponType === 'runeblade') {
         const glow = new THREE.Mesh(
           new THREE.BoxGeometry(0.02 * S, 0.5 * S, 0.02 * S),
-          new THREE.MeshStandardMaterial({
-            color: 0x4488ff,
-            emissive: 0x4488ff,
-            emissiveIntensity: 0.8,
-            transparent: true,
-            opacity: 0.6,
-          }),
+          new THREE.MeshStandardMaterial({ color: 0x4488ff, emissive: 0x4488ff, emissiveIntensity: 0.8, transparent: true, opacity: 0.6 })
         );
         glow.position.y = 0.5 * S;
         group.add(glow);
@@ -929,15 +883,11 @@ function createWeaponMesh(weaponType) {
       break;
     }
 
-    case "bow": {
+    case 'bow': {
       // Bow limb (curved via TorusGeometry)
       const limb = new THREE.Mesh(
         new THREE.TorusGeometry(0.5 * S, 0.015 * S, 8, 16, Math.PI * 0.8),
-        new THREE.MeshStandardMaterial({
-          color: 0x6b4226,
-          roughness: 0.8,
-          metalness: 0.1,
-        }),
+        new THREE.MeshStandardMaterial({ color: 0x6b4226, roughness: 0.8, metalness: 0.1 })
       );
       limb.position.y = 0.3 * S;
       limb.rotation.z = Math.PI / 2;
@@ -951,26 +901,26 @@ function createWeaponMesh(weaponType) {
       ]);
       const bowstring = new THREE.Line(
         stringGeo,
-        new THREE.LineBasicMaterial({ color: 0xccccaa, linewidth: 2 }),
+        new THREE.LineBasicMaterial({ color: 0xccccaa, linewidth: 2 })
       );
       group.add(bowstring);
 
       // Grip
       const grip = new THREE.Mesh(
         new THREE.CylinderGeometry(0.018 * S, 0.018 * S, 0.12 * S, 8),
-        new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.9 }),
+        new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.9 })
       );
       grip.position.y = 0.3 * S;
       group.add(grip);
       break;
     }
 
-    case "staff":
-    case "wand": {
+    case 'staff':
+    case 'wand': {
       // Shaft
       const shaft = new THREE.Mesh(
         new THREE.CylinderGeometry(0.015 * S, 0.02 * S, 1.4 * S, 8),
-        new THREE.MeshStandardMaterial({ color: 0x5c3d2e, roughness: 0.8 }),
+        new THREE.MeshStandardMaterial({ color: 0x5c3d2e, roughness: 0.8 })
       );
       shaft.position.y = 0.5 * S;
       shaft.castShadow = true;
@@ -979,13 +929,7 @@ function createWeaponMesh(weaponType) {
       // Crystal/orb at top
       const crystal = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.06 * S, 1),
-        new THREE.MeshStandardMaterial({
-          color: 0x8844ff,
-          emissive: 0x8844ff,
-          emissiveIntensity: 0.6,
-          metalness: 0.3,
-          roughness: 0.2,
-        }),
+        new THREE.MeshStandardMaterial({ color: 0x8844ff, emissive: 0x8844ff, emissiveIntensity: 0.6, metalness: 0.3, roughness: 0.2 })
       );
       crystal.position.y = 1.25 * S;
       crystal.castShadow = true;
@@ -1002,11 +946,7 @@ function createWeaponMesh(weaponType) {
       // Generic weapon placeholder
       const generic = new THREE.Mesh(
         new THREE.BoxGeometry(0.04 * S, 0.6 * S, 0.04 * S),
-        new THREE.MeshStandardMaterial({
-          color: 0x888888,
-          metalness: 0.5,
-          roughness: 0.5,
-        }),
+        new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5, roughness: 0.5 })
       );
       generic.position.y = 0.3 * S;
       generic.castShadow = true;
@@ -1023,23 +963,17 @@ function createWeaponMesh(weaponType) {
  * @param {THREE.Group} weaponMesh - The weapon mesh group from createWeaponMesh()
  * @param {string} boneName - Target bone name (default: 'RightHand')
  */
-export function attachWeaponToBone(
-  characterScene,
-  weaponMesh,
-  boneName = "RightHand",
-) {
+export function attachWeaponToBone(characterScene, weaponMesh, boneName = 'RightHand') {
   let handBone = null;
 
-  characterScene.traverse((node) => {
+  characterScene.traverse(node => {
     if (node.isBone && node.name === boneName) {
       handBone = node;
     }
   });
 
   if (!handBone) {
-    console.warn(
-      `[modelLoader] Bone '${boneName}' not found, weapon not attached`,
-    );
+    console.warn(`[modelLoader] Bone '${boneName}' not found, weapon not attached`);
     return null;
   }
 
@@ -1059,16 +993,12 @@ export function attachWeaponToBone(
 function createShieldMesh() {
   const S = 100;
   const group = new THREE.Group();
-  group.name = "__shield";
+  group.name = '__shield';
 
   // Shield body
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(0.3 * S, 0.4 * S, 0.03 * S),
-    new THREE.MeshStandardMaterial({
-      color: 0x5a5a7a,
-      metalness: 0.7,
-      roughness: 0.3,
-    }),
+    new THREE.MeshStandardMaterial({ color: 0x5a5a7a, metalness: 0.7, roughness: 0.3 })
   );
   body.position.y = 0.1 * S;
   body.castShadow = true;
@@ -1077,11 +1007,7 @@ function createShieldMesh() {
   // Boss (center bump)
   const boss = new THREE.Mesh(
     new THREE.SphereGeometry(0.06 * S, 8, 8),
-    new THREE.MeshStandardMaterial({
-      color: 0xc9a84c,
-      metalness: 0.9,
-      roughness: 0.2,
-    }),
+    new THREE.MeshStandardMaterial({ color: 0xc9a84c, metalness: 0.9, roughness: 0.2 })
   );
   boss.position.set(0, 0.1 * S, 0.02 * S);
   group.add(boss);
@@ -1089,11 +1015,7 @@ function createShieldMesh() {
   // Rim
   const rim = new THREE.Mesh(
     new THREE.TorusGeometry(0.2 * S, 0.012 * S, 4, 16),
-    new THREE.MeshStandardMaterial({
-      color: 0x8b6914,
-      metalness: 0.8,
-      roughness: 0.2,
-    }),
+    new THREE.MeshStandardMaterial({ color: 0x8b6914, metalness: 0.8, roughness: 0.2 })
   );
   rim.position.set(0, 0.1 * S, 0.015 * S);
   group.add(rim);
@@ -1112,25 +1034,18 @@ let _animLibraryCache = null;
  */
 async function loadAnimationLibrary() {
   if (_animLibraryCache) return _animLibraryCache;
-
+  
   const gltf = await new Promise((resolve, reject) => {
-    gltfLoader.load(
-      "/models/animation-library.glb",
-      resolve,
-      undefined,
-      reject,
-    );
+    gltfLoader.load('/models/animation-library.glb', resolve, undefined, reject);
   });
-
+  
   // Index animations by name
   const clips = new Map();
   for (const clip of gltf.animations) {
     clips.set(clip.name, clip);
   }
-
-  console.log(
-    `[modelLoader] Animation library loaded: ${clips.size} clips [${[...clips.keys()].join(", ")}]`,
-  );
+  
+  console.log(`[modelLoader] Animation library loaded: ${clips.size} clips [${[...clips.keys()].join(', ')}]`);
   _animLibraryCache = clips;
   return clips;
 }
@@ -1219,7 +1134,26 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
     }
   }
 
-  applyCommonClipAliases(controller.actions);
+  // Aliases the FSM / AI commonly use that map to slightly differently-named
+  // clips inside the library. Only set if the alias isn't already bound.
+  const CLIP_ALIASES = {
+    death: ["dead", "deadBack", "hurt"], // FSM 'playDead' uses 'death'
+    hit: ["hurt", "stun"], // FSM 'playHit' uses 'hit'
+    dodge: ["roll", "dodgeBack"], // ArenaController/FSM 'playDash' uses 'dodge'/'roll'
+    heavy: ["swing", "attack3", "attack2"], // FSM 'playHeavy'
+    fall: ["fallLoop", "jump"], // FSM 'playFall'
+    land: ["jumpLand", "idle"],
+  };
+  for (const [alias, candidates] of Object.entries(CLIP_ALIASES)) {
+    if (controller.actions.has(alias)) continue;
+    for (const c of candidates) {
+      const act = controller.actions.get(c);
+      if (act) {
+        controller.actions.set(alias, act);
+        break;
+      }
+    }
+  }
 
   console.log(
     `[modelLoader] ${raceConfig.name} (${raceConfig.faction}) unit ready: ${controller.actions.size} anims (${bareRegistered} bare-aliased from '${animClass}'), weapon: ${resolvedWeapon}, tier: ${tierCfg.name}`,
@@ -1371,7 +1305,25 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
     }
   }
 
-  applyCommonClipAliases(controller.actions);
+  // Shared alias map (same as createAnimatedUnit)
+  const CLIP_ALIASES = {
+    death: ["dead", "deadBack", "hurt"],
+    hit: ["hurt", "stun"],
+    dodge: ["roll", "dodgeBack"],
+    heavy: ["swing", "attack3", "attack2"],
+    fall: ["fallLoop", "jump"],
+    land: ["jumpLand", "idle"],
+  };
+  for (const [alias, candidates] of Object.entries(CLIP_ALIASES)) {
+    if (controller.actions.has(alias)) continue;
+    for (const c of candidates) {
+      const act = controller.actions.get(c);
+      if (act) {
+        controller.actions.set(alias, act);
+        break;
+      }
+    }
+  }
 
   // Attach weapon mesh
   const weapon = createWeaponMesh(weaponType);
