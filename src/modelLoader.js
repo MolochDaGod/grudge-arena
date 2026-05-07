@@ -542,10 +542,13 @@ export async function loadRaceModel(race) {
   // Register embedded animations (remap bone names)
   // Clone clips so cached originals aren't mutated
   // Also create aliases: 'Running' → register as both 'running' AND 'run'
+  // DO NOT alias 'running' as 'idle' — this causes characters to run while standing.
+  // The idle anim is loaded from the weapon animation pack (see ANIM_FILE_MAP).
+  // Only alias for locomotion fallback if the clip doesn't exist in the pack.
   const EMBEDDED_ALIASES = {
-    'running': ['run', 'idle'],   // Running anim doubles as run and idle fallback
+    'running': ['run'],           // Running → run only (NOT idle)
     'walking': ['walk'],
-    'idle':    [],
+    'idle':    [],                 // Idle comes from weapon anim pack
   };
   for (const clip of gltf.animations) {
     const clonedClip = clip.clone();
