@@ -23,6 +23,7 @@ import { GameTimerSystem } from './src/engine/GameTimer.js';
 import { inventorySystem } from "./src/inventorySystem.js";
 import { InventoryUI } from "./src/inventoryUI.js";
 import { generateGrudgeUuid } from "./src/grudgeUuid.js";
+import { getHero, DefaultHeroForRace } from "./src/HeroRegistry.js";
 
 // ── Static spawn helpers ──
 const ArenaMatchStatic = {
@@ -116,6 +117,7 @@ class GrudgeArena {
       const playerProfile = this._derivePlayerProfile(buildConfig);
       const TEAM_A = [
         {
+          heroId: DefaultHeroForRace[race] || "human_knight",
           race,
           weapon: playerWeapon,
           isPlayer: true,
@@ -123,13 +125,13 @@ class GrudgeArena {
           displayName: this._getPlayerDisplayName(buildConfig),
           profile: playerProfile,
         },
-        { race: "elf", weapon: "bow", isPlayer: false, tier: 2 },
-        { race: "dwarf", weapon: "runeblade", isPlayer: false, tier: 2 },
+        { heroId: "elf_archer", isPlayer: false, tier: 2 },
+        { heroId: "dwarf_ironclad", isPlayer: false, tier: 2 },
       ];
       const TEAM_B = [
-        { race: "orc", weapon: "greatsword", isPlayer: false, tier: 2 },
-        { race: "barbarian", weapon: "greatsword", isPlayer: false, tier: 2 },
-        { race: "undead", weapon: "scythe", isPlayer: false, tier: 3 },
+        { heroId: "orc_warlord", isPlayer: false, tier: 2 },
+        { heroId: "barbarian_berserker", isPlayer: false, tier: 2 },
+        { heroId: "undead_necromancer", isPlayer: false, tier: 3 },
       ];
 
       setProgress(30, "Loading Team A models...");
@@ -437,15 +439,29 @@ class GrudgeArena {
       WeaponDefinitions[comp.weapon] ||
       WeaponDefinitions[WeaponTypes.GREATSWORD];
 
+    // Use hero prefab if heroId is specified, otherwise fall back to race/weapon
+    let unitResult;
+    if (comp.heroId) {
+      const hero = getHero(comp.heroId);
+      if (hero) {
+        unitResult = await modelMod.createHeroUnit(hero, comp.weapon || null, {
+          tier: comp.tier || 1,
+        });
+      }
+    }
+    if (!unitResult) {
+      unitResult = await modelMod.createAnimatedUnit(comp.race, comp.weapon, {
+        tier: comp.tier || 1,
+      });
+    }
+
     const {
       scene: mesh,
       mixer,
       controller,
       raceConfig,
       resolvedWeapon,
-    } = await modelMod.createAnimatedUnit(comp.race, comp.weapon, {
-      tier: comp.tier || 1,
-    });
+    } = unitResult;
     mesh.position.copy(spawnPos);
     mesh.rotation.y = facing;
     this.scene.add(mesh);
@@ -491,8 +507,9 @@ class GrudgeArena {
       .addComponent("TargetInfo", {
         displayName:
           comp.displayName ||
+          unitResult.hero?.displayName ||
           `${raceConfig.name} ${actualWeaponDef.title || ""}`.trim(),
-        race: comp.race,
+        race: unitResult.race || comp.race,
         weaponType: resolvedWeapon,
         team: teamId,
         faction: raceConfig.faction,

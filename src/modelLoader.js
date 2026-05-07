@@ -1050,15 +1050,15 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   // Validate weapon against race restrictions (fall back to default)
   const resolvedWeapon = resolveWeapon(race, weaponType);
   if (resolvedWeapon !== weaponType) {
-    console.warn(`[modelLoader] ${raceConfig.name} can't use ${weaponType}, using ${resolvedWeapon}`);
+    console.warn(
+      `[modelLoader] ${raceConfig.name} can't use ${weaponType}, using ${resolvedWeapon}`,
+    );
   }
 
   // Load character model and animation library in parallel
-  const [{ scene, mixer, actions: embeddedActions }, animClips] = await Promise.all([
-    loadRaceModel(race),
-    loadAnimationLibrary(),
-  ]);
-  
+  const [{ scene, mixer, actions: embeddedActions }, animClips] =
+    await Promise.all([loadRaceModel(race), loadAnimationLibrary()]);
+
   const controller = new AnimationController(mixer, scene);
 
   // Register embedded animations from the character GLB (Running, Walking)
@@ -1068,7 +1068,7 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   // bare names (e.g. 'greatsword__attack1' → also 'attack1'). This is what
   // lets CharacterFSM / arenaAI / game.js call play('attack1'), play('hurt'),
   // play('dodge'), etc. without knowing the weapon class.
-  const animClass = WeaponToAnimClass[resolvedWeapon] || 'greatsword';
+  const animClass = WeaponToAnimClass[resolvedWeapon] || "greatsword";
   const prefix = `${animClass}__`;
 
   // Register all animations from the pre-built library. For clips matching
@@ -1092,41 +1092,51 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   // Aliases the FSM / AI commonly use that map to slightly differently-named
   // clips inside the library. Only set if the alias isn't already bound.
   const CLIP_ALIASES = {
-    death: ['dead', 'deadBack', 'hurt'],     // FSM 'playDead' uses 'death'
-    hit:   ['hurt', 'stun'],                  // FSM 'playHit' uses 'hit'
-    dodge: ['roll', 'dodgeBack'],             // ArenaController/FSM 'playDash' uses 'dodge'/'roll'
-    heavy: ['swing', 'attack3', 'attack2'],   // FSM 'playHeavy'
-    fall:  ['fallLoop', 'jump'],              // FSM 'playFall'
-    land:  ['jumpLand', 'idle'],
+    death: ["dead", "deadBack", "hurt"], // FSM 'playDead' uses 'death'
+    hit: ["hurt", "stun"], // FSM 'playHit' uses 'hit'
+    dodge: ["roll", "dodgeBack"], // ArenaController/FSM 'playDash' uses 'dodge'/'roll'
+    heavy: ["swing", "attack3", "attack2"], // FSM 'playHeavy'
+    fall: ["fallLoop", "jump"], // FSM 'playFall'
+    land: ["jumpLand", "idle"],
   };
   for (const [alias, candidates] of Object.entries(CLIP_ALIASES)) {
     if (controller.actions.has(alias)) continue;
     for (const c of candidates) {
       const act = controller.actions.get(c);
-      if (act) { controller.actions.set(alias, act); break; }
+      if (act) {
+        controller.actions.set(alias, act);
+        break;
+      }
     }
   }
 
-  console.log(`[modelLoader] ${raceConfig.name} (${raceConfig.faction}) unit ready: ${controller.actions.size} anims (${bareRegistered} bare-aliased from '${animClass}'), weapon: ${resolvedWeapon}, tier: ${tierCfg.name}`);
+  console.log(
+    `[modelLoader] ${raceConfig.name} (${raceConfig.faction}) unit ready: ${controller.actions.size} anims (${bareRegistered} bare-aliased from '${animClass}'), weapon: ${resolvedWeapon}, tier: ${tierCfg.name}`,
+  );
 
   // Create and attach weapon mesh with race faction tint + tier glow
   const weapon = createWeaponMesh(resolvedWeapon);
   tintWeaponMesh(weapon, raceConfig.gearTint, factionColors.emissive, tierCfg);
-  attachWeaponToBone(scene, weapon, 'RightHand');
+  attachWeaponToBone(scene, weapon, "RightHand");
 
   // Attach shield to LeftHand for sword+shield weapons
-  const shieldWeapons = ['sabres', 'runeblade'];
+  const shieldWeapons = ["sabres", "runeblade"];
   if (shieldWeapons.includes(resolvedWeapon)) {
     const shield = createShieldMesh();
-    tintWeaponMesh(shield, raceConfig.gearTint, factionColors.emissive, tierCfg);
+    tintWeaponMesh(
+      shield,
+      raceConfig.gearTint,
+      factionColors.emissive,
+      tierCfg,
+    );
     shield.rotation.set(-Math.PI / 2, 0, Math.PI);
-    attachWeaponToBone(scene, shield, 'LeftHand');
+    attachWeaponToBone(scene, shield, "LeftHand");
   }
 
   // Start idle animation
-  controller.play('idle');
+  controller.play("idle");
 
-  return { scene, mixer, controller, raceConfig, resolvedWeapon, tier };
+  return { scene, mixer, controller, raceConfig, resolvedWeapon, tier, race };
 }
 
 /**
@@ -1138,7 +1148,7 @@ function tintWeaponMesh(group, raceTint, factionEmissive, tierCfg) {
   const tintColor = new THREE.Color(raceTint);
   const emissiveColor = new THREE.Color(tierCfg.emissive || factionEmissive);
 
-  group.traverse(child => {
+  group.traverse((child) => {
     if (!child.isMesh || !child.material) return;
     const mat = child.material;
     if (!mat.isMeshStandardMaterial) return;
@@ -1151,7 +1161,225 @@ function tintWeaponMesh(group, raceTint, factionEmissive, tierCfg) {
     // Add tier emissive glow to all parts
     if (tierCfg.emissiveIntensity > 0) {
       mat.emissive.copy(emissiveColor);
-      mat.emissiveIntensity = Math.max(mat.emissiveIntensity, tierCfg.emissiveIntensity);
+      mat.emissiveIntensity = Math.max(
+        mat.emissiveIntensity,
+        tierCfg.emissiveIntensity,
+      );
     }
   });
+}
+
+// ── Hero unit factory (uses HeroRegistry prefab definitions) ─────────────────
+
+/**
+ * Create a fully animated unit from a HeroRegistry entry.
+ * Tries to load the hero's pack-specific GLB; falls back to the generic
+ * race GLB if the file has not been placed yet.
+ *
+ * @param {Object} hero  - A HeroRegistry entry (from HeroRegistry.js)
+ * @param {string|null} weaponOverride - Force a weapon from hero.weapons list
+ * @param {Object} [opts] - { tier: 1-8 }
+ * @returns {{ scene, mixer, controller, raceConfig, resolvedWeapon, tier, hero, race }}
+ */
+export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
+  const weaponType =
+    weaponOverride && hero.weapons.includes(weaponOverride)
+      ? weaponOverride
+      : hero.defaultWeapon;
+
+  const raceConfig = getRaceConfig(hero.race);
+  const factionColors = getRaceFactionColors(hero.race);
+  const tier = opts.tier || 1;
+  const tierCfg = TierConfig[tier] || TierConfig[1];
+  const animClass = WeaponToAnimClass[weaponType] || "greatsword";
+  const prefix = `${animClass}__`;
+
+  // Try hero-specific pack GLB, fall back to generic race model
+  let scene, mixer, embeddedActions;
+  try {
+    const path = hero.modelPath;
+    let gltf = gltfCache.get(path);
+    if (!gltf) {
+      gltf = await new Promise((resolve, reject) => {
+        gltfLoader.load(path, resolve, undefined, reject);
+      });
+      gltfCache.set(path, gltf);
+    }
+    scene = cloneGLTFScene(gltf.scene);
+    scene.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        child.frustumCulled = false;
+        if (child.material?.metalness !== undefined)
+          child.material.metalness = Math.min(child.material.metalness, 0.6);
+      }
+    });
+    const nativeScale = scene.scale.x;
+    scene.scale.setScalar(nativeScale * (hero.scale ?? 1.0));
+    mixer = new THREE.AnimationMixer(scene);
+    embeddedActions = new Map();
+    const EMBEDDED_ALIASES = { running: ["run"], walking: ["walk"], idle: [] };
+    for (const clip of gltf.animations) {
+      const cloned = clip.clone();
+      remapClipBoneNames(cloned);
+      const key = cloned.name.toLowerCase();
+      const action = mixer.clipAction(cloned, scene);
+      embeddedActions.set(key, action);
+      for (const alias of EMBEDDED_ALIASES[key] || []) {
+        if (!embeddedActions.has(alias)) embeddedActions.set(alias, action);
+      }
+    }
+    console.log(`[modelLoader] Hero model loaded: ${path}`);
+  } catch {
+    console.warn(
+      `[modelLoader] ${hero.id}: pack model not found (${hero.modelPath}), using race fallback`,
+    );
+    const result = await loadRaceModel(hero.race);
+    scene = result.scene;
+    mixer = result.mixer;
+    embeddedActions = result.actions;
+  }
+
+  const controller = new AnimationController(mixer, scene);
+  controller.registerActions(embeddedActions);
+
+  const animClips = await loadAnimationLibrary();
+  let bareRegistered = 0;
+  for (const [name, clip] of animClips) {
+    const clonedClip = clip.clone();
+    clonedClip.name = name;
+    const action = mixer.clipAction(clonedClip, scene);
+    controller.actions.set(name, action);
+    if (name.startsWith(prefix)) {
+      const bare = name.slice(prefix.length);
+      if (!controller.actions.has(bare)) {
+        controller.actions.set(bare, action);
+        bareRegistered++;
+      }
+    }
+  }
+
+  // Shared alias map (same as createAnimatedUnit)
+  const CLIP_ALIASES = {
+    death: ["dead", "deadBack", "hurt"],
+    hit: ["hurt", "stun"],
+    dodge: ["roll", "dodgeBack"],
+    heavy: ["swing", "attack3", "attack2"],
+    fall: ["fallLoop", "jump"],
+    land: ["jumpLand", "idle"],
+  };
+  for (const [alias, candidates] of Object.entries(CLIP_ALIASES)) {
+    if (controller.actions.has(alias)) continue;
+    for (const c of candidates) {
+      const act = controller.actions.get(c);
+      if (act) {
+        controller.actions.set(alias, act);
+        break;
+      }
+    }
+  }
+
+  // Attach weapon mesh
+  const weapon = createWeaponMesh(weaponType);
+  tintWeaponMesh(weapon, raceConfig.gearTint, factionColors.emissive, tierCfg);
+  attachWeaponToBone(scene, weapon, "RightHand");
+
+  const shieldWeapons = ["sabres", "runeblade"];
+  if (shieldWeapons.includes(weaponType)) {
+    const shield = createShieldMesh();
+    tintWeaponMesh(
+      shield,
+      raceConfig.gearTint,
+      factionColors.emissive,
+      tierCfg,
+    );
+    shield.rotation.set(-Math.PI / 2, 0, Math.PI);
+    attachWeaponToBone(scene, shield, "LeftHand");
+  }
+
+  controller.play("idle");
+
+  console.log(
+    `[modelLoader] Hero ${hero.displayName} (${hero.id}) ready: ${controller.actions.size} anims (${bareRegistered} bare-aliased from '${animClass}'), weapon: ${weaponType}, tier: ${tierCfg.name}`,
+  );
+  return {
+    scene,
+    mixer,
+    controller,
+    raceConfig,
+    resolvedWeapon: weaponType,
+    tier,
+    hero,
+    race: hero.race,
+  };
+}
+
+// ── Live weapon swap ──────────────────────────────────────────────────────────
+
+/**
+ * Hot-swap a unit's equipped weapon at runtime.
+ * Removes the existing weapon/shield meshes from hand bones, attaches the
+ * new weapon, and re-aliases animation clips for the new weapon class.
+ *
+ * The unit object must contain: { scene, controller, raceConfig, tier, race }
+ * (returned by createAnimatedUnit or createHeroUnit).
+ *
+ * @param {Object} unit - Unit object returned by createAnimatedUnit / createHeroUnit
+ * @param {string} newWeaponType - One of the WeaponTypes keys
+ */
+export function swapWeapon(unit, newWeaponType) {
+  const { scene, controller, raceConfig, tier, race } = unit;
+  const tierCfg = TierConfig[tier] || TierConfig[1];
+  const factionColors = getRaceFactionColors(race);
+
+  // Remove existing weapon / shield meshes from all hand bones
+  scene.traverse((node) => {
+    if (!node.isBone) return;
+    const toRemove = node.children.filter(
+      (c) => c.name === "__weapon" || c.name === "__shield",
+    );
+    toRemove.forEach((c) => node.remove(c));
+  });
+
+  // Attach new weapon
+  const newWeapon = createWeaponMesh(newWeaponType);
+  tintWeaponMesh(
+    newWeapon,
+    raceConfig.gearTint,
+    factionColors.emissive,
+    tierCfg,
+  );
+  attachWeaponToBone(scene, newWeapon, "RightHand");
+
+  const shieldWeapons = ["sabres", "runeblade"];
+  if (shieldWeapons.includes(newWeaponType)) {
+    const shield = createShieldMesh();
+    tintWeaponMesh(
+      shield,
+      raceConfig.gearTint,
+      factionColors.emissive,
+      tierCfg,
+    );
+    shield.rotation.set(-Math.PI / 2, 0, Math.PI);
+    attachWeaponToBone(scene, shield, "LeftHand");
+  }
+
+  // Re-alias animation clips for the new weapon's anim class.
+  // Overwrites existing bare-name aliases so play('attack1') etc. resolve
+  // to the correct weapon pack.
+  const newAnimClass = WeaponToAnimClass[newWeaponType] || "greatsword";
+  const newPrefix = `${newAnimClass}__`;
+  for (const [name, action] of controller.actions) {
+    if (!name.startsWith(newPrefix)) continue;
+    const bare = name.slice(newPrefix.length);
+    controller.actions.set(bare, action);
+  }
+
+  unit.resolvedWeapon = newWeaponType;
+  controller.play("idle");
+
+  console.log(
+    `[modelLoader] Weapon swapped → ${newWeaponType} (${newAnimClass})`,
+  );
 }

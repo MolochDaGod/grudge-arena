@@ -9,5 +9,6 @@
             "healthCheckInterval": 300000
         }
     ],
-    "serverpulse.ai.optInShown": true
+    "serverpulse.ai.optInShown": true,
+    "DockerRun.DisableDockerrc": true
 }
