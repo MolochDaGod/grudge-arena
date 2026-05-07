@@ -196,12 +196,6 @@ export async function getItemById(idOrUuid) {
   return idx.byUuid.get(idOrUuid) || idx.byId.get(idOrUuid) || null;
 }
 
-/** Synchronous lookup — only succeeds after `getItems()` has resolved at least once. */
-export function getItemByIdSync(idOrUuid) {
-  if (!_itemsIndex) return null;
-  return _itemsIndex.byUuid.get(idOrUuid) || _itemsIndex.byId.get(idOrUuid) || null;
-}
-
 /** Get all items in a category (weapon/armor/consumable/sword/spear/...). */
 export async function getItemsByCategory(category) {
   const idx = await getItems();

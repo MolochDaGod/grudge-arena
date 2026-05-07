@@ -681,21 +681,6 @@ body { background: var(--void); color: var(--text); font-family: var(--font-ui);
   font-family: var(--font-ui);
 }
 
-.inv-icon {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
-  pointer-events: none;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
-}
-
-.inv-glyph {
-  pointer-events: none;
-  line-height: 1;
-}
-
 /* ── Equipment doll (3-column: left slots / portrait / right slots) ── */
 .equip-doll {
   display: grid;
@@ -851,60 +836,9 @@ body { background: var(--void); color: var(--text); font-family: var(--font-ui);
   letter-spacing: 0.1em;
 }
 
-.item-tooltip .tt-stats {
-  margin: 4px 0;
-}
-
 .item-tooltip .tt-stat {
   display: block;
   color: #aee0ff;
-}
-
-.item-tooltip .tt-set {
-  color: #f59e0b;
-  font-size: 10px;
-  margin-bottom: 4px;
-}
-
-.item-tooltip .tt-signature {
-  color: #f5d76e;
-  font-style: italic;
-  margin: 4px 0 2px;
-}
-
-.item-tooltip .tt-passive {
-  color: #b39ddb;
-  margin: 2px 0;
-}
-
-.item-tooltip .tt-proc {
-  color: #ff7e7e;
-  margin: 2px 0;
-}
-
-.item-tooltip .tt-setbonus {
-  color: #f59e0b;
-  margin: 2px 0;
-}
-
-.item-tooltip .tt-abilities {
-  margin: 4px 0;
-}
-
-.item-tooltip .tt-ability {
-  display: inline-block;
-  padding: 1px 5px;
-  margin: 1px 2px 1px 0;
-  background: rgba(174, 224, 255, 0.08);
-  border: 1px solid rgba(174, 224, 255, 0.25);
-  border-radius: 3px;
-  color: #aee0ff;
-  font-size: 10px;
-}
-
-.item-tooltip .tt-bound {
-  color: #c79a3a;
-  text-transform: uppercase;
 }
 
 .item-tooltip .tt-desc {

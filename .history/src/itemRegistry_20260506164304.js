@@ -13,7 +13,7 @@
  * and mint-ready.
  */
 
-import { getItemById, getItemByIdSync, getItems } from "./objectstore.js";
+import { getItemById, getItems } from './objectstore.js';
 import { generateGrudgeUuid, isValidGrudgeUuid } from './grudgeUuid.js';
 
 class ItemRegistry {
@@ -101,8 +101,8 @@ class ItemRegistry {
   resolveSync(itemId) {
     const instance = this._instances.get(itemId);
     if (!instance) return null;
-    const catalog = getItemByIdSync(instance.catalogId);
-    return this._buildResolved(instance, catalog);
+    // Best-effort: catalog comes from the cached index attached to objectstore.
+    return this._buildResolved(instance, null);
   }
 
   _buildResolved(instance, catalog) {

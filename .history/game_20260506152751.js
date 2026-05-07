@@ -1102,8 +1102,6 @@ class GrudgeArena {
     this.spriteSystem?.update(delta);
     this.orbitCamera?.update(delta);
     this._updateUI();
-    this._updateAbilityCooldownSweep();
-    this.inventoryUI?.update();
     if (this.targeting) {
       this.targeting.updateTargetFrameHP();
       this.targeting.updateTeamFrames();
@@ -1112,95 +1110,10 @@ class GrudgeArena {
     this.renderer.render(this.scene, this.camera);
   }
 
-  /** Bind I/C/K to toggle inventory/character/skills panels. */
-  _bindInventoryHotkeys() {
-    if (this._invHotkeysBound) return;
-    this._invHotkeysBound = true;
-    this._invKeyHandler = (e) => {
-      if (e.target?.matches?.("input,textarea,[contenteditable=true]")) return;
-      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-      const key = e.key.toLowerCase();
-      if (key === "i") {
-        e.preventDefault();
-        this.inventoryUI?.toggle("panel-inv");
-      } else if (key === "c") {
-        e.preventDefault();
-        this.inventoryUI?.toggle("panel-char");
-      } else if (key === "k") {
-        e.preventDefault();
-        this.inventoryUI?.toggle("panel-skills");
-      } else if (key === "escape") {
-        this.inventoryUI?.close();
-      }
-    };
-    window.addEventListener("keydown", this._invKeyHandler);
-  }
-
-  /**
-   * Paint a radial cooldown sweep on each ability slot.
-   * Reads AbilityState.cooldowns[key] and the shared GCD timer; both write
-   * a conic-gradient mask + remaining-seconds label without rebuilding DOM.
-   */
-  _updateAbilityCooldownSweep() {
-    const bar = document.getElementById("abilityBar");
-    if (!bar || !this.playerEntity) return;
-    const as = this.playerEntity.getComponent("AbilityState");
-    if (!as) return;
-    const weapon = this.getCurrentWeapon();
-    if (!weapon) return;
-    const keys = Object.keys(weapon.abilities);
-    const slots = bar.querySelectorAll(".ability-slot");
-    for (let i = 0; i < slots.length; i++) {
-      const slot = slots[i];
-      const key = keys[i];
-      if (!key) continue;
-      const ability = weapon.abilities[key];
-      const cd = as.cooldowns[key] || 0;
-      const cdMax = ability?.cooldown || 0;
-      const gcd = ability?.offGCD ? 0 : this._gcdTimer || 0;
-      const remaining = Math.max(cd, gcd);
-      let mask = slot.querySelector(".ability-cd-mask");
-      let text = slot.querySelector(".ability-cd-text");
-      if (remaining <= 0.01) {
-        slot.classList.remove("on-cd");
-        if (mask) mask.style.display = "none";
-        if (text) text.style.display = "none";
-        continue;
-      }
-      slot.classList.add("on-cd");
-      if (!mask) {
-        mask = document.createElement("div");
-        mask.className = "ability-cd-mask";
-        slot.appendChild(mask);
-      }
-      if (!text) {
-        text = document.createElement("div");
-        text.className = "ability-cd-text";
-        slot.appendChild(text);
-      }
-      // Sweep: full disc shrinks counterclockwise as cooldown expires.
-      const denom = cd > 0 ? cdMax : this._gcdDuration || 1.5;
-      const pct = Math.min(1, remaining / denom);
-      const deg = Math.round(360 * pct);
-      mask.style.display = "block";
-      mask.style.background = `conic-gradient(rgba(0,0,0,0.65) 0deg ${deg}deg, transparent ${deg}deg 360deg)`;
-      text.style.display = "flex";
-      text.textContent =
-        remaining >= 1 ? Math.ceil(remaining).toString() : remaining.toFixed(1);
-    }
-  }
-
   /** Clean dispose — release all GPU resources and DOM elements */
   dispose() {
     this._disposed = true;
     this.clock.stop();
-
-    // Detach inventory hotkey listener
-    if (this._invKeyHandler) {
-      window.removeEventListener("keydown", this._invKeyHandler);
-      this._invKeyHandler = null;
-      this._invHotkeysBound = false;
-    }
 
     // Dispose subsystems
     this.particleSystem?.dispose();

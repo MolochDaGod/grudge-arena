@@ -1195,13 +1195,6 @@ class GrudgeArena {
     this._disposed = true;
     this.clock.stop();
 
-    // Detach inventory hotkey listener
-    if (this._invKeyHandler) {
-      window.removeEventListener("keydown", this._invKeyHandler);
-      this._invKeyHandler = null;
-      this._invHotkeysBound = false;
-    }
-
     // Dispose subsystems
     this.particleSystem?.dispose();
     this.spriteSystem?.dispose();
