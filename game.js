@@ -25,6 +25,26 @@ import { InventoryUI } from "./src/inventoryUI.js";
 import { generateGrudgeUuid } from "./src/grudgeUuid.js";
 import { getHero, DefaultHeroForRace } from "./src/HeroRegistry.js";
 
+const VALID_RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
+const VALID_CLASSES = ["warlord", "arcanist", "ranger", "assassin"];
+
+function sanitizeArenaConfig(cfg = {}) {
+  const race = VALID_RACES.includes(cfg.race) ? cfg.race : "human";
+  const classId = VALID_CLASSES.includes(cfg.classId) ? cfg.classId : "warlord";
+  const heroId = DefaultHeroForRace[race] || "human";
+  const hero = getHero(heroId);
+  const weapon = hero?.weapons?.includes(cfg.weapon)
+    ? cfg.weapon
+    : hero?.defaultWeapon || "greatsword";
+
+  return {
+    ...cfg,
+    race,
+    classId,
+    weapon,
+  };
+}
+
 // ── Static spawn helpers ──
 const ArenaMatchStatic = {
   getSpawnPosition(teamId, slot, teamSize) {
@@ -79,6 +99,7 @@ class GrudgeArena {
       Object.assign(this.config, config);
       if (config.container) this.container = config.container;
     }
+    this.config = sanitizeArenaConfig(this.config);
     this._setupRenderer();
     this._setupScene();
     this._setupLighting();
@@ -117,7 +138,7 @@ class GrudgeArena {
       const playerProfile = this._derivePlayerProfile(buildConfig);
       const TEAM_A = [
         {
-          heroId: DefaultHeroForRace[race] || "human_knight",
+          heroId: DefaultHeroForRace[race] || "human",
           race,
           weapon: playerWeapon,
           isPlayer: true,
@@ -125,13 +146,13 @@ class GrudgeArena {
           displayName: this._getPlayerDisplayName(buildConfig),
           profile: playerProfile,
         },
-        { heroId: "elf_archer", isPlayer: false, tier: 2 },
-        { heroId: "dwarf_ironclad", isPlayer: false, tier: 2 },
+        { heroId: "elf", isPlayer: false, tier: 2 },
+        { heroId: "dwarf", isPlayer: false, tier: 2 },
       ];
       const TEAM_B = [
-        { heroId: "orc_warlord", isPlayer: false, tier: 2 },
-        { heroId: "barbarian_berserker", isPlayer: false, tier: 2 },
-        { heroId: "undead_necromancer", isPlayer: false, tier: 3 },
+        { heroId: "orc", isPlayer: false, tier: 2 },
+        { heroId: "barbarian", isPlayer: false, tier: 2 },
+        { heroId: "undead", isPlayer: false, tier: 3 },
       ];
 
       setProgress(30, "Loading Team A models...");

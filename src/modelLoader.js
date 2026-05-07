@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { getRaceConfig, getRaceFactionColors, resolveWeapon, TierConfig } from './engine/RaceConfig.js';
+import { EquipmentManager, isD1ModularScene } from "./EquipmentManager.js";
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
 
@@ -21,25 +22,27 @@ import { getRaceConfig, getRaceFactionColors, resolveWeapon, TierConfig } from '
  * All 6 race GLBs have root scale 0.01 (centimeter units).
  * These multipliers adjust relative size differences between races.
  */
+// All 6 race GLBs have been pre-scaled to 1.75 m by build-character-library.mjs.
+// Do NOT apply additional multipliers — just use 1.0 for every race.
 export const RaceScaleConfig = {
-  human:     { scale: 1.0,  heightOffset: 0 },
-  barbarian: { scale: 1.12, heightOffset: 0.06 },
-  elf:       { scale: 1.05, heightOffset: 0.02 },
-  dwarf:     { scale: 0.85, heightOffset: -0.08 },
-  orc:       { scale: 1.08, heightOffset: 0.04 },
-  undead:    { scale: 0.95, heightOffset: -0.02 },
+  human: { scale: 1.0, heightOffset: 0 },
+  barbarian: { scale: 1.0, heightOffset: 0 },
+  elf: { scale: 1.0, heightOffset: 0 },
+  dwarf: { scale: 1.0, heightOffset: 0 },
+  orc: { scale: 1.0, heightOffset: 0 },
+  undead: { scale: 1.0, heightOffset: 0 },
 };
 
 export const WeaponToAnimPack = {
-  greatsword: 'axe',
-  bow:        'longbow',
-  sabres:     'sword_shield',
-  scythe:     'axe',
-  runeblade:  'sword_shield',
-  staff:      'magic',
-  wand:       'magic',
-  rifle:      'rifle',
-  unarmed:    'axe',
+  greatsword: "axe",
+  bow: "longbow",
+  sabres: "sword_shield",
+  scythe: "axe",
+  runeblade: "sword_shield",
+  staff: "magic",
+  wand: "magic",
+  rifle: "rifle",
+  unarmed: "axe",
 };
 
 /**
@@ -48,324 +51,402 @@ export const WeaponToAnimPack = {
  * keyed as `${animClass}__${state}` e.g. 'greatsword__attack1', 'swordShield__cast'.
  */
 export const WeaponToAnimClass = {
-  greatsword: 'greatsword',
-  scythe:     'greatsword',
-  sabres:     'swordShield',
-  runeblade:  'swordShield',
-  staff:      'magic',
-  wand:       'magic',
-  bow:        'longbow',
-  rifle:      'rifle',
-  unarmed:    'greatsword',
+  greatsword: "greatsword",
+  scythe: "greatsword",
+  sabres: "swordShield",
+  runeblade: "swordShield",
+  staff: "magic",
+  wand: "magic",
+  bow: "longbow",
+  rifle: "rifle",
+  unarmed: "greatsword",
 };
 
 /** Animation state loop config — true = loops, false = plays once */
 export const CORE_ANIMS = {
   // Locomotion (loop)
-  idle: { loop: true }, idle2: { loop: true }, idle3: { loop: true },
-  run: { loop: true }, runBack: { loop: true },
-  runLeft: { loop: true }, runRight: { loop: true },
-  walk: { loop: true }, walkBack: { loop: true },
-  walkLeft: { loop: true }, walkRight: { loop: true },
-  strafeLeft: { loop: true }, strafeRight: { loop: true },
+  idle: { loop: true },
+  idle2: { loop: true },
+  idle3: { loop: true },
+  run: { loop: true },
+  runBack: { loop: true },
+  runLeft: { loop: true },
+  runRight: { loop: true },
+  walk: { loop: true },
+  walkBack: { loop: true },
+  walkLeft: { loop: true },
+  walkRight: { loop: true },
+  strafeLeft: { loop: true },
+  strafeRight: { loop: true },
   sprint: { loop: true },
-  crouch: { loop: true }, crouchIdle: { loop: true },
-  crouchWalk: { loop: true }, crouchWalkBack: { loop: true },
-  aimIdle: { loop: true }, aimWalkFwd: { loop: true },
-  fallLoop: { loop: true }, jumpLoop: { loop: true },
-  blockIdle: { loop: true }, crouchBlockIdle: { loop: true },
+  crouch: { loop: true },
+  crouchIdle: { loop: true },
+  crouchWalk: { loop: true },
+  crouchWalkBack: { loop: true },
+  aimIdle: { loop: true },
+  aimWalkFwd: { loop: true },
+  fallLoop: { loop: true },
+  jumpLoop: { loop: true },
+  blockIdle: { loop: true },
+  crouchBlockIdle: { loop: true },
   // One-shot
-  attack1: { loop: false }, attack2: { loop: false }, attack3: { loop: false },
+  attack1: { loop: false },
+  attack2: { loop: false },
+  attack3: { loop: false },
   attack4: { loop: false },
-  slash1: { loop: false }, slash2: { loop: false }, slash3: { loop: false },
-  slash4: { loop: false }, slash5: { loop: false },
-  combo1: { loop: false }, combo2: { loop: false }, combo3: { loop: false },
-  spin: { loop: false }, spinLow: { loop: false },
-  kick: { loop: false }, kick2: { loop: false }, punch: { loop: false },
+  slash1: { loop: false },
+  slash2: { loop: false },
+  slash3: { loop: false },
+  slash4: { loop: false },
+  slash5: { loop: false },
+  combo1: { loop: false },
+  combo2: { loop: false },
+  combo3: { loop: false },
+  spin: { loop: false },
+  spinLow: { loop: false },
+  kick: { loop: false },
+  kick2: { loop: false },
+  punch: { loop: false },
   jumpAttack: { loop: false },
-  cast: { loop: false }, cast2: { loop: false }, cast2H: { loop: false },
-  aoe: { loop: false }, aoe2: { loop: false }, powerUp: { loop: false },
-  attack2H1: { loop: false }, attack2H2: { loop: false }, attack2H3: { loop: false },
-  attack2H4: { loop: false }, attack2H5: { loop: false },
-  block: { loop: false }, block2: { loop: false },
-  blockHit: { loop: false }, blockEnd: { loop: false },
+  cast: { loop: false },
+  cast2: { loop: false },
+  cast2H: { loop: false },
+  aoe: { loop: false },
+  aoe2: { loop: false },
+  powerUp: { loop: false },
+  attack2H1: { loop: false },
+  attack2H2: { loop: false },
+  attack2H3: { loop: false },
+  attack2H4: { loop: false },
+  attack2H5: { loop: false },
+  block: { loop: false },
+  block2: { loop: false },
+  blockHit: { loop: false },
+  blockEnd: { loop: false },
   crouchBlock: { loop: false },
-  dodge: { loop: false }, dodgeBack: { loop: false },
-  dodgeLeft: { loop: false }, dodgeRight: { loop: false },
+  dodge: { loop: false },
+  dodgeBack: { loop: false },
+  dodgeLeft: { loop: false },
+  dodgeRight: { loop: false },
   dive: { loop: false },
-  hit: { loop: false }, hit2: { loop: false }, hit3: { loop: false },
-  hitBack: { loop: false }, hitLeft: { loop: false }, hitRight: { loop: false },
-  hitGut: { loop: false }, hitHead: { loop: false }, hitSmall: { loop: false },
-  death: { loop: false }, death2: { loop: false },
-  deathBack: { loop: false }, deathLeft: { loop: false }, deathRight: { loop: false },
-  jump: { loop: false }, jumpRun: { loop: false },
-  jumpLand: { loop: false }, fallLand: { loop: false }, runStop: { loop: false },
-  land: { loop: false }, crouchStand: { loop: false },
-  draw: { loop: false }, draw2: { loop: false },
-  sheath: { loop: false }, disarm: { loop: false }, equip: { loop: false },
-  taunt: { loop: false }, taunt2: { loop: false },
-  turnLeft: { loop: false }, turnRight: { loop: false },
+  hit: { loop: false },
+  hit2: { loop: false },
+  hit3: { loop: false },
+  hitBack: { loop: false },
+  hitLeft: { loop: false },
+  hitRight: { loop: false },
+  hitGut: { loop: false },
+  hitHead: { loop: false },
+  hitSmall: { loop: false },
+  death: { loop: false },
+  death2: { loop: false },
+  deathBack: { loop: false },
+  deathLeft: { loop: false },
+  deathRight: { loop: false },
+  jump: { loop: false },
+  jumpRun: { loop: false },
+  jumpLand: { loop: false },
+  fallLand: { loop: false },
+  runStop: { loop: false },
+  land: { loop: false },
+  crouchStand: { loop: false },
+  draw: { loop: false },
+  draw2: { loop: false },
+  sheath: { loop: false },
+  disarm: { loop: false },
+  equip: { loop: false },
+  taunt: { loop: false },
+  taunt2: { loop: false },
+  turnLeft: { loop: false },
+  turnRight: { loop: false },
 };
 
 /** Full animation maps — all available GLBs per weapon pack */
 const ANIM_FILE_MAP = {
   axe: {
     // Locomotion
-    idle:     'standing idle.glb',
-    idle2:    'standing idle looking ver. 1.glb',
-    idle3:    'standing idle looking ver. 2.glb',
-    run:      'standing run forward.glb',
-    runBack:  'standing run back.glb',
-    walk:     'standing walk forward.glb',
-    walkBack: 'standing walk back.glb',
-    walkLeft: 'standing walk left.glb',
-    walkRight:'standing walk right.glb',
-    jump:     'standing jump.glb',
-    jumpAttack:'standing melee run jump attack.glb',
+    idle: "standing idle.glb",
+    idle2: "standing idle looking ver. 1.glb",
+    idle3: "standing idle looking ver. 2.glb",
+    run: "standing run forward.glb",
+    runBack: "standing run back.glb",
+    walk: "standing walk forward.glb",
+    walkBack: "standing walk back.glb",
+    walkLeft: "standing walk left.glb",
+    walkRight: "standing walk right.glb",
+    jump: "standing jump.glb",
+    jumpAttack: "standing melee run jump attack.glb",
     // Attacks
-    attack1:  'standing melee attack horizontal.glb',
-    attack2:  'standing melee attack downward.glb',
-    attack3:  'standing melee attack backhand.glb',
-    combo1:   'standing melee combo attack ver. 1.glb',
-    combo2:   'standing melee combo attack ver. 2.glb',
-    combo3:   'standing melee combo attack ver. 3.glb',
-    spin:     'standing melee attack 360 high.glb',
-    spinLow:  'standing melee attack 360 low.glb',
-    kick:     'standing melee attack kick ver. 1.glb',
-    kick2:    'standing melee attack kick ver. 2.glb',
+    attack1: "standing melee attack horizontal.glb",
+    attack2: "standing melee attack downward.glb",
+    attack3: "standing melee attack backhand.glb",
+    combo1: "standing melee combo attack ver. 1.glb",
+    combo2: "standing melee combo attack ver. 2.glb",
+    combo3: "standing melee combo attack ver. 3.glb",
+    spin: "standing melee attack 360 high.glb",
+    spinLow: "standing melee attack 360 low.glb",
+    kick: "standing melee attack kick ver. 1.glb",
+    kick2: "standing melee attack kick ver. 2.glb",
     // Defense
-    block:    'standing block idle.glb',
-    blockHit: 'standing block react large.glb',
-    crouch:   'crouch idle.glb',
-    crouchStand: 'crouch to standing idle.glb',
+    block: "standing block idle.glb",
+    blockHit: "standing block react large.glb",
+    crouch: "crouch idle.glb",
+    crouchStand: "crouch to standing idle.glb",
     // Reactions
-    hit:      'standing react large from left.glb',
-    hitRight: 'standing react large from right.glb',
-    hitGut:   'standing react large gut.glb',
+    hit: "standing react large from left.glb",
+    hitRight: "standing react large from right.glb",
+    hitGut: "standing react large gut.glb",
     // Utility
-    taunt:    'standing taunt battlecry.glb',
-    taunt2:   'standing taunt chest thump.glb',
-    equip:    'unarmed equip over shoulder.glb',
-    disarm:   'standing disarm over shoulder.glb',
-    turnLeft: 'standing turn left 90.glb',
-    turnRight:'standing turn right 90.glb',
+    taunt: "standing taunt battlecry.glb",
+    taunt2: "standing taunt chest thump.glb",
+    equip: "unarmed equip over shoulder.glb",
+    disarm: "standing disarm over shoulder.glb",
+    turnLeft: "standing turn left 90.glb",
+    turnRight: "standing turn right 90.glb",
   },
   sword_shield: {
     // Locomotion
-    idle:     'sword and shield idle.glb',
-    idle2:    'sword and shield idle (2).glb',
-    idle3:    'sword and shield idle (3).glb',
-    run:      'sword and shield run.glb',
-    runBack:  'sword and shield run (2).glb',
-    walk:     'sword and shield walk.glb',
-    walkBack: 'sword and shield walk (2).glb',
-    strafeLeft:'sword and shield strafe.glb',
-    strafeRight:'sword and shield strafe (2).glb',
-    jump:     'sword and shield jump.glb',
-    crouch:   'sword and shield crouch.glb',
-    crouchIdle:'sword and shield crouch idle.glb',
+    idle: "sword and shield idle.glb",
+    idle2: "sword and shield idle (2).glb",
+    idle3: "sword and shield idle (3).glb",
+    run: "sword and shield run.glb",
+    runBack: "sword and shield run (2).glb",
+    walk: "sword and shield walk.glb",
+    walkBack: "sword and shield walk (2).glb",
+    strafeLeft: "sword and shield strafe.glb",
+    strafeRight: "sword and shield strafe (2).glb",
+    jump: "sword and shield jump.glb",
+    crouch: "sword and shield crouch.glb",
+    crouchIdle: "sword and shield crouch idle.glb",
     // Attacks
-    attack1:  'sword and shield attack.glb',
-    attack2:  'sword and shield attack (2).glb',
-    attack3:  'sword and shield attack (3).glb',
-    attack4:  'sword and shield attack (4).glb',
-    slash1:   'sword and shield slash.glb',
-    slash2:   'sword and shield slash (2).glb',
-    slash3:   'sword and shield slash (3).glb',
-    slash4:   'sword and shield slash (4).glb',
-    slash5:   'sword and shield slash (5).glb',
-    kick:     'sword and shield kick.glb',
-    cast:     'sword and shield casting.glb',
-    cast2:    'sword and shield casting (2).glb',
-    powerUp:  'sword and shield power up.glb',
+    attack1: "sword and shield attack.glb",
+    attack2: "sword and shield attack (2).glb",
+    attack3: "sword and shield attack (3).glb",
+    attack4: "sword and shield attack (4).glb",
+    slash1: "sword and shield slash.glb",
+    slash2: "sword and shield slash (2).glb",
+    slash3: "sword and shield slash (3).glb",
+    slash4: "sword and shield slash (4).glb",
+    slash5: "sword and shield slash (5).glb",
+    kick: "sword and shield kick.glb",
+    cast: "sword and shield casting.glb",
+    cast2: "sword and shield casting (2).glb",
+    powerUp: "sword and shield power up.glb",
     // Defense
-    block:    'sword and shield block.glb',
-    block2:   'sword and shield block (2).glb',
-    blockIdle:'sword and shield block idle.glb',
-    crouchBlock:'sword and shield crouch block.glb',
-    crouchBlockIdle:'sword and shield crouch block idle.glb',
+    block: "sword and shield block.glb",
+    block2: "sword and shield block (2).glb",
+    blockIdle: "sword and shield block idle.glb",
+    crouchBlock: "sword and shield crouch block.glb",
+    crouchBlockIdle: "sword and shield crouch block idle.glb",
     // Reactions
-    hit:      'sword and shield impact.glb',
-    hit2:     'sword and shield impact (2).glb',
-    hit3:     'sword and shield impact (3).glb',
-    death:    'sword and shield death.glb',
-    death2:   'sword and shield death (2).glb',
+    hit: "sword and shield impact.glb",
+    hit2: "sword and shield impact (2).glb",
+    hit3: "sword and shield impact (3).glb",
+    death: "sword and shield death.glb",
+    death2: "sword and shield death (2).glb",
     // Utility
-    draw:     'draw sword 1.glb',
-    draw2:    'draw sword 2.glb',
-    sheath:   'sheath sword 1.glb',
-    turnLeft: 'sword and shield turn.glb',
-    turnRight:'sword and shield turn (2).glb',
+    draw: "draw sword 1.glb",
+    draw2: "draw sword 2.glb",
+    sheath: "sheath sword 1.glb",
+    turnLeft: "sword and shield turn.glb",
+    turnRight: "sword and shield turn (2).glb",
   },
   longbow: {
     // Locomotion
-    idle:     'standing idle 01.glb',
-    idle2:    'standing idle 02 looking.glb',
-    idle3:    'standing idle 03 examine.glb',
-    run:      'standing run forward.glb',
-    runBack:  'standing run back.glb',
-    runLeft:  'standing run left.glb',
-    runRight: 'standing run right.glb',
-    runStop:  'standing run forward stop.glb',
-    walk:     'standing walk forward.glb',
-    walkBack: 'standing walk back.glb',
-    walkLeft: 'standing walk left.glb',
-    walkRight:'standing walk right.glb',
-    aimWalkFwd:'standing aim walk forward.glb',
-    aimWalkBack:'standing aim walk back.glb',
-    aimWalkLeft:'standing aim walk left.glb',
-    aimWalkRight:'standing aim walk right.glb',
-    fallLoop: 'fall a loop.glb',
-    fallLand: 'fall a land to standing idle 01.glb',
+    idle: "standing idle 01.glb",
+    idle2: "standing idle 02 looking.glb",
+    idle3: "standing idle 03 examine.glb",
+    run: "standing run forward.glb",
+    runBack: "standing run back.glb",
+    runLeft: "standing run left.glb",
+    runRight: "standing run right.glb",
+    runStop: "standing run forward stop.glb",
+    walk: "standing walk forward.glb",
+    walkBack: "standing walk back.glb",
+    walkLeft: "standing walk left.glb",
+    walkRight: "standing walk right.glb",
+    aimWalkFwd: "standing aim walk forward.glb",
+    aimWalkBack: "standing aim walk back.glb",
+    aimWalkLeft: "standing aim walk left.glb",
+    aimWalkRight: "standing aim walk right.glb",
+    fallLoop: "fall a loop.glb",
+    fallLand: "fall a land to standing idle 01.glb",
     // Attacks
-    attack1:  'standing draw arrow.glb',
-    attack2:  'standing aim recoil.glb',
-    attack3:  'standing aim overdraw.glb',
-    kick:     'standing melee kick.glb',
-    punch:    'standing melee punch.glb',
+    attack1: "standing draw arrow.glb",
+    attack2: "standing aim recoil.glb",
+    attack3: "standing aim overdraw.glb",
+    kick: "standing melee kick.glb",
+    punch: "standing melee punch.glb",
     // Defense
-    block:    'standing block.glb',
-    dodge:    'standing dodge forward.glb',
-    dodgeBack:'standing dodge backward.glb',
-    dodgeLeft:'standing dodge left.glb',
-    dodgeRight:'standing dodge right.glb',
-    dive:     'standing dive forward.glb',
+    block: "standing block.glb",
+    dodge: "standing dodge forward.glb",
+    dodgeBack: "standing dodge backward.glb",
+    dodgeLeft: "standing dodge left.glb",
+    dodgeRight: "standing dodge right.glb",
+    dive: "standing dive forward.glb",
     // Reactions
-    hit:      'standing react small from front.glb',
-    hitHead:  'standing react small from headshot.glb',
-    death:    'standing death forward 01.glb',
-    deathBack:'standing death backward 01.glb',
+    hit: "standing react small from front.glb",
+    hitHead: "standing react small from headshot.glb",
+    death: "standing death forward 01.glb",
+    deathBack: "standing death backward 01.glb",
     // Utility
-    draw:     'standing equip bow.glb',
-    disarm:   'standing disarm bow.glb',
-    turnLeft: 'standing turn 90 left.glb',
-    turnRight:'standing turn 90 right.glb',
+    draw: "standing equip bow.glb",
+    disarm: "standing disarm bow.glb",
+    turnLeft: "standing turn 90 left.glb",
+    turnRight: "standing turn 90 right.glb",
   },
   magic: {
     // Locomotion
-    idle:     'standing idle.glb',
-    idle2:    'standing idle 02.glb',
-    idle3:    'Standing Idle 03.glb',
-    run:      'Standing Run Forward.glb',
-    runBack:  'Standing Run Back.glb',
-    runLeft:  'Standing Run Left.glb',
-    runRight: 'Standing Run Right.glb',
-    walk:     'Standing Walk Forward.glb',
-    walkBack: 'Standing Walk Back.glb',
-    walkLeft: 'Standing Walk Left.glb',
-    walkRight:'Standing Walk Right.glb',
-    sprint:   'Standing Sprint Forward.glb',
-    jump:     'Standing Jump.glb',
-    jumpRun:  'Standing Jump Running.glb',
-    land:     'Standing Land To Standing Idle.glb',
-    crouch:   'Crouch Idle.glb',
-    crouchWalk:'Crouch Walk Forward.glb',
-    crouchWalkBack:'Crouch Walk Back.glb',
+    idle: "standing idle.glb",
+    idle2: "standing idle 02.glb",
+    idle3: "Standing Idle 03.glb",
+    run: "Standing Run Forward.glb",
+    runBack: "Standing Run Back.glb",
+    runLeft: "Standing Run Left.glb",
+    runRight: "Standing Run Right.glb",
+    walk: "Standing Walk Forward.glb",
+    walkBack: "Standing Walk Back.glb",
+    walkLeft: "Standing Walk Left.glb",
+    walkRight: "Standing Walk Right.glb",
+    sprint: "Standing Sprint Forward.glb",
+    jump: "Standing Jump.glb",
+    jumpRun: "Standing Jump Running.glb",
+    land: "Standing Land To Standing Idle.glb",
+    crouch: "Crouch Idle.glb",
+    crouchWalk: "Crouch Walk Forward.glb",
+    crouchWalkBack: "Crouch Walk Back.glb",
     // Attacks
-    attack1:  'Standing 1H Magic Attack 01.glb',
-    attack2:  'Standing 1H Magic Attack 02.glb',
-    attack3:  'Standing 1H Magic Attack 03.glb',
-    attack2H1:'Standing 2H Magic Attack 01.glb',
-    attack2H2:'Standing 2H Magic Attack 02.glb',
-    attack2H3:'Standing 2H Magic Attack 03.glb',
-    attack2H4:'Standing 2H Magic Attack 04.glb',
-    attack2H5:'Standing 2H Magic Attack 05.glb',
-    cast:     'standing 1H cast spell 01.glb',
-    cast2H:   'Standing 2H Cast Spell 01.glb',
-    aoe:      'Standing 2H Magic Area Attack 01.glb',
-    aoe2:     'Standing 2H Magic Area Attack 02.glb',
+    attack1: "Standing 1H Magic Attack 01.glb",
+    attack2: "Standing 1H Magic Attack 02.glb",
+    attack3: "Standing 1H Magic Attack 03.glb",
+    attack2H1: "Standing 2H Magic Attack 01.glb",
+    attack2H2: "Standing 2H Magic Attack 02.glb",
+    attack2H3: "Standing 2H Magic Attack 03.glb",
+    attack2H4: "Standing 2H Magic Attack 04.glb",
+    attack2H5: "Standing 2H Magic Attack 05.glb",
+    cast: "standing 1H cast spell 01.glb",
+    cast2H: "Standing 2H Cast Spell 01.glb",
+    aoe: "Standing 2H Magic Area Attack 01.glb",
+    aoe2: "Standing 2H Magic Area Attack 02.glb",
     // Defense
-    block:    'Standing Block Start.glb',
-    blockIdle:'Standing Block Idle.glb',
-    blockEnd: 'Standing Block End.glb',
-    blockHit: 'Standing Block React Large.glb',
+    block: "Standing Block Start.glb",
+    blockIdle: "Standing Block Idle.glb",
+    blockEnd: "Standing Block End.glb",
+    blockHit: "Standing Block React Large.glb",
     // Reactions
-    hit:      'Standing React Large From Front.glb',
-    hitBack:  'Standing React Large From Back.glb',
-    hitLeft:  'Standing React Large From Left.glb',
-    hitRight: 'Standing React Large From Right.glb',
-    hitSmall: 'Standing React Small From Front.glb',
-    death:    'Standing React Death Forward.glb',
-    deathBack:'Standing React Death Backward.glb',
-    deathLeft:'Standing React Death Left.glb',
-    deathRight:'Standing React Death Right.glb',
+    hit: "Standing React Large From Front.glb",
+    hitBack: "Standing React Large From Back.glb",
+    hitLeft: "Standing React Large From Left.glb",
+    hitRight: "Standing React Large From Right.glb",
+    hitSmall: "Standing React Small From Front.glb",
+    death: "Standing React Death Forward.glb",
+    deathBack: "Standing React Death Backward.glb",
+    deathLeft: "Standing React Death Left.glb",
+    deathRight: "Standing React Death Right.glb",
     // Utility
-    turnLeft: 'Standing Turn Left 90.glb',
-    turnRight:'Standing Turn Right 90.glb',
+    turnLeft: "Standing Turn Left 90.glb",
+    turnRight: "Standing Turn Right 90.glb",
   },
   rifle: {
     // Locomotion
-    idle:     'idle.glb',
-    aimIdle:  'idle aiming.glb',
-    run:      'run forward.glb',
-    runBack:  'run backward.glb',
-    runLeft:  'run left.glb',
-    runRight: 'run right.glb',
-    walk:     'walk forward.glb',
-    walkBack: 'walk backward.glb',
-    walkLeft: 'walk left.glb',
-    walkRight:'walk right.glb',
-    sprint:   'sprint forward.glb',
-    sprintLeft:'sprint left.glb',
-    sprintRight:'sprint right.glb',
-    jump:     'jump up.glb',
-    jumpLoop: 'jump loop.glb',
-    jumpLand: 'jump down.glb',
-    crouch:   'idle crouching.glb',
-    crouchAim:'idle crouching aiming.glb',
-    crouchWalk:'walk crouching forward.glb',
-    crouchWalkBack:'walk crouching backward.glb',
+    idle: "idle.glb",
+    aimIdle: "idle aiming.glb",
+    run: "run forward.glb",
+    runBack: "run backward.glb",
+    runLeft: "run left.glb",
+    runRight: "run right.glb",
+    walk: "walk forward.glb",
+    walkBack: "walk backward.glb",
+    walkLeft: "walk left.glb",
+    walkRight: "walk right.glb",
+    sprint: "sprint forward.glb",
+    sprintLeft: "sprint left.glb",
+    sprintRight: "sprint right.glb",
+    jump: "jump up.glb",
+    jumpLoop: "jump loop.glb",
+    jumpLand: "jump down.glb",
+    crouch: "idle crouching.glb",
+    crouchAim: "idle crouching aiming.glb",
+    crouchWalk: "walk crouching forward.glb",
+    crouchWalkBack: "walk crouching backward.glb",
     // Attacks
-    attack1:  'idle aiming.glb',
+    attack1: "idle aiming.glb",
     // Reactions
-    hit:      'death from front headshot.glb',
-    hitBack:  'death from back headshot.glb',
-    death:    'death from the front.glb',
-    deathBack:'death from the back.glb',
-    deathRight:'death from right.glb',
-    deathCrouch:'death crouching headshot front.glb',
+    hit: "death from front headshot.glb",
+    hitBack: "death from back headshot.glb",
+    death: "death from the front.glb",
+    deathBack: "death from the back.glb",
+    deathRight: "death from right.glb",
+    deathCrouch: "death crouching headshot front.glb",
     // Utility
-    turnLeft: 'turn 90 left.glb',
-    turnRight:'turn 90 right.glb',
+    turnLeft: "turn 90 left.glb",
+    turnRight: "turn 90 right.glb",
   },
 };
 
 /** Audio SFX paths per weapon type (matched to actual filenames) */
 export const WEAPON_SFX = {
   greatsword: {
-    attack: ['/audio/sfx/sword/swing_1.mp3', '/audio/sfx/sword/swing_2.mp3', '/audio/sfx/sword/swing_3.mp3'],
-    skill:  ['/audio/sfx/sword/charge.mp3', '/audio/sfx/sword/colossus_strike.mp3', '/audio/sfx/sword/windshear.mp3'],
-    block:  ['/audio/sfx/sword/deflect.mp3'],
+    attack: [
+      "/audio/sfx/sword/swing_1.mp3",
+      "/audio/sfx/sword/swing_2.mp3",
+      "/audio/sfx/sword/swing_3.mp3",
+    ],
+    skill: [
+      "/audio/sfx/sword/charge.mp3",
+      "/audio/sfx/sword/colossus_strike.mp3",
+      "/audio/sfx/sword/windshear.mp3",
+    ],
+    block: ["/audio/sfx/sword/deflect.mp3"],
   },
   scythe: {
-    attack: ['/audio/sfx/scythe/entropic_bolts.mp3'],
-    skill:  ['/audio/sfx/scythe/cryoflame.mp3', '/audio/sfx/scythe/crossentropy.mp3', '/audio/sfx/scythe/frost_nova.mp3', '/audio/sfx/scythe/sunwell.mp3'],
+    attack: ["/audio/sfx/scythe/entropic_bolts.mp3"],
+    skill: [
+      "/audio/sfx/scythe/cryoflame.mp3",
+      "/audio/sfx/scythe/crossentropy.mp3",
+      "/audio/sfx/scythe/frost_nova.mp3",
+      "/audio/sfx/scythe/sunwell.mp3",
+    ],
   },
   sabres: {
-    attack: ['/audio/sfx/sabres/sabres_swing.mp3'],
-    skill:  ['/audio/sfx/sabres/backstab.mp3', '/audio/sfx/sabres/flourish.mp3', '/audio/sfx/sabres/shadow_step.mp3', '/audio/sfx/sabres/skyfall.mp3'],
+    attack: ["/audio/sfx/sabres/sabres_swing.mp3"],
+    skill: [
+      "/audio/sfx/sabres/backstab.mp3",
+      "/audio/sfx/sabres/flourish.mp3",
+      "/audio/sfx/sabres/shadow_step.mp3",
+      "/audio/sfx/sabres/skyfall.mp3",
+    ],
   },
   runeblade: {
-    attack: ['/audio/sfx/runeblade/smite.mp3'],
-    skill:  ['/audio/sfx/runeblade/heartrend.mp3', '/audio/sfx/runeblade/wraithblade.mp3', '/audio/sfx/runeblade/void_grasp.mp3'],
+    attack: ["/audio/sfx/runeblade/smite.mp3"],
+    skill: [
+      "/audio/sfx/runeblade/heartrend.mp3",
+      "/audio/sfx/runeblade/wraithblade.mp3",
+      "/audio/sfx/runeblade/void_grasp.mp3",
+    ],
   },
   bow: {
-    attack: ['/audio/sfx/bow/draw.mp3', '/audio/sfx/bow/release.mp3'],
-    skill:  ['/audio/sfx/bow/cobra_shot_release.mp3', '/audio/sfx/bow/viper_sting_release.mp3', '/audio/sfx/bow/barrage_release.mp3', '/audio/sfx/bow/cloudkill_release.mp3'],
+    attack: ["/audio/sfx/bow/draw.mp3", "/audio/sfx/bow/release.mp3"],
+    skill: [
+      "/audio/sfx/bow/cobra_shot_release.mp3",
+      "/audio/sfx/bow/viper_sting_release.mp3",
+      "/audio/sfx/bow/barrage_release.mp3",
+      "/audio/sfx/bow/cloudkill_release.mp3",
+    ],
   },
   staff: {
-    attack: ['/audio/sfx/scythe/entropic_bolts.mp3'],
-    skill:  ['/audio/sfx/scythe/mantra.mp3', '/audio/sfx/scythe/cryoflame.mp3'],
+    attack: ["/audio/sfx/scythe/entropic_bolts.mp3"],
+    skill: ["/audio/sfx/scythe/mantra.mp3", "/audio/sfx/scythe/cryoflame.mp3"],
   },
   wand: {
-    attack: ['/audio/sfx/scythe/entropic_bolts.mp3'],
-    skill:  ['/audio/sfx/scythe/mantra.mp3'],
+    attack: ["/audio/sfx/scythe/entropic_bolts.mp3"],
+    skill: ["/audio/sfx/scythe/mantra.mp3"],
   },
   // UI sounds
   ui: {
-    select:  '/audio/sfx/ui/selection.mp3',
-    dash:    '/audio/sfx/ui/dash.mp3',
-    countdown:'/audio/sfx/ui/interface.mp3',
+    select: "/audio/sfx/ui/selection.mp3",
+    dash: "/audio/sfx/ui/dash.mp3",
+    countdown: "/audio/sfx/ui/interface.mp3",
   },
 };
 
@@ -391,29 +472,86 @@ export function playSFX(pathOrArray, volume = 0.3) {
 // We strip the prefix first, then apply the alias map.
 
 const MIXAMO_PREFIXES = [
-  'mixamorig10:', 'mixamorig9:', 'mixamorig8:', 'mixamorig7:',
-  'mixamorig6:', 'mixamorig5:', 'mixamorig4:', 'mixamorig3:',
-  'mixamorig2:', 'mixamorig1:', 'mixamorig:',
+  "mixamorig10:",
+  "mixamorig9:",
+  "mixamorig8:",
+  "mixamorig7:",
+  "mixamorig6:",
+  "mixamorig5:",
+  "mixamorig4:",
+  "mixamorig3:",
+  "mixamorig2:",
+  "mixamorig1:",
+  "mixamorig:",
 ];
 
-/** After stripping prefix, remap any names that differ between Mixamo standard and our models */
+/**
+ * Remap Mixamo bare bone names → Synty Bip001 bone names.
+ * After stripping the "mixamorig:" prefix we get e.g. "Hips", "Spine", "LeftArm".
+ * These need to map to the Bip001 convention used by all 6 race GLBs.
+ */
 const BONE_ALIASES = {
-  'Spine1':       'Spine01',
-  'Spine2':       'Spine02',
-  'Neck':         'neck',
-  'HeadTop_End':  'head_end',
-  'Reye':         'headfront',
-  'Leye':         'headfront',
+  // Root / spine
+  Hips: "Bip001 Pelvis",
+  Spine: "Bip001 Spine",
+  Spine1: "Bip001 Spine", // Mixamo only has Spine/Spine1/Spine2; Bip001 has Spine/Spine1
+  Spine2: "Bip001 Spine1",
+  // Head / neck
+  Neck: "Bip001 Neck",
+  Head: "Bip001 Head",
+  HeadTop_End: "Bip001 Head",
+  // Left arm
+  LeftShoulder: "Bip001 L Clavicle",
+  LeftArm: "Bip001 L UpperArm",
+  LeftForeArm: "Bip001 L Forearm",
+  LeftHand: "Bip001 L Hand",
+  // Right arm
+  RightShoulder: "Bip001 R Clavicle",
+  RightArm: "Bip001 R UpperArm",
+  RightForeArm: "Bip001 R Forearm",
+  RightHand: "Bip001 R Hand",
+  // Left leg
+  LeftUpLeg: "Bip001 L Thigh",
+  LeftLeg: "Bip001 L Calf",
+  LeftFoot: "Bip001 L Foot",
+  LeftToeBase: "Bip001 L Toe0",
+  // Right leg
+  RightUpLeg: "Bip001 R Thigh",
+  RightLeg: "Bip001 R Calf",
+  RightFoot: "Bip001 R Foot",
+  RightToeBase: "Bip001 R Toe0",
+  // Eyes (ignore — no matching bone)
+  Reye: null,
+  Leye: null,
 };
 
-/** Bones that exist on our 24-joint character skeleton. Tracks targeting anything else get stripped. */
+/**
+ * Bones that exist on the Synty/Bip001 character skeleton.
+ * Tracks targeting anything else get stripped.
+ */
 const VALID_BONES = new Set([
-  'Hips', 'Spine', 'Spine01', 'Spine02', 'neck', 'Head', 'head_end', 'headfront',
-  'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
-  'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
-  'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'LeftToeBase',
-  'RightUpLeg', 'RightLeg', 'RightFoot', 'RightToeBase',
-  'Armature',
+  "Bip001 Pelvis",
+  "Bip001 Spine",
+  "Bip001 Spine1",
+  "Bip001 Neck",
+  "Bip001 Head",
+  "Bip001 L Clavicle",
+  "Bip001 L UpperArm",
+  "Bip001 L Forearm",
+  "Bip001 L Hand",
+  "Bip001 R Clavicle",
+  "Bip001 R UpperArm",
+  "Bip001 R Forearm",
+  "Bip001 R Hand",
+  "Bip001 L Thigh",
+  "Bip001 L Calf",
+  "Bip001 L Foot",
+  "Bip001 L Toe0",
+  "Bip001 R Thigh",
+  "Bip001 R Calf",
+  "Bip001 R Foot",
+  "Bip001 R Toe0",
+  "Armature",
 ]);
 
 function stripMixamoPrefix(name) {
@@ -430,23 +568,31 @@ function stripMixamoPrefix(name) {
  */
 function remapClipBoneNames(clip) {
   for (const track of clip.tracks) {
-    const dotIdx = track.name.indexOf('.');
+    const dotIdx = track.name.indexOf(".");
     if (dotIdx === -1) continue;
     const bone = track.name.substring(0, dotIdx);
     const prop = track.name.substring(dotIdx);
-    
+
     // Step 1: strip mixamorig: prefix
     let remapped = stripMixamoPrefix(bone);
-    
-    // Step 2: apply alias map for bones that differ
-    if (BONE_ALIASES[remapped]) {
-      remapped = BONE_ALIASES[remapped];
+
+    // Step 2: apply alias map (Mixamo bare name → Bip001 name)
+    if (remapped in BONE_ALIASES) {
+      const mapped = BONE_ALIASES[remapped];
+      if (mapped === null) {
+        // Mark track for removal (no matching bone on target skeleton)
+        track.name = "__REMOVE__" + prop;
+        continue;
+      }
+      remapped = mapped;
     }
-    
+
     if (remapped !== bone) {
       track.name = remapped + prop;
     }
   }
+  // Remove tracks that were flagged for deletion (null-mapped bones)
+  clip.tracks = clip.tracks.filter((t) => !t.name.startsWith("__REMOVE__"));
   return clip;
 }
 
@@ -455,6 +601,206 @@ function remapClipBoneNames(clip) {
 const gltfCache = new Map();
 const clipCache = new Map();
 const gltfLoader = new GLTFLoader();
+const textureLoader = new THREE.TextureLoader();
+
+let _characterManifestPromise = null;
+let _humanBasemeshAnimPromise = null;
+const _raceTextureCache = new Map();
+
+const RACE_CHARACTER_PATHS = {
+  human: "/assets/characters/human/WK_Characters.glb",
+  barbarian: "/assets/characters/barbarian/BRB_Characters.glb",
+  elf: "/assets/characters/elf/ELF_Characters.glb",
+  dwarf: "/assets/characters/dwarf/DWF_Characters.glb",
+  orc: "/assets/characters/orc/ORC_Characters.glb",
+  undead: "/assets/characters/undead/UD_Characters.glb",
+};
+
+const HUMAN_BASEMESH_ANIM_SOURCE =
+  "/assets/characters/human_basemesh/HumanBaseMesh_WithEquips.glb";
+
+function raceModelPaths(race) {
+  const local = RACE_CHARACTER_PATHS[race];
+  return [
+    local,
+    `/api/assets/models/characters/${race}.glb`,
+    `/models/${race}.glb`,
+  ].filter(Boolean);
+}
+
+async function loadCharacterManifest() {
+  if (_characterManifestPromise) return _characterManifestPromise;
+  _characterManifestPromise = fetch("/models/characterManifest.json")
+    .then((r) => {
+      if (!r.ok) throw new Error(`manifest http ${r.status}`);
+      return r.json();
+    })
+    .catch((err) => {
+      console.warn("[modelLoader] characterManifest unavailable:", err.message);
+      return null;
+    });
+  return _characterManifestPromise;
+}
+
+async function loadRaceTextureMap(race) {
+  if (_raceTextureCache.has(race)) return _raceTextureCache.get(race);
+
+  const manifest = await loadCharacterManifest();
+  const texPath = manifest?.races?.[race]?.textures?.[0]?.file;
+  if (!texPath) {
+    _raceTextureCache.set(race, null);
+    return null;
+  }
+
+  const tex = await new Promise((resolve) => {
+    textureLoader.load(
+      texPath,
+      (loaded) => resolve(loaded),
+      undefined,
+      () => resolve(null),
+    );
+  });
+
+  if (!tex) {
+    _raceTextureCache.set(race, null);
+    return null;
+  }
+
+  tex.flipY = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  _raceTextureCache.set(race, tex);
+  return tex;
+}
+
+async function applyRaceTextureFix(scene, race) {
+  const atlas = await loadRaceTextureMap(race);
+  if (!atlas) return 0;
+
+  let patched = 0;
+  scene.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+
+    const mats = Array.isArray(child.material)
+      ? child.material
+      : [child.material];
+    for (const mat of mats) {
+      if (!mat?.isMeshStandardMaterial) continue;
+      if (mat.map) continue;
+      if (!child.geometry?.attributes?.uv) continue;
+
+      mat.map = atlas;
+      mat.color.set(0xffffff);
+      mat.needsUpdate = true;
+      patched++;
+    }
+  });
+
+  if (patched > 0) {
+    console.log(
+      `[modelLoader] ${race}: patched ${patched} material slots with race atlas`,
+    );
+  }
+  return patched;
+}
+
+async function loadHumanBasemeshAnimations() {
+  if (_humanBasemeshAnimPromise) return _humanBasemeshAnimPromise;
+  _humanBasemeshAnimPromise = new Promise((resolve) => {
+    gltfLoader.load(
+      HUMAN_BASEMESH_ANIM_SOURCE,
+      (gltf) => resolve(gltf.animations || []),
+      undefined,
+      () => resolve([]),
+    );
+  });
+  return _humanBasemeshAnimPromise;
+}
+
+function getTrackBindingStats(action) {
+  const bindings = action?._propertyBindings || [];
+  const total = bindings.length;
+  let bound = 0;
+  for (const binding of bindings) {
+    if (binding?.binding?.node) bound++;
+  }
+  return { total, bound, ratio: total > 0 ? bound / total : 0 };
+}
+
+function mapBasemeshClipToState(clipName) {
+  const n = (clipName || "").toLowerCase();
+  if (n.includes("idle")) return "idle";
+  if (n.includes("run")) return "run";
+  if (n.includes("walk")) return "walk";
+  if (n.includes("jump") && n.includes("land")) return "jumpLand";
+  if (n.includes("jump")) return "jump";
+  if (n.includes("block")) return "block";
+  if (n.includes("death")) return "death";
+  if (n.includes("hit") || n.includes("react")) return "hit";
+  if (n.includes("attack")) return "attack1";
+  return null;
+}
+
+async function registerCompatibleBasemeshAnimations(controller, mixer, root) {
+  const clips = await loadHumanBasemeshAnimations();
+  if (!clips.length) return { imported: 0, skipped: 0 };
+
+  let imported = 0;
+  let skipped = 0;
+
+  for (const srcClip of clips) {
+    const state = mapBasemeshClipToState(srcClip.name);
+    if (!state || controller.actions.has(state)) continue;
+
+    const clip = srcClip.clone();
+    remapClipBoneNames(clip);
+    clip.tracks = clip.tracks.filter((track) => {
+      const dot = track.name.indexOf(".");
+      if (dot === -1) return true;
+      return VALID_BONES.has(track.name.substring(0, dot));
+    });
+
+    const action = mixer.clipAction(clip, root);
+    const stats = getTrackBindingStats(action);
+    if (stats.total < 8 || stats.ratio < 0.45) {
+      skipped++;
+      continue;
+    }
+
+    controller.actions.set(state, action);
+    imported++;
+  }
+
+  if (imported > 0 || skipped > 0) {
+    console.log(
+      `[modelLoader] human_basemesh fallback clips: +${imported} compatible, ${skipped} skipped`,
+    );
+  }
+
+  return { imported, skipped };
+}
+
+async function loadGLTFWithFallback(paths) {
+  let lastError = null;
+  for (const path of paths) {
+    try {
+      let gltf = gltfCache.get(path);
+      if (!gltf) {
+        gltf = await new Promise((resolve, reject) => {
+          gltfLoader.load(path, resolve, undefined, reject);
+        });
+        gltfCache.set(path, gltf);
+      }
+      return { gltf, path };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw (
+    lastError ||
+    new Error(`Failed to load GLTF from paths: ${paths.join(", ")}`)
+  );
+}
 
 // ── Load race GLB model ─────────────────────────────────────────────────────
 
@@ -472,8 +818,12 @@ function cloneGLTFScene(source) {
   const sourceSkins = [];
   const cloneSkins = [];
 
-  source.traverse(node => { if (node.isSkinnedMesh) sourceSkins.push(node); });
-  clone.traverse(node => { if (node.isSkinnedMesh) cloneSkins.push(node); });
+  source.traverse((node) => {
+    if (node.isSkinnedMesh) sourceSkins.push(node);
+  });
+  clone.traverse((node) => {
+    if (node.isSkinnedMesh) cloneSkins.push(node);
+  });
 
   for (let i = 0; i < cloneSkins.length; i++) {
     const src = sourceSkins[i];
@@ -481,21 +831,24 @@ function cloneGLTFScene(source) {
     if (!src || !dst) continue;
 
     // Find matching bones in the cloned hierarchy by name
-    const newBones = src.skeleton.bones.map(srcBone => {
+    const newBones = src.skeleton.bones.map((srcBone) => {
       let found = null;
-      clone.traverse(node => {
+      clone.traverse((node) => {
         if (node.name === srcBone.name && node.isBone) found = node;
       });
       return found || srcBone;
     });
 
-    dst.skeleton = new THREE.Skeleton(newBones, src.skeleton.boneInverses.map(m => m.clone()));
+    dst.skeleton = new THREE.Skeleton(
+      newBones,
+      src.skeleton.boneInverses.map((m) => m.clone()),
+    );
     dst.bind(dst.skeleton, dst.matrixWorld);
 
     // Clone material so we don't mutate the cached original
     if (dst.material) {
       dst.material = Array.isArray(dst.material)
-        ? dst.material.map(m => m.clone())
+        ? dst.material.map((m) => m.clone())
         : dst.material.clone();
     }
   }
@@ -504,21 +857,13 @@ function cloneGLTFScene(source) {
 }
 
 export async function loadRaceModel(race) {
-  const path = `/models/${race}.glb`;
-  let gltf = gltfCache.get(path);
-
-  if (!gltf) {
-    gltf = await new Promise((resolve, reject) => {
-      gltfLoader.load(path, resolve, undefined, reject);
-    });
-    gltfCache.set(path, gltf);
-  }
+  const { gltf, path } = await loadGLTFWithFallback(raceModelPaths(race));
 
   // Properly clone with skeleton rebinding
   const scene = cloneGLTFScene(gltf.scene);
 
   // Enable shadows, fix materials
-  scene.traverse(child => {
+  scene.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
       child.receiveShadow = true;
@@ -528,6 +873,8 @@ export async function loadRaceModel(race) {
       }
     }
   });
+
+  await applyRaceTextureFix(scene, race);
 
   // IMPORTANT: Do NOT overwrite the root scale.
   // GLB models have root scale 0.01 (centimeter units) baked in.
@@ -546,9 +893,9 @@ export async function loadRaceModel(race) {
   // The idle anim is loaded from the weapon animation pack (see ANIM_FILE_MAP).
   // Only alias for locomotion fallback if the clip doesn't exist in the pack.
   const EMBEDDED_ALIASES = {
-    'running': ['run'],           // Running → run only (NOT idle)
-    'walking': ['walk'],
-    'idle':    [],                 // Idle comes from weapon anim pack
+    running: ["run"], // Running → run only (NOT idle)
+    walking: ["walk"],
+    idle: [], // Idle comes from weapon anim pack
   };
   for (const clip of gltf.animations) {
     const clonedClip = clip.clone();
@@ -563,7 +910,9 @@ export async function loadRaceModel(race) {
     }
   }
 
-  console.log(`[modelLoader] Loaded ${race} — scale: ${nativeScale * cfg.scale}, embeddedAnims: [${[...actions.keys()].join(', ')}]`);
+  console.log(
+    `[modelLoader] Loaded ${race} — scale: ${nativeScale * cfg.scale}, embeddedAnims: [${[...actions.keys()].join(", ")}]`,
+  );
   return { scene, mixer, actions, clips: gltf.animations };
 }
 
@@ -576,8 +925,8 @@ export async function loadRaceModel(race) {
  */
 export async function loadAnimClip(filePath) {
   // URL-encode spaces in file paths (Mixamo filenames have spaces)
-  const encodedPath = filePath.replace(/ /g, '%20');
-  
+  const encodedPath = filePath.replace(/ /g, "%20");
+
   const cached = clipCache.get(filePath);
   if (cached) return cached.clone();
 
@@ -592,8 +941,8 @@ export async function loadAnimClip(filePath) {
     const clip = remapClipBoneNames(gltf.animations[0]);
 
     // Strip tracks targeting bones that don't exist on our 24-joint skeleton.
-    clip.tracks = clip.tracks.filter(track => {
-      const dotIdx = track.name.indexOf('.');
+    clip.tracks = clip.tracks.filter((track) => {
+      const dotIdx = track.name.indexOf(".");
       if (dotIdx === -1) return true;
       const boneName = track.name.substring(0, dotIdx);
       return VALID_BONES.has(boneName);
@@ -620,7 +969,7 @@ export async function loadAnimClip(filePath) {
  * @returns {Map<string, THREE.AnimationAction>} stateName → action
  */
 export async function preloadWeaponAnims(weaponType, mixer, root) {
-  const packName = WeaponToAnimPack[weaponType] || 'axe';
+  const packName = WeaponToAnimPack[weaponType] || "axe";
   const fileMap = ANIM_FILE_MAP[packName];
   if (!fileMap) {
     console.warn(`[modelLoader] No anim pack for weapon: ${weaponType}`);
@@ -631,19 +980,19 @@ export async function preloadWeaponAnims(weaponType, mixer, root) {
   const entries = Object.entries(fileMap);
   const results = await Promise.allSettled(
     entries.map(([state, file]) =>
-      loadAnimClip(basePath + file).then(clip => ({ state, clip }))
-    )
+      loadAnimClip(basePath + file).then((clip) => ({ state, clip })),
+    ),
   );
 
   const actions = new Map();
   let boundTracks = 0;
   let totalTracks = 0;
   for (const result of results) {
-    if (result.status === 'fulfilled' && result.value.clip) {
+    if (result.status === "fulfilled" && result.value.clip) {
       const { state, clip } = result.value;
       clip.name = state;
       totalTracks += clip.tracks.length;
-      
+
       // Verify tracks bind to bones in the character hierarchy
       const action = mixer.clipAction(clip, root);
       // Count how many property bindings resolved
@@ -654,14 +1003,25 @@ export async function preloadWeaponAnims(weaponType, mixer, root) {
     }
   }
 
-  console.log(`[modelLoader] Loaded ${actions.size}/${entries.length} anims for ${weaponType} (${packName}), ${boundTracks}/${totalTracks} tracks bound`);
+  console.log(
+    `[modelLoader] Loaded ${actions.size}/${entries.length} anims for ${weaponType} (${packName}), ${boundTracks}/${totalTracks} tracks bound`,
+  );
   return actions;
 }
 
 // ── fadeToAction — smooth animation crossfade (annihilate pattern) ───────────
 
-export function fadeToAction(currentAction, nextAction, duration = 0.15, loop = true, speed = 1) {
-  nextAction.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
+export function fadeToAction(
+  currentAction,
+  nextAction,
+  duration = 0.15,
+  loop = true,
+  speed = 1,
+) {
+  nextAction.setLoop(
+    loop ? THREE.LoopRepeat : THREE.LoopOnce,
+    loop ? Infinity : 1,
+  );
   nextAction.clampWhenFinished = !loop;
   nextAction.timeScale = speed;
 
@@ -1026,7 +1386,7 @@ function createWeaponMesh(weaponType) {
 export function attachWeaponToBone(
   characterScene,
   weaponMesh,
-  boneName = "RightHand",
+  boneName = "Bip001 R Hand",
 ) {
   let handBone = null;
 
@@ -1220,34 +1580,54 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   }
 
   applyCommonClipAliases(controller.actions);
+  await registerCompatibleBasemeshAnimations(controller, mixer, scene);
 
   console.log(
     `[modelLoader] ${raceConfig.name} (${raceConfig.faction}) unit ready: ${controller.actions.size} anims (${bareRegistered} bare-aliased from '${animClass}'), weapon: ${resolvedWeapon}, tier: ${tierCfg.name}`,
   );
 
-  // Create and attach weapon mesh with race faction tint + tier glow
-  const weapon = createWeaponMesh(resolvedWeapon);
-  tintWeaponMesh(weapon, raceConfig.gearTint, factionColors.emissive, tierCfg);
-  attachWeaponToBone(scene, weapon, "RightHand");
-
-  // Attach shield to LeftHand for sword+shield weapons
-  const shieldWeapons = ["sabres", "runeblade"];
-  if (shieldWeapons.includes(resolvedWeapon)) {
-    const shield = createShieldMesh();
+  let equipment = null;
+  if (isD1ModularScene(scene)) {
+    equipment = new EquipmentManager(scene);
+    equipment.applyLoadout(resolvedWeapon);
+  } else {
+    // Legacy fallback path for non-D1 meshes
+    const weapon = createWeaponMesh(resolvedWeapon);
     tintWeaponMesh(
-      shield,
+      weapon,
       raceConfig.gearTint,
       factionColors.emissive,
       tierCfg,
     );
-    shield.rotation.set(-Math.PI / 2, 0, Math.PI);
-    attachWeaponToBone(scene, shield, "LeftHand");
+    attachWeaponToBone(scene, weapon, "Bip001 R Hand");
+
+    const shieldWeapons = ["sabres", "runeblade"];
+    if (shieldWeapons.includes(resolvedWeapon)) {
+      const shield = createShieldMesh();
+      tintWeaponMesh(
+        shield,
+        raceConfig.gearTint,
+        factionColors.emissive,
+        tierCfg,
+      );
+      shield.rotation.set(-Math.PI / 2, 0, Math.PI);
+      attachWeaponToBone(scene, shield, "Bip001 L Hand");
+    }
   }
 
   // Start idle animation
   controller.play("idle");
 
-  return { scene, mixer, controller, raceConfig, resolvedWeapon, tier, race };
+  return {
+    scene,
+    mixer,
+    controller,
+    raceConfig,
+    resolvedWeapon,
+    tier,
+    race,
+    equipment,
+  };
 }
 
 /**
@@ -1305,17 +1685,11 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
   const animClass = WeaponToAnimClass[weaponType] || "greatsword";
   const prefix = `${animClass}__`;
 
-  // Try hero-specific pack GLB, fall back to generic race model
+  // Try hero-specific Cloudflare/local GLB, then generic race fallback.
   let scene, mixer, embeddedActions;
   try {
-    const path = hero.modelPath;
-    let gltf = gltfCache.get(path);
-    if (!gltf) {
-      gltf = await new Promise((resolve, reject) => {
-        gltfLoader.load(path, resolve, undefined, reject);
-      });
-      gltfCache.set(path, gltf);
-    }
+    const candidates = [hero.modelPath, hero.fallbackModel].filter(Boolean);
+    const { gltf, path } = await loadGLTFWithFallback(candidates);
     scene = cloneGLTFScene(gltf.scene);
     scene.traverse((child) => {
       if (child.isMesh) {
@@ -1326,6 +1700,7 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
           child.material.metalness = Math.min(child.material.metalness, 0.6);
       }
     });
+    await applyRaceTextureFix(scene, hero.race);
     const nativeScale = scene.scale.x;
     scene.scale.setScalar(nativeScale * (hero.scale ?? 1.0));
     mixer = new THREE.AnimationMixer(scene);
@@ -1372,23 +1747,34 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
   }
 
   applyCommonClipAliases(controller.actions);
+  await registerCompatibleBasemeshAnimations(controller, mixer, scene);
 
-  // Attach weapon mesh
-  const weapon = createWeaponMesh(weaponType);
-  tintWeaponMesh(weapon, raceConfig.gearTint, factionColors.emissive, tierCfg);
-  attachWeaponToBone(scene, weapon, "RightHand");
-
-  const shieldWeapons = ["sabres", "runeblade"];
-  if (shieldWeapons.includes(weaponType)) {
-    const shield = createShieldMesh();
+  let equipment = null;
+  if (isD1ModularScene(scene)) {
+    equipment = new EquipmentManager(scene);
+    equipment.applyLoadout(weaponType);
+  } else {
+    const weapon = createWeaponMesh(weaponType);
     tintWeaponMesh(
-      shield,
+      weapon,
       raceConfig.gearTint,
       factionColors.emissive,
       tierCfg,
     );
-    shield.rotation.set(-Math.PI / 2, 0, Math.PI);
-    attachWeaponToBone(scene, shield, "LeftHand");
+    attachWeaponToBone(scene, weapon, "RightHand");
+
+    const shieldWeapons = ["sabres", "runeblade"];
+    if (shieldWeapons.includes(weaponType)) {
+      const shield = createShieldMesh();
+      tintWeaponMesh(
+        shield,
+        raceConfig.gearTint,
+        factionColors.emissive,
+        tierCfg,
+      );
+      shield.rotation.set(-Math.PI / 2, 0, Math.PI);
+      attachWeaponToBone(scene, shield, "LeftHand");
+    }
   }
 
   controller.play("idle");
@@ -1405,6 +1791,7 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
     tier,
     hero,
     race: hero.race,
+    equipment,
   };
 }
 

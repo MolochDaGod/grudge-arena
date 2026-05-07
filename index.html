@@ -70,6 +70,14 @@
       </div>
 
       <div class="race-title">Create Arena Champion</div>
+      <div class="selection-spotlight" id="selection-spotlight">
+        <div class="spotlight-icon" id="spotlight-icon">🛡️</div>
+        <div class="spotlight-copy">
+          <div class="spotlight-title" id="spotlight-title">Human · The Ironwall</div>
+          <div class="spotlight-meta" id="spotlight-meta">Faction: Crusade · Archetype: Warrior</div>
+          <div class="spotlight-lore" id="spotlight-lore">A veteran of a hundred crusades. His shield has never broken.</div>
+        </div>
+      </div>
       
       <div class="builder-grid">
         <div class="builder-column">
@@ -175,6 +183,7 @@
 
       <button class="enter-btn" id="enter-btn" onclick="enterArena()">⚔ ENTER THE ARENA</button>
       <button class="queue-btn" onclick="joinQueue()">🔍 Find PvP Match</button>
+      <div class="builder-readiness" id="builder-readiness">Allocate all 160 points to unlock Enter Arena.</div>
       <a class="back-link" href="https://grudge-studio.com">← Back to The Engine</a>
     </div>
   </div>
@@ -309,6 +318,58 @@ let grudgeUser = null;
     ranger: 'bow',
     assassin: 'sabres',
   };
+
+      const RACE_WEAPON_ALLOWLIST = {
+        human: ['greatsword', 'sabres', 'runeblade', 'bow', 'scythe'],
+        barbarian: ['greatsword', 'scythe', 'sabres', 'bow'],
+        elf: ['bow', 'sabres', 'runeblade', 'scythe'],
+        dwarf: ['greatsword', 'runeblade', 'sabres', 'scythe'],
+        orc: ['greatsword', 'scythe', 'sabres', 'bow'],
+        undead: ['scythe', 'runeblade', 'bow', 'greatsword'],
+      };
+
+      const RACE_DETAILS = {
+        human: {
+          icon: '🛡️',
+          title: 'Human · The Ironwall',
+          meta: 'Faction: Crusade · Archetype: Warrior',
+          lore: 'A veteran of a hundred crusades. His shield has never broken.',
+        },
+        barbarian: {
+          icon: '⚔️',
+          title: 'Barbarian · The Immortal',
+          meta: 'Faction: Crusade · Archetype: Warrior',
+          lore: 'Rage is his armor. Death is his offering.',
+        },
+        elf: {
+          icon: '🏹',
+          title: 'Elf · The Assassin',
+          meta: 'Faction: Fabled · Archetype: Ranger',
+          lore: 'Shadows are her home. Silence is her weapon.',
+        },
+        dwarf: {
+          icon: '🔨',
+          title: 'Dwarf · The Wall',
+          meta: 'Faction: Fabled · Archetype: Warrior',
+          lore: 'Built like stone. Hits like a mountain.',
+        },
+        orc: {
+          icon: '🪓',
+          title: 'Orc · The Crusher',
+          meta: 'Faction: Legion · Archetype: Warrior',
+          lore: 'His army follows. Everything else burns.',
+        },
+        undead: {
+          icon: '💀',
+          title: 'Undead · The Weaver of Souls',
+          meta: 'Faction: Legion · Archetype: Mage',
+          lore: 'Death is merely the beginning of service.',
+        },
+      };
+
+      const VALID_RACES = Object.keys(RACE_DETAILS);
+      const VALID_CLASSES = ['warlord', 'arcanist', 'ranger', 'assassin'];
+      const DEFAULT_CLASS = 'warlord';
 
   const RING_TIERS = {
     iron: { power: 1, hp: 0, speed: 0 },
@@ -560,10 +621,86 @@ function setAuthStatus(msg) {
     } else {
       advice.textContent = 'Stable build. Push more points into your class triad for higher burst or survivability.';
     }
+
+    updateReadinessState();
+  }
+
+  function sanitizeSelectionState() {
+    if (!VALID_RACES.includes(selectedRace)) {
+      selectedRace = 'human';
+    }
+
+    if (!VALID_CLASSES.includes(selectedClass)) {
+      selectedClass = DEFAULT_CLASS;
+    }
+
+    if (!RING_TIERS[selectedRingTier]) {
+      selectedRingTier = 'mythic';
+    }
+
+    // Keep up to 3 known perks.
+    const knownPerks = new Set(RING_PERKS.map((p) => p.id));
+    selectedRingPerks = (selectedRingPerks || []).filter((id) => knownPerks.has(id)).slice(0, 3);
+
+    refreshWeaponAvailability();
+    normalizeAttributes();
+  }
+
+  function normalizeBuildConfig(rawBuild) {
+    const build = rawBuild && typeof rawBuild === 'object' ? rawBuild : {};
+    const race = VALID_RACES.includes(build.race) ? build.race : selectedRace;
+    const classId = VALID_CLASSES.includes(build.classId) ? build.classId : selectedClass;
+
+    const allowed = RACE_WEAPON_ALLOWLIST[race] || ['greatsword'];
+    const preferred = CLASS_WEAPON_DEFAULTS[classId] || 'greatsword';
+    const weapon = allowed.includes(build.weapon)
+      ? build.weapon
+      : (allowed.includes(preferred) ? preferred : allowed[0]);
+
+    const ringTier = RING_TIERS[build.ringTier] ? build.ringTier : selectedRingTier;
+    const knownPerks = new Set(RING_PERKS.map((p) => p.id));
+    const ringPerks = Array.isArray(build.ringPerks)
+      ? build.ringPerks.filter((id) => knownPerks.has(id)).slice(0, 3)
+      : [...selectedRingPerks];
+
+    const attrs = {};
+    for (const key of ATTRIBUTE_KEYS) {
+      const value = Number(build.attributes?.[key]);
+      attrs[key] = Number.isFinite(value) ? Math.max(0, Math.min(160, Math.floor(value))) : (attributePoints[key] || 0);
+    }
+
+    const total = Object.values(attrs).reduce((sum, v) => sum + v, 0);
+    if (total !== ATTRIBUTE_TOTAL) {
+      const fixed = { ...attrs };
+      let delta = ATTRIBUTE_TOTAL - total;
+      while (delta !== 0) {
+        for (const key of ATTRIBUTE_KEYS) {
+          if (delta === 0) break;
+          if (delta > 0) {
+            fixed[key] += 1;
+            delta -= 1;
+          } else if (fixed[key] > 0) {
+            fixed[key] -= 1;
+            delta += 1;
+          }
+        }
+      }
+      Object.assign(attrs, fixed);
+    }
+
+    return {
+      race,
+      classId,
+      weapon,
+      ringTier,
+      ringPerks,
+      attributes: attrs,
+      combatPower: Number(build.combatPower) || calculateBuildPower(),
+    };
   }
 
   function getCurrentBuildConfig() {
-    return {
+    return normalizeBuildConfig({
       race: selectedRace,
       classId: selectedClass,
       weapon: selectedWeapon,
@@ -571,7 +708,7 @@ function setAuthStatus(msg) {
       ringPerks: [...selectedRingPerks],
       attributes: { ...attributePoints },
       combatPower: calculateBuildPower(),
-    };
+    });
   }
 
   window.applyBuildPreset = function (type) {
@@ -665,14 +802,64 @@ function setAuthStatus(msg) {
     if (ringSelect) ringSelect.value = selectedRingTier;
   }
 
+      function updateSpotlight() {
+        const detail = RACE_DETAILS[selectedRace] || RACE_DETAILS.human;
+        const icon = document.getElementById('spotlight-icon');
+        const title = document.getElementById('spotlight-title');
+        const meta = document.getElementById('spotlight-meta');
+        const lore = document.getElementById('spotlight-lore');
+        if (icon) icon.textContent = detail.icon;
+        if (title) title.textContent = detail.title;
+        if (meta) meta.textContent = detail.meta;
+        if (lore) lore.textContent = detail.lore;
+      }
+
+      function refreshWeaponAvailability() {
+        const raceAllowed = new Set(RACE_WEAPON_ALLOWLIST[selectedRace] || []);
+        const classPreferred = CLASS_WEAPON_DEFAULTS[selectedClass];
+        const pills = document.querySelectorAll('.weapon-pill');
+
+        pills.forEach((pill) => {
+          const allowed = raceAllowed.has(pill.dataset.weapon);
+          pill.classList.toggle('disabled', !allowed);
+          pill.disabled = !allowed;
+          if (!allowed) pill.classList.remove('active');
+        });
+
+        if (!raceAllowed.has(selectedWeapon)) {
+          selectedWeapon = raceAllowed.has(classPreferred)
+            ? classPreferred
+            : (RACE_WEAPON_ALLOWLIST[selectedRace] || ['greatsword'])[0];
+        }
+        syncBuilderSelectionUI();
+      }
+
+      function updateReadinessState() {
+        const ready = getPointsSpent() === ATTRIBUTE_TOTAL;
+        const enterBtn = document.getElementById('enter-btn');
+        const queueBtn = document.querySelector('.queue-btn');
+        const readyEl = document.getElementById('builder-readiness');
+
+        if (enterBtn) enterBtn.disabled = !ready;
+        if (queueBtn) queueBtn.disabled = !ready;
+        if (readyEl) {
+          readyEl.classList.toggle('ready', ready);
+          readyEl.textContent = ready
+            ? 'Champion profile locked in. You are ready for arena deployment.'
+            : `Allocate all ${ATTRIBUTE_TOTAL} points to unlock Enter Arena.`;
+        }
+      }
+
   function setupCharacterBuilder() {
     loadBuildFromStorage();
     hydrateBuildFromURL();
-    normalizeAttributes();
+    sanitizeSelectionState();
     syncBuilderSelectionUI();
     renderAttributeEditor();
     renderRingPerks();
+    updateSpotlight();
     updateBuildSummary();
+    updateReadinessState();
 
     const ringSelect = document.getElementById('ring-tier-select');
     if (ringSelect) {
@@ -1025,7 +1212,10 @@ window.selectRace = function(el) {
   document.querySelectorAll('.race-card').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
   selectedRace = el.dataset.race;
+  refreshWeaponAvailability();
+  updateSpotlight();
       updateBuildSummary();
+  updateReadinessState();
       saveBuildToStorage();
     };
 
@@ -1036,33 +1226,52 @@ window.selectRace = function(el) {
       const preferred = CLASS_WEAPON_DEFAULTS[selectedClass];
       if (preferred) {
         selectedWeapon = preferred;
+        refreshWeaponAvailability();
         syncBuilderSelectionUI();
       }
       updateBuildSummary();
+      updateReadinessState();
       saveBuildToStorage();
     };
 
     window.selectWeaponPill = function (el) {
+      if (el.disabled || el.classList.contains('disabled')) return;
       document.querySelectorAll('.weapon-pill').forEach((pill) => pill.classList.remove('active'));
       el.classList.add('active');
       selectedWeapon = el.dataset.weapon;
       updateBuildSummary();
+      updateReadinessState();
       saveBuildToStorage();
 };
 
 // ── Enter Arena ──────────────────────────────
 window.enterArena = function() {
+  sanitizeSelectionState();
+  const build = normalizeBuildConfig(getCurrentBuildConfig());
+  selectedRace = build.race;
+  selectedClass = build.classId;
+  selectedWeapon = build.weapon;
+  attributePoints = { ...build.attributes };
+
   if (getPointsSpent() !== ATTRIBUTE_TOTAL) {
     setAuthStatus(`Spend all ${ATTRIBUTE_TOTAL} points before entering arena`);
     return;
   }
+  saveBuildToStorage();
   document.getElementById('lobby-overlay').classList.add('hidden');
   document.getElementById('loading-overlay').classList.add('active');
-  loadArenaGame(selectedRace, null, getCurrentBuildConfig());
+  loadArenaGame(build.race, null, build);
 };
 
 // ── PvP Queue ────────────────────────────────────────
 window.joinQueue = async function() {
+  sanitizeSelectionState();
+  const build = normalizeBuildConfig(getCurrentBuildConfig());
+  selectedRace = build.race;
+  selectedClass = build.classId;
+  selectedWeapon = build.weapon;
+  attributePoints = { ...build.attributes };
+
   if (getPointsSpent() !== ATTRIBUTE_TOTAL) {
     setAuthStatus(`Spend all ${ATTRIBUTE_TOTAL} points before queueing`);
     return;
@@ -1088,7 +1297,7 @@ window.joinQueue = async function() {
       setTimeout(() => {
         document.getElementById('lobby-overlay').classList.add('hidden');
         document.getElementById('game-root').classList.add('active');
-        loadArenaGame(selectedRace, data, getCurrentBuildConfig());
+        loadArenaGame(build.race, data, build);
       }, 1500);
     });
 
@@ -1113,9 +1322,11 @@ function setLoadingProgress(pct, text) {
 }
 
   async function loadArenaGame(race, matchData, buildConfig) {
+    const normalizedBuild = normalizeBuildConfig(buildConfig);
+    const normalizedRace = VALID_RACES.includes(race) ? race : normalizedBuild.race;
   const root = document.getElementById('game-root');
   const playerName = grudgeUser?.username || 'Warlord';
-  const raceName = race.charAt(0).toUpperCase() + race.slice(1);
+    const raceName = normalizedRace.charAt(0).toUpperCase() + normalizedRace.slice(1);
 
   setLoadingProgress(10, 'Loading game engine...');
 
@@ -1125,10 +1336,10 @@ function setLoadingProgress(pct, text) {
 
     const arena = new GrudgeArena({
       container: root,
-      race: race,
-      weapon: buildConfig?.weapon || selectedWeapon,
-      classId: buildConfig?.classId || selectedClass,
-      buildConfig: buildConfig || getCurrentBuildConfig(),
+      race: normalizedRace,
+      weapon: normalizedBuild.weapon,
+      classId: normalizedBuild.classId,
+      buildConfig: normalizedBuild,
       playerName: playerName,
       grudgeId: grudgeUser?.grudgeId || localStorage.getItem('grudge_id') || '',
       matchData: matchData || null,
