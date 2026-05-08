@@ -8,6 +8,7 @@
  */
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // Engine modules
 import { World, Components } from './src/engine/ECS.js';
@@ -106,7 +107,7 @@ class GrudgeArena {
 
     this.particleSystem = new ParticleSystem(this.scene);
     this.spriteSystem = new SpriteSystem(this.scene);
-    this._createArena();
+    await this._createArena();
     createSkybox(this.scene);
 
     // Loading progress helper
@@ -328,38 +329,53 @@ class GrudgeArena {
 
   // ── Arena construction ──
 
-  _createArena() {
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(80, 80, 32, 32),
-      createShaderMaterial("arenaGround"),
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    this.scene.add(ground);
-    this.collisionSystem.addCollider(ground, "environment");
+  async _createArena() {
+    // Try to load the MOBA GLTF map. Falls back to a procedural ground if it fails.
+    let mapLoaded = false;
+    try {
+      const loader = new GLTFLoader();
+      const gltf = await new Promise((resolve, reject) => {
+        loader.load('/assets/maps/moba/scene.gltf', resolve, undefined, reject);
+      });
+      const mapScene = gltf.scene;
+      // Scale the MOBA map to a reasonable arena size and center it.
+      // The map is roughly 100 units across — scale up slightly for the arena.
+      mapScene.scale.setScalar(0.5);
+      mapScene.position.set(0, -0.1, 0); // Slight sink so floor sits at ~Y=0
+      mapScene.traverse((child) => {
+        if (child.isMesh) {
+          child.receiveShadow = true;
+          child.castShadow = true;
+        }
+      });
+      this.scene.add(mapScene);
+      this.collisionSystem.addCollider(mapScene, 'environment');
+      mapLoaded = true;
+      console.log('[arena] MOBA map loaded');
+    } catch (err) {
+      console.warn('[arena] MOBA map failed to load, using fallback ground:', err.message);
+    }
 
-    const ringGeo = new THREE.RingGeometry(38, 40, 64);
-    const ring = new THREE.Mesh(
-      ringGeo,
-      new THREE.MeshStandardMaterial({
-        color: 0xc9a84c,
-        emissive: 0x8b6914,
-        emissiveIntensity: 0.3,
-        metalness: 0.8,
-        roughness: 0.3,
-      }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.01;
-    this.scene.add(ring);
+    // Fallback: simple ground plane if map didn't load
+    if (!mapLoaded) {
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(120, 120, 32, 32),
+        createShaderMaterial('arenaGround'),
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      this.scene.add(ground);
+      this.collisionSystem.addCollider(ground, 'environment');
+    }
 
-    for (const teamId of ["A", "B"]) {
+    // Spawn markers for both teams (visible on top of any map)
+    for (const teamId of ['A', 'B']) {
       for (let i = 0; i < 3; i++) {
         const pos = ArenaMatchStatic.getSpawnPosition(teamId, i, 3);
         const m = new THREE.Mesh(
           new THREE.RingGeometry(0.8, 1.0, 32),
           new THREE.MeshBasicMaterial({
-            color: teamId === "A" ? 0x3366ff : 0xff3333,
+            color: teamId === 'A' ? 0x3366ff : 0xff3333,
             transparent: true,
             opacity: 0.4,
             side: THREE.DoubleSide,
@@ -367,38 +383,9 @@ class GrudgeArena {
         );
         m.rotation.x = -Math.PI / 2;
         m.position.copy(pos);
-        m.position.y = 0.02;
+        m.position.y = 0.05;
         this.scene.add(m);
       }
-    }
-
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2;
-      const group = new THREE.Group();
-      const col = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.8, 1, 4, 8),
-        new THREE.MeshStandardMaterial({
-          color: 0x2a2a4e,
-          metalness: 0.6,
-          roughness: 0.4,
-          emissive: 0x3366ff,
-          emissiveIntensity: 0.1,
-        }),
-      );
-      col.position.y = 2;
-      col.castShadow = true;
-      group.add(col);
-      const orb = new THREE.Mesh(
-        new THREE.SphereGeometry(0.4, 16, 16),
-        createShaderMaterial("frost"),
-      );
-      orb.position.y = 4.2;
-      group.add(orb);
-      const pillarLight = new THREE.PointLight(0x4488ff, 1, 8, 2);
-      pillarLight.position.set(0, 4.5, 0);
-      group.add(pillarLight);
-      group.position.set(Math.cos(angle) * 35, 0, Math.sin(angle) * 35);
-      this.scene.add(group);
     }
   }
 

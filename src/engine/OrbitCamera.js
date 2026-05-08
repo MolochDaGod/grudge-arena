@@ -1,16 +1,15 @@
 /**
- * OrbitCamera — Third-person camera with mouse orbit
+ * OrbitCamera — MMO-style third-person camera
  *
  * Controls:
- *   RMB drag  = orbit (yaw + pitch) around the player
- *   Scroll    = zoom in/out
- *   LMB drag  = orbit (same as RMB, for when no target selected)
+ *   LMB hold + drag = orbit (yaw + pitch) around the player
+ *   Scroll           = zoom in/out
+ *   RMB              = attack (handled by ArenaController, NOT camera)
  *
- * The camera tracks a target mesh with lerp smoothing.
+ * When LMB is NOT held the camera passively drifts behind the character's
+ * facing direction, giving an "over the shoulder" follow-cam feel.
+ *
  * Exposes `yaw` for the controller to compute camera-relative movement.
- *
- * Design: Camera position is computed from spherical coordinates
- * (yaw, pitch, distance) around the target's pivot point.
  */
 
 import * as THREE from 'three';
@@ -45,12 +44,15 @@ export class OrbitCamera {
     this.orbitSensitivity = 0.003;
     this.zoomSensitivity = 0.08;
 
+    // Passive follow-behind speed (radians/sec equivalent via lerp factor)
+    this.passiveFollowSpeed = 2.5;
+
     // Internal state
     this._currentPos = new THREE.Vector3();
     this._currentLookAt = new THREE.Vector3();
     this._pivotWorld = new THREE.Vector3();
     this._initialized = false;
-    this._isDragging = false;
+    this._isDragging = false;  // LMB held
 
     this._setupInput();
   }
@@ -65,19 +67,24 @@ export class OrbitCamera {
     return this.yaw;
   }
 
+  /** Whether the player is actively orbiting the camera (LMB held) */
+  get isDragging() {
+    return this._isDragging;
+  }
+
   // ── Input ────────────────────────────────────────────────────────
 
   _setupInput() {
     const el = this.domElement;
 
-    // Mouse drag for orbit
+    // LMB-only drag for orbit (button 0). RMB (button 2) is attack.
     el.addEventListener('mousedown', (e) => {
-      if (e.button === 0 || e.button === 2) {
+      if (e.button === 0) {
         this._isDragging = true;
       }
     });
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 0 || e.button === 2) {
+      if (e.button === 0) {
         this._isDragging = false;
       }
     });
@@ -102,6 +109,22 @@ export class OrbitCamera {
 
   update(delta) {
     if (!this.target) return;
+
+    // ── Passive follow-behind ──────────────────────────────────────
+    // When the player is NOT holding LMB, gently drift the camera yaw
+    // to sit behind the character's facing direction.
+    if (!this._isDragging) {
+      const behindYaw = this.target.rotation.y + Math.PI;
+      let diff = behindYaw - this.yaw;
+      // Wrap to [-PI, PI]
+      while (diff > Math.PI) diff -= PI2;
+      while (diff < -Math.PI) diff += PI2;
+      // Only follow if the character is actually moving (avoid snapping while idle)
+      if (Math.abs(diff) > 0.02) {
+        const t = 1 - Math.exp(-this.passiveFollowSpeed * delta);
+        this.yaw += diff * t;
+      }
+    }
 
     // Compute pivot point (target position + offset)
     this._pivotWorld.copy(this.target.position).add(this.pivotOffset);

@@ -1,15 +1,27 @@
 /**
- * ArenaController — Player input controller for arena combat
+ * ArenaController — Player input controller for arena combat (MMO-style)
  *
  * Bridges game.js mesh-based units with the XState CharacterFSM.
  * Works with AnimationController (from modelLoader).
  *
+ * Controls (WoW / MMO style):
+ *   W/S   = move forward / backward (camera-relative)
+ *   A/D   = turn character left / right
+ *   Q/E   = strafe left / right (camera-relative, no rotation)
+ *   Shift = sprint
+ *   Space = jump
+ *   Ctrl  = dash/roll
+ *   V     = block (hold)
+ *   RMB   = toggle auto-attack
+ *   1-5   = skills
+ *   Tab   = cycle target
+ *
  * Features:
- *   - Camera-relative WASD movement (W = forward from camera)
- *   - Smooth rotation interpolation (no snapping)
+ *   - Camera-relative W/S + Q/E movement
+ *   - A/D keyboard turning with smooth interpolation
  *   - Acceleration / deceleration curves
  *   - holdKey / tickKey pattern (annihilate)
- *   - Double-tap WASD directional dodge
+ *   - Double-tap W/S directional dodge
  *   - FSM-driven state transitions (attack, dash, block, skill, jump)
  *   - Animation coordination via FSM entry actions
  *
@@ -29,8 +41,9 @@ const MOVE_SPEED = 5.5;         // Base units/sec
 const SPRINT_MULTIPLIER = 1.6;
 const ACCEL_RATE = 25;          // Units/sec² to reach full speed
 const DECEL_RATE = 20;          // Units/sec² to stop
-const TURN_SPEED = 12;          // Radians/sec for smooth rotation
-const ARENA_RADIUS = 35;        // Position clamp
+const TURN_SPEED = 12;          // Radians/sec for smooth mesh rotation lerp
+const KB_TURN_SPEED = 3.0;      // Radians/sec for A/D keyboard turning
+const ARENA_RADIUS = 60;        // Position clamp (matches MOBA map bounds)
 
 const DOUBLE_TAP_WINDOW = 280;  // ms
 const DOUBLE_TAP_COOLDOWN = 0.5;// seconds
@@ -158,9 +171,9 @@ export class ArenaController {
       this.holdKey[e.code] = true;
       this.tickKey[e.code] = true;
 
-      // Double-tap dodge detection
-      const dirKeys = ['KeyW', 'KeyA', 'KeyS', 'KeyD'];
-      if (dirKeys.includes(e.code) && this._doubleTapCooldown <= 0) {
+      // Double-tap dodge detection (W/S only — A/D are turn keys in MMO mode)
+      const dodgeKeys = ['KeyW', 'KeyS'];
+      if (dodgeKeys.includes(e.code) && this._doubleTapCooldown <= 0) {
         const now = performance.now();
         const last = this._lastTapTime[e.code] || 0;
         if (now - last < DOUBLE_TAP_WINDOW) {
@@ -175,8 +188,8 @@ export class ArenaController {
 
     window.addEventListener('keyup', (e) => {
       this.holdKey[e.code] = false;
-      // Block release
-      if (e.code === 'KeyQ') {
+      // Block release (V key)
+      if (e.code === 'KeyV') {
         this._fsmService.send('blockRelease');
       }
     });
@@ -205,7 +218,7 @@ export class ArenaController {
       fsm.send("jump");
     } else if (this.tickKey.ControlLeft || this.tickKey.ControlRight) {
       fsm.send("dash");
-    } else if (this.tickKey.KeyQ) {
+    } else if (this.tickKey.KeyV) {
       fsm.send("block");
     } else if (this.tickKey.Digit1 || this.tickKey.Numpad1) {
       this._activeSkill = 1;
@@ -225,13 +238,26 @@ export class ArenaController {
     }
     this.tickKey = {};
 
+    // ── A/D keyboard turning (MMO-style) ──
+    // A/D rotate the character's facing. They do NOT produce movement.
+    const turningLeft = this.holdKey.KeyA || this.holdKey.ArrowLeft;
+    const turningRight = this.holdKey.KeyD || this.holdKey.ArrowRight;
+    if (this.canMove && (turningLeft || turningRight)) {
+      const turnDir = (turningLeft ? 1 : 0) - (turningRight ? 1 : 0);
+      this.targetYaw += turnDir * KB_TURN_SPEED * delta;
+      // Normalize
+      while (this.targetYaw > Math.PI) this.targetYaw -= Math.PI * 2;
+      while (this.targetYaw < -Math.PI) this.targetYaw += Math.PI * 2;
+    }
+
     // ── Build input direction from held keys ──
+    // W/S = forward/back (camera-relative), Q/E = strafe (camera-relative)
     let ix = 0,
       iz = 0;
     if (this.holdKey.KeyW || this.holdKey.ArrowUp) iz -= 1;
     if (this.holdKey.KeyS || this.holdKey.ArrowDown) iz += 1;
-    if (this.holdKey.KeyA || this.holdKey.ArrowLeft) ix -= 1;
-    if (this.holdKey.KeyD || this.holdKey.ArrowRight) ix += 1;
+    if (this.holdKey.KeyQ) ix -= 1;   // Strafe left
+    if (this.holdKey.KeyE) ix += 1;   // Strafe right
 
     const hasInput = ix !== 0 || iz !== 0;
     const isSprint = this.holdKey.ShiftLeft || this.holdKey.ShiftRight;
@@ -318,8 +344,6 @@ export class ArenaController {
     switch (keyCode) {
       case 'KeyW': dz = -1; break;
       case 'KeyS': dz = 1;  break;
-      case 'KeyA': dx = -1; break;
-      case 'KeyD': dx = 1;  break;
     }
     const cos = Math.cos(yaw), sin = Math.sin(yaw);
     const worldX = dx * cos - dz * sin;
