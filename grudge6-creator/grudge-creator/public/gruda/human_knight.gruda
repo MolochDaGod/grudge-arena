@@ -1,0 +1,89 @@
+{
+  "schema": "gruda/1.0",
+  "id": "human_knight",
+  "displayName": "Human Knight",
+  "kind": "character",
+  "asset": "../models/toon_rts/characters/human.glb",
+  "source": {
+    "tool": "synty",
+    "license": "Synty Studios EULA",
+    "needsRetopology": false,
+    "generationPrompt": null
+  },
+  "geometry": {
+    "vertexCount": 8423,
+    "triangleCount": 5210,
+    "boundsMeters": { "min": [-0.4, 0.0, -0.3], "max": [0.4, 1.82, 0.3] },
+    "pivot": "feet",
+    "upAxis": "Y",
+    "units": "meters",
+    "tangentsBaked": false
+  },
+  "materials": {
+    "atlasCount": 1,
+    "totalTextures": 2,
+    "maxTextureSize": 1024,
+    "ktx2": false,
+    "specGloss": false,
+    "transparent": false
+  },
+  "compression": {
+    "draco": false,
+    "meshopt": false,
+    "ktx2": false,
+    "sizeBytes": 487000
+  },
+  "skeleton": {
+    "convention": "biped",
+    "boneCount": 67,
+    "rootBone": "Bip001_Pelvis",
+    "hasFingers": true,
+    "bindPose": "T",
+    "boneNamingNormalized": true,
+    "namedBones": {
+      "head":      "Bip001_Head",
+      "neck":      "Bip001_Neck",
+      "spine":     "Bip001_Spine",
+      "pelvis":    "Bip001_Pelvis",
+      "shoulderL": "Bip001_L_UpperArm",
+      "shoulderR": "Bip001_R_UpperArm",
+      "handL":     "Bip001_L_Hand",
+      "handR":     "Bip001_R_Hand",
+      "footL":     "Bip001_L_Foot",
+      "footR":     "Bip001_R_Foot"
+    }
+  },
+  "skinning": {
+    "maxInfluencesPerVertex": 4,
+    "unweightedVertices": 0,
+    "normalized": true
+  },
+  "animations": {
+    "clips": ["idle", "walk", "run", "attack_light", "attack_heavy", "death"],
+    "sampleRateFps": 30,
+    "rootMotion": "locked"
+  },
+  "sockets": {
+    "weaponMain": { "bone": "handR", "offset": [0.05, 0.02, 0.0], "rotationEulerDeg": [0, 90, 0] },
+    "weaponOff":  { "bone": "handL", "offset": [0.0,  0.02, 0.0], "rotationEulerDeg": [0, 90, 0] },
+    "shieldOff":  { "bone": "handL", "offset": [0.0,  0.0,  0.05], "rotationEulerDeg": [0, 0, 90] },
+    "helm":       { "bone": "head",  "offset": [0,    0.10, 0],   "rotationEulerDeg": [0, 0, 0] },
+    "backMount":  { "bone": "spine", "offset": [0,    0.05, -0.20], "rotationEulerDeg": [0, 0, 0] }
+  },
+  "hurtboxes": [
+    { "id": "head",  "bone": "head",      "shape": "sphere",  "radius": 0.16, "multiplier": 2.0, "tags": ["headshot"] },
+    { "id": "torso", "bone": "spine",     "shape": "capsule", "from": [0,0,0], "to": [0,0.45,0], "radius": 0.22, "multiplier": 1.0 },
+    { "id": "armL",  "bone": "shoulderL", "shape": "capsule", "from": [0,0,0], "to": [0,0.40,0], "radius": 0.09, "multiplier": 0.5 },
+    { "id": "armR",  "bone": "shoulderR", "shape": "capsule", "from": [0,0,0], "to": [0,0.40,0], "radius": 0.09, "multiplier": 0.5 },
+    { "id": "legL",  "bone": "footL",     "shape": "capsule", "from": [0,0,0], "to": [0,0.55,0], "radius": 0.11, "multiplier": 0.7 },
+    { "id": "legR",  "bone": "footR",     "shape": "capsule", "from": [0,0,0], "to": [0,0.55,0], "radius": 0.11, "multiplier": 0.7 }
+  ],
+  "gameplay": {
+    "controller": "souls_like",
+    "loadout": "knight_default",
+    "abilities": ["roll", "block", "parry"],
+    "stats": { "hp": 130, "stamina": 100, "speed": 6.0 },
+    "ikChains": ["foot_l", "foot_r"],
+    "faction": "ironbound"
+  }
+}

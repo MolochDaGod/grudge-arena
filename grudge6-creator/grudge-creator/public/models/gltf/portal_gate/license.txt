@@ -1,0 +1,11 @@
+Model Information:
+* title:	Portal gate Sci-Fi
+* source:	https://sketchfab.com/3d-models/portal-gate-sci-fi-86f65251573843bcbf74d3857c8dd9d1
+* author:	Helley (https://sketchfab.com/Helley)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Portal gate Sci-Fi" (https://sketchfab.com/3d-models/portal-gate-sci-fi-86f65251573843bcbf74d3857c8dd9d1) by Helley (https://sketchfab.com/Helley) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
