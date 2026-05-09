@@ -20,11 +20,17 @@ const IS_DEV =
   (window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1");
 
+// R2 direct URL (for server-side reference only — never used in the browser
+// because cross-origin fetch from vercel.app is blocked by CORS).
 export const R2_BASE = "https://assets.grudge-studio.com/arena";
 export const LOCAL_BASE = ""; // Vite serves /public as root
 
+// In production, all asset fetches go through the Vercel /cdn/* proxy,
+// which rewrites to R2 server-side — no browser CORS issue.
+export const CDN_PROXY = "/cdn";
+
 /** Resolved base — use this for all assets */
-export const ASSET_BASE = IS_DEV ? LOCAL_BASE : R2_BASE;
+export const ASSET_BASE = IS_DEV ? LOCAL_BASE : CDN_PROXY;
 
 /**
  * Build a full URL for any public/ asset.
@@ -32,7 +38,7 @@ export const ASSET_BASE = IS_DEV ? LOCAL_BASE : R2_BASE;
  */
 export function assetUrl(path) {
   const p = path.startsWith("/") ? path.slice(1) : path;
-  return IS_DEV ? `/${p}` : `${R2_BASE}/${p}`;
+  return IS_DEV ? `/${p}` : `${CDN_PROXY}/${p}`;
 }
 
 /** Shorthand for public/assets/characters/... */

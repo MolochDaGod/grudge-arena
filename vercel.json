@@ -75,6 +75,10 @@
       "source": "/api/assets/:path*",
       "destination": "https://assets.grudge-studio.com/:path*"
     },
+    {
+      "source": "/cdn/:path*",
+      "destination": "https://assets.grudge-studio.com/arena/:path*"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
