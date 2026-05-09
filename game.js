@@ -341,8 +341,8 @@ class GrudgeArena {
   }
 
   _setupLighting() {
-    this.scene.add(new THREE.AmbientLight(0xb0c4de, 0.6));
-    this.scene.add(new THREE.HemisphereLight(0x87ceeb, 0x362d1e, 0.4));
+    this.scene.add(new THREE.AmbientLight(0xb0c4de, 1.0)); // bumped 0.6→1.0 for better model visibility
+    this.scene.add(new THREE.HemisphereLight(0x87ceeb, 0x362d1e, 0.5));
     const dir = new THREE.DirectionalLight(0xfff5e1, 1.2);
     dir.position.set(10, 20, 10);
     dir.castShadow = true;
@@ -394,11 +394,16 @@ class GrudgeArena {
       console.warn('[arena] MOBA map failed to load, using fallback ground:', err.message);
     }
 
-    // Fallback: simple ground plane if map didn't load
+    // Fallback: solid concrete-grey ground plane if map didn't load.
+    // Uses MeshStandardMaterial (no shader dependency) so it's always visible.
     if (!mapLoaded) {
       const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(120, 120, 32, 32),
-        createShaderMaterial('arenaGround'),
+        new THREE.MeshStandardMaterial({
+          color: 0x3a3a45,
+          roughness: 0.85,
+          metalness: 0.05,
+        }),
       );
       ground.rotation.x = -Math.PI / 2;
       ground.receiveShadow = true;

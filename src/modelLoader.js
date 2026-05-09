@@ -705,6 +705,60 @@ async function applyRaceTextureFix(scene, race) {
   return patched;
 }
 
+// ── Faction color override ─────────────────────────────────────────
+
+/**
+ * Apply faction-specific body colors directly to character materials.
+ * Called AFTER applyRaceTextureFix — if a texture atlas was applied this
+ * is a no-op (mat.map is already set). If texture loading failed (404,
+ * manifest missing, etc.) this guarantees each race has a distinct,
+ * intentional color instead of the raw yellow-green GLB default.
+ *
+ * Color scheme:
+ *   Crusade (Human, Barbarian)  → warm gold / bronze tones
+ *   Fabled  (Elf, Dwarf)        → cool blue / silver tones
+ *   Legion  (Orc, Undead)       → dark red / purple tones
+ */
+function applyFactionBodyColor(scene, race) {
+  const raceConf     = getRaceConfig(race);
+  const factionColors = getRaceFactionColors(race);
+
+  // Body color = faction primary, slightly lightened for visibility
+  const bodyColor = new THREE.Color(factionColors.primary).multiplyScalar(1.35);
+  // Accent color for secondary parts (collar, belt, etc.)
+  const accentColor = new THREE.Color(raceConf.gearTint);
+
+  let patched = 0;
+  scene.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    const mats = Array.isArray(child.material)
+      ? child.material
+      : [child.material];
+
+    for (const mat of mats) {
+      if (!mat?.isMeshStandardMaterial) continue;
+      if (mat.map) continue; // Texture applied — leave it alone
+
+      // Separate metallic parts (weapons, buckles) from body
+      if (mat.metalness > 0.5) {
+        mat.color.copy(accentColor);
+      } else {
+        mat.color.copy(bodyColor);
+      }
+      mat.roughness = Math.min(mat.roughness + 0.1, 0.95);
+      mat.needsUpdate = true;
+      patched++;
+    }
+  });
+
+  if (patched > 0) {
+    console.log(
+      `[modelLoader] ${race}: faction color applied to ${patched} material slots (${raceConf.faction})`,
+    );
+  }
+  return patched;
+}
+
 async function loadHumanBasemeshAnimations() {
   if (_humanBasemeshAnimPromise) return _humanBasemeshAnimPromise;
   _humanBasemeshAnimPromise = new Promise((resolve) => {
@@ -876,6 +930,8 @@ export async function loadRaceModel(race) {
   });
 
   await applyRaceTextureFix(scene, race);
+  // Guaranteed color fallback — runs even when texture atlas is unavailable
+  applyFactionBodyColor(scene, race);
 
   // IMPORTANT: Do NOT overwrite the root scale.
   // GLB models have root scale 0.01 (centimeter units) baked in.
@@ -1474,26 +1530,35 @@ let _animLibraryCache = null;
 async function loadAnimationLibrary() {
   if (_animLibraryCache) return _animLibraryCache;
 
-  const gltf = await new Promise((resolve, reject) => {
-    gltfLoader.load(
-      modelUrl("animation-library.glb"),
-      resolve,
-      undefined,
-      reject,
+  try {
+    const gltf = await new Promise((resolve, reject) => {
+      gltfLoader.load(
+        modelUrl("animation-library.glb"),
+        resolve,
+        undefined,
+        reject,
+      );
+    });
+
+    // Index animations by name
+    const clips = new Map();
+    for (const clip of gltf.animations) {
+      clips.set(clip.name, clip);
+    }
+
+    console.log(
+      `[modelLoader] Animation library loaded: ${clips.size} clips [${[...clips.keys()].join(", ")}]`,
     );
-  });
-
-  // Index animations by name
-  const clips = new Map();
-  for (const clip of gltf.animations) {
-    clips.set(clip.name, clip);
+    _animLibraryCache = clips;
+    return clips;
+  } catch (err) {
+    // animation-library.glb not found (common in dev / first deploy). Fall through
+    // to per-weapon-pack loader in createAnimatedUnit / createHeroUnit.
+    console.warn('[modelLoader] animation-library.glb unavailable:', err.message);
+    const empty = new Map();
+    _animLibraryCache = empty;
+    return empty;
   }
-
-  console.log(
-    `[modelLoader] Animation library loaded: ${clips.size} clips [${[...clips.keys()].join(", ")}]`,
-  );
-  _animLibraryCache = clips;
-  return clips;
 }
 
 function applyCommonClipAliases(actions) {
@@ -1616,8 +1681,23 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
     }
   }
 
-  // Start idle animation
+  // Start idle animation — weapon library clips are now registered.
+  // If the animation library was empty or clips didn't bind (bone mismatch),
+  // currentAction will be null → fall back to loading weapon pack GLBs directly.
   controller.play("idle");
+
+  if (!controller.currentAction) {
+    console.warn(
+      `[modelLoader] ${race}: idle from animation library failed (T-pose). Loading weapon pack directly…`,
+    );
+    const packActions = await preloadWeaponAnims(resolvedWeapon, mixer, scene);
+    controller.registerActions(packActions);
+    applyCommonClipAliases(controller.actions);
+    controller.play("idle");
+    console.log(
+      `[modelLoader] ${race}: weapon-pack fallback: ${controller.actions.size} anims, idle bound=${!!controller.currentAction}`,
+    );
+  }
 
   return {
     scene,
@@ -1702,6 +1782,7 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
       }
     });
     await applyRaceTextureFix(scene, hero.race);
+    applyFactionBodyColor(scene, hero.race);
     const nativeScale = scene.scale.x;
     scene.scale.setScalar(nativeScale * (hero.scale ?? 1.0));
     mixer = new THREE.AnimationMixer(scene);
@@ -1778,7 +1859,21 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
     }
   }
 
+  // Same weapon-pack fallback as createAnimatedUnit — ensures no T-pose
   controller.play("idle");
+
+  if (!controller.currentAction) {
+    console.warn(
+      `[modelLoader] Hero ${hero.id}: idle from animation library failed (T-pose). Loading weapon pack directly…`,
+    );
+    const packActions = await preloadWeaponAnims(weaponType, mixer, scene);
+    controller.registerActions(packActions);
+    applyCommonClipAliases(controller.actions);
+    controller.play("idle");
+    console.log(
+      `[modelLoader] Hero ${hero.id}: weapon-pack fallback: ${controller.actions.size} anims, idle bound=${!!controller.currentAction}`,
+    );
+  }
 
   console.log(
     `[modelLoader] Hero ${hero.displayName} (${hero.id}) ready: ${controller.actions.size} anims (${bareRegistered} bare-aliased from '${animClass}'), weapon: ${weaponType}, tier: ${tierCfg.name}`,
