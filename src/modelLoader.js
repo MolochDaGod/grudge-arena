@@ -911,6 +911,27 @@ function cloneGLTFScene(source) {
   return clone;
 }
 
+/**
+ * Normalise a character scene to TARGET_H metres tall using its T-pose
+ * bounding box (Y axis only, ignoring arm-span width).
+ * Also grounds the scene so its bottom sits at Y=0.
+ */
+function normalizeCharacterScale(scene, targetH = 1.75) {
+  scene.traverse((node) => {
+    if (node.isSkinnedMesh) node.normalizeSkinWeights();
+  });
+  const box = new THREE.Box3().setFromObject(scene);
+  const height = box.getSize(new THREE.Vector3()).y;
+  if (height < 0.001) {
+    console.warn('[modelLoader] normalizeCharacterScale: could not compute bounding box');
+    return;
+  }
+  scene.scale.setScalar(targetH / height);
+  // Re-ground after rescale
+  const box2 = new THREE.Box3().setFromObject(scene);
+  scene.position.y = -box2.min.y;
+}
+
 export async function loadRaceModel(race) {
   const { gltf, path } = await loadGLTFWithFallback(raceModelPaths(race));
 
@@ -933,12 +954,10 @@ export async function loadRaceModel(race) {
   // Guaranteed color fallback — runs even when texture atlas is unavailable
   applyFactionBodyColor(scene, race);
 
-  // IMPORTANT: Do NOT overwrite the root scale.
-  // GLB models have root scale 0.01 (centimeter units) baked in.
-  // Apply race multiplier ON TOP of the native scale.
-  const cfg = RaceScaleConfig[race] || RaceScaleConfig.human;
-  const nativeScale = scene.scale.x; // 0.01 for all race GLBs
-  scene.scale.setScalar(nativeScale * cfg.scale);
+  // Normalise to 1.75 m using bounding box Y, regardless of GLB export scale.
+  // WK/BRB/ELF/DWF/ORC/UD GLBs ship with root scale ~4.26, yielding 7.45 m
+  // world-height — this corrects that to the expected humanoid size.
+  normalizeCharacterScale(scene, 1.75);
 
   const mixer = new THREE.AnimationMixer(scene);
   const actions = new Map();
@@ -968,7 +987,7 @@ export async function loadRaceModel(race) {
   }
 
   console.log(
-    `[modelLoader] Loaded ${race} — scale: ${nativeScale * cfg.scale}, embeddedAnims: [${[...actions.keys()].join(", ")}]`,
+    `[modelLoader] Loaded ${race} — scale: ${scene.scale.x.toFixed(4)}, embeddedAnims: [${[...actions.keys()].join(", ")}]`,
   );
   return { scene, mixer, actions, clips: gltf.animations };
 }
@@ -1682,20 +1701,22 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   }
 
   // Start idle animation — weapon library clips are now registered.
-  // If the animation library was empty or clips didn't bind (bone mismatch),
-  // currentAction will be null → fall back to loading weapon pack GLBs directly.
+  // Check that the idle clip actually bound to bones (non-null action with
+  // bound tracks). A zero-binding action plays silently, causing T-pose.
   controller.play("idle");
 
-  if (!controller.currentAction) {
+  const idleStats = getTrackBindingStats(controller.currentAction);
+  if (!controller.currentAction || idleStats.bound === 0) {
     console.warn(
-      `[modelLoader] ${race}: idle from animation library failed (T-pose). Loading weapon pack directly…`,
+      `[modelLoader] ${race}: idle from animation library has 0 bound tracks (T-pose). Loading weapon pack directly…`,
     );
     const packActions = await preloadWeaponAnims(resolvedWeapon, mixer, scene);
     controller.registerActions(packActions);
     applyCommonClipAliases(controller.actions);
     controller.play("idle");
+    const packStats = getTrackBindingStats(controller.currentAction);
     console.log(
-      `[modelLoader] ${race}: weapon-pack fallback: ${controller.actions.size} anims, idle bound=${!!controller.currentAction}`,
+      `[modelLoader] ${race}: weapon-pack fallback: ${controller.actions.size} anims, idle bound=${packStats.bound}/${packStats.total} tracks`,
     );
   }
 
@@ -1783,8 +1804,8 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
     });
     await applyRaceTextureFix(scene, hero.race);
     applyFactionBodyColor(scene, hero.race);
-    const nativeScale = scene.scale.x;
-    scene.scale.setScalar(nativeScale * (hero.scale ?? 1.0));
+    // Normalise to 1.75 m (same approach as loadRaceModel)
+    normalizeCharacterScale(scene, 1.75);
     mixer = new THREE.AnimationMixer(scene);
     embeddedActions = new Map();
     const EMBEDDED_ALIASES = { running: ["run"], walking: ["walk"], idle: [] };
@@ -1859,19 +1880,21 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
     }
   }
 
-  // Same weapon-pack fallback as createAnimatedUnit — ensures no T-pose
+  // Same weapon-pack fallback as createAnimatedUnit — ensures no T-pose.
   controller.play("idle");
 
-  if (!controller.currentAction) {
+  const heroIdleStats = getTrackBindingStats(controller.currentAction);
+  if (!controller.currentAction || heroIdleStats.bound === 0) {
     console.warn(
-      `[modelLoader] Hero ${hero.id}: idle from animation library failed (T-pose). Loading weapon pack directly…`,
+      `[modelLoader] Hero ${hero.id}: idle from animation library has 0 bound tracks (T-pose). Loading weapon pack directly…`,
     );
     const packActions = await preloadWeaponAnims(weaponType, mixer, scene);
     controller.registerActions(packActions);
     applyCommonClipAliases(controller.actions);
     controller.play("idle");
+    const packStats = getTrackBindingStats(controller.currentAction);
     console.log(
-      `[modelLoader] Hero ${hero.id}: weapon-pack fallback: ${controller.actions.size} anims, idle bound=${!!controller.currentAction}`,
+      `[modelLoader] Hero ${hero.id}: weapon-pack fallback: ${controller.actions.size} anims, idle bound=${packStats.bound}/${packStats.total} tracks`,
     );
   }
 
