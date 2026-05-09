@@ -37,6 +37,12 @@ import { updateSplashes, HitSplash } from './src/engine/HitSplash.js';
 import { AoEIndicator } from './src/engine/AoEIndicator.js';
 import { SplineTrajectory, TrajectoryMover } from './src/engine/SplineTrajectory.js';
 import { spawnGroundSlamVFX, updateGroundSlamVFX, disposeAllGroundSlamVFX } from './src/engine/GroundSlamVFX.js';
+import {
+  buildArena,
+  getArenaSpawnPosition,
+  getArenaSpawnFacing,
+  ARENA_CLAMP_RADIUS,
+} from './src/engine/ProceduralArena.js';
 
 const VALID_RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
 const VALID_CLASSES = ["warlord", "arcanist", "ranger", "assassin"];
@@ -58,15 +64,10 @@ function sanitizeArenaConfig(cfg = {}) {
   };
 }
 
-// ── Static spawn helpers ──
+// ── Spawn helpers — delegate to ProceduralArena ──
 const ArenaMatchStatic = {
-  getSpawnPosition(teamId, slot, teamSize) {
-    const xSign = teamId === "A" ? -1 : 1;
-    return new THREE.Vector3(15 * xSign, 0, (slot - (teamSize - 1) / 2) * 4);
-  },
-  getSpawnFacing(teamId) {
-    return teamId === "A" ? Math.PI / 2 : -Math.PI / 2;
-  },
+  getSpawnPosition: getArenaSpawnPosition,
+  getSpawnFacing:   getArenaSpawnFacing,
 };
 
 // ── Main Game Class ──
@@ -348,7 +349,8 @@ class GrudgeArena {
   _setupScene() {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0a0f);
-    this.scene.fog = new THREE.Fog(0x0a0a0f, 50, 150);
+    // Tighter fog for the small arena — not visible beyond the wall (~35m)
+    this.scene.fog = new THREE.Fog(0x0a0a0f, 28, 55);
     this.camera = new THREE.PerspectiveCamera(
       50,
       window.innerWidth / window.innerHeight,
@@ -368,10 +370,10 @@ class GrudgeArena {
     dir.shadow.mapSize.set(2048, 2048);
     dir.shadow.camera.near = 0.5;
     dir.shadow.camera.far = 80;
-    dir.shadow.camera.left = -40;
-    dir.shadow.camera.right = 40;
-    dir.shadow.camera.top = 40;
-    dir.shadow.camera.bottom = -40;
+    dir.shadow.camera.left = -25;
+    dir.shadow.camera.right = 25;
+    dir.shadow.camera.top = 25;
+    dir.shadow.camera.bottom = -25;
     dir.shadow.bias = -0.001;
     this.scene.add(dir);
     const rim = new THREE.DirectionalLight(0x8888ff, 0.3);
@@ -385,76 +387,17 @@ class GrudgeArena {
   // ── Arena construction ──
 
   async _createArena() {
-    // Try to load the MOBA GLTF map. Falls back to a procedural ground if it fails.
-    let mapLoaded = false;
-    try {
-      const loader = new GLTFLoader();
-      const gltf = await new Promise((resolve, reject) => {
-        loader.load(mapUrl('moba/scene.gltf'), resolve, undefined, reject);
-      });
-      const mapScene = gltf.scene;
-      // Scale the MOBA map to a reasonable arena size and center it.
-      // The map is roughly 100 units across — scale up slightly for the arena.
-      mapScene.scale.setScalar(0.5);
-      mapScene.position.set(0, -0.1, 0); // Slight sink so floor sits at ~Y=0
-      mapScene.traverse((child) => {
-        if (child.isMesh) {
-          child.receiveShadow = true;
-          child.castShadow = true;
-        }
-      });
-      this.scene.add(mapScene);
-      this.collisionSystem.addCollider(mapScene, 'environment');
-      // Register map meshes for AoEIndicator terrain snap (Raycaster)
-      mapScene.traverse(child => { if (child.isMesh) this._terrainMeshes.push(child); });
-      mapLoaded = true;
-      console.log('[arena] MOBA map loaded');
-    } catch (err) {
-      console.warn('[arena] MOBA map failed to load, using fallback ground:', err.message);
+    // Build the procedural WoW-style PvP arena (no external assets required).
+    // terrainMeshes are the collidable floor surfaces for AoEIndicator snapping.
+    const { terrainMeshes } = buildArena(this.scene);
+    for (const mesh of terrainMeshes) {
+      this.collisionSystem.addCollider(mesh, 'environment');
+      this._terrainMeshes.push(mesh);
     }
+    console.log('[arena] Procedural PvP arena built');
 
-    // Fallback: solid concrete-grey ground plane if map didn't load.
-    // Uses MeshStandardMaterial (no shader dependency) so it's always visible.
-    if (!mapLoaded) {
-      const ground = new THREE.Mesh(
-        new THREE.PlaneGeometry(120, 120, 32, 32),
-        new THREE.MeshStandardMaterial({
-          color: 0x3a3a45,
-          roughness: 0.85,
-          metalness: 0.05,
-        }),
-      );
-      ground.rotation.x = -Math.PI / 2;
-      ground.receiveShadow = true;
-      this.scene.add(ground);
-      this.collisionSystem.addCollider(ground, 'environment');
-      this._terrainMeshes.push(ground);
-    }
-
-    // AoEIndicator — created here so it has the scene and terrain meshes.
-    // The terrain meshes list is populated above, enabling accurate ground snap
-    // via Raycaster when the player aims a targeted AoE skill (Meteor Strike, etc.)
+    // AoEIndicator — terrain meshes registered above.
     this.aoeIndicator = new AoEIndicator(this.scene, this._terrainMeshes);
-
-    // Spawn markers for both teams (visible on top of any map)
-    for (const teamId of ['A', 'B']) {
-      for (let i = 0; i < 3; i++) {
-        const pos = ArenaMatchStatic.getSpawnPosition(teamId, i, 3);
-        const m = new THREE.Mesh(
-          new THREE.RingGeometry(0.8, 1.0, 32),
-          new THREE.MeshBasicMaterial({
-            color: teamId === 'A' ? 0x3366ff : 0xff3333,
-            transparent: true,
-            opacity: 0.4,
-            side: THREE.DoubleSide,
-          }),
-        );
-        m.rotation.x = -Math.PI / 2;
-        m.position.copy(pos);
-        m.position.y = 0.05;
-        this.scene.add(m);
-      }
-    }
   }
 
   // ── Unit loading ──

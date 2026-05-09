@@ -36,8 +36,9 @@
 
 import * as THREE from 'three';
 import { createCharacterFSM } from './CharacterFSM.js';
+import { ARENA_CLAMP_RADIUS } from './ProceduralArena.js';
 
-// ── Constants ────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────
 
 const MOVE_SPEED = 5.5;         // Base units/sec
 const SPRINT_MULTIPLIER = 1.6;
@@ -45,7 +46,7 @@ const ACCEL_RATE = 25;          // Units/sec² to reach full speed
 const DECEL_RATE = 20;          // Units/sec² to stop
 const TURN_SPEED = 12;          // Radians/sec for smooth mesh rotation lerp
 const KB_TURN_SPEED = 3.0;      // Radians/sec for A/D keyboard turning
-const ARENA_RADIUS = 60;        // Position clamp (matches MOBA map bounds)
+const ARENA_RADIUS = ARENA_CLAMP_RADIUS; // Position clamp — tied to ProceduralArena
 
 const DOUBLE_TAP_WINDOW = 280;  // ms
 const DOUBLE_TAP_COOLDOWN = 0.5;// seconds
