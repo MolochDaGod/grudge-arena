@@ -85,7 +85,9 @@ function getContentType(ext) {
 }
 
 async function uploadViaWrangler(localPath, r2Key, contentType) {
-  const cmd = `wrangler r2 object put "${R2_BUCKET}/${r2Key}" --file="${localPath}" --content-type="${contentType}"`;
+  // --remote is required so wrangler targets the real Cloudflare R2
+  // (without it wrangler uses a local persistence simulation)
+  const cmd = `wrangler r2 object put "${R2_BUCKET}/${r2Key}" --file="${localPath}" --content-type="${contentType}" --remote`;
   if (DRY_RUN) {
     console.log(`[DRY] ${cmd}`);
     return;
