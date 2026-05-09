@@ -206,7 +206,7 @@ export class CombatSystem {
 
     // Play cast animation
     if (this.unit.controller) {
-      this.unit.controller.send('skill');
+      this.unit.controller.send({ type: 'skill' });
     }
 
     return true;

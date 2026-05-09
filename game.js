@@ -238,7 +238,7 @@ class GrudgeArena {
 
         // Wire animation finished → FSM 'finish' event for combo chains
         this.playerUnit.mixer.addEventListener("finished", () => {
-          this.playerController.send("finish");
+          this.playerController.send({ type: "finish" });
         });
       }
 

@@ -11,7 +11,7 @@
  *   knockDown: attack sends target to knockdown state
  */
 
-import { createMachine, interpret } from 'xstate';
+import { createMachine, createActor } from 'xstate';
 
 /**
  * Create a character FSM for the given character reference.
@@ -231,7 +231,7 @@ export function createCharacterFSM(char) {
           entry: "playHit",
           on: {
             hit: "hit", // Can be hit again (annihilate pattern)
-            finish: [{ target: "fall", cond: "isAir" }, { target: "idle" }],
+            finish: [{ target: "fall", guard: "isAir" }, { target: "idle" }],
             die: "dead",
           },
         },
@@ -300,12 +300,12 @@ export function createCharacterFSM(char) {
     },
   );
 
-  const service = interpret(machine);
-  service.start();
+  const actor = createActor(machine);
+  actor.start();
 
   // Animation finish → send 'finish' event (annihilate pattern)
   // This must be wired up by the character after registering animations
-  char._fsmService = service;
+  char._fsmService = actor;
 
-  return service;
+  return actor;
 }

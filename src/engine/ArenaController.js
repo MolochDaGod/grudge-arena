@@ -190,7 +190,7 @@ export class ArenaController {
       this.holdKey[e.code] = false;
       // Block release (V key)
       if (e.code === 'KeyV') {
-        this._fsmService.send('blockRelease');
+        this._fsmService.send({ type: 'blockRelease' });
       }
     });
 
@@ -215,26 +215,26 @@ export class ArenaController {
     if (this.tickKey._RMB) {
       this.onAttack?.("toggle");
     } else if (this.tickKey.Space) {
-      fsm.send("jump");
+      fsm.send({ type: "jump" });
     } else if (this.tickKey.ControlLeft || this.tickKey.ControlRight) {
-      fsm.send("dash");
+      fsm.send({ type: "dash" });
     } else if (this.tickKey.KeyV) {
-      fsm.send("block");
+      fsm.send({ type: "block" });
     } else if (this.tickKey.Digit1 || this.tickKey.Numpad1) {
       this._activeSkill = 1;
-      fsm.send("skill");
+      fsm.send({ type: "skill" });
     } else if (this.tickKey.Digit2 || this.tickKey.Numpad2) {
       this._activeSkill = 2;
-      fsm.send("skill");
+      fsm.send({ type: "skill" });
     } else if (this.tickKey.Digit3 || this.tickKey.Numpad3) {
       this._activeSkill = 3;
-      fsm.send("skill");
+      fsm.send({ type: "skill" });
     } else if (this.tickKey.Digit4 || this.tickKey.Numpad4) {
       this._activeSkill = 4;
-      fsm.send("skill");
+      fsm.send({ type: "skill" });
     } else if (this.tickKey.Digit5 || this.tickKey.Numpad5) {
       this._activeSkill = 5;
-      fsm.send("skill");
+      fsm.send({ type: "skill" });
     }
     this.tickKey = {};
 
@@ -303,13 +303,13 @@ export class ArenaController {
         this._fsmChar.facing.set(worldDirX, worldDirZ);
 
         // Only enter 'run' state from idle — avoids flooding XState
-        if (fsmValue === "idle") fsm.send("run");
+        if (fsmValue === "idle") fsm.send({ type: "run" });
       } else {
         // Decelerate
         this.currentSpeed = Math.max(0, this.currentSpeed - DECEL_RATE * delta);
         if (this.currentSpeed < 0.01) {
           this.currentSpeed = 0;
-          if (fsmValue === "run") fsm.send("stop");
+          if (fsmValue === "run") fsm.send({ type: "stop" });
         }
       }
     } else {
@@ -354,7 +354,7 @@ export class ArenaController {
     this.mesh.rotation.y = this.targetYaw; // Snap for dodge (instant)
 
     this._fsmChar.facing.set(worldX, worldZ);
-    this._fsmService.send('dash');
+    this._fsmService.send({ type: 'dash' });
     this.onDash?.();
   }
 
@@ -367,7 +367,8 @@ export class ArenaController {
 
   /** Send an FSM event from outside (e.g. game.js combat system) */
   send(event) {
-    this._fsmService.send(event);
+    const evt = typeof event === 'string' ? { type: event } : event;
+    this._fsmService.send(evt);
   }
 
   dispose() {
