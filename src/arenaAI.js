@@ -3,6 +3,12 @@
  *
  * States: idle → engage → approach → attack → retreat → dead
  * Each AI unit picks targets, manages cooldowns, and uses abilities.
+ *
+ * Physics integration:
+ *   - AIDetector (trigger sphere) for target acquisition
+ *   - AIBehaviorFSM (per-class cooldown) for attack gating
+ *   - Physics body movement instead of direct mesh.position mutation
+ *   - Facing controlled via FSM canFacing tag (annihilatetrainer pattern)
  */
 
 import * as THREE from 'three';
@@ -33,13 +39,21 @@ export class ArenaAI {
     this.units = [];
   }
 
-  /** Register an AI unit: { entity, mesh, controller, team, weaponDef } */
-  register(unit) {
+  /**
+   * Register an AI unit.
+   * @param {object} unit — { entity, mesh, controller, team, weaponDef }
+   * @param {object} [physics] — { detector: AIDetector, behaviorFSM, physicsBody }
+   */
+  register(unit, physics) {
     unit.aiState = AI_STATES.IDLE;
     unit.aiTarget = null;
     unit.aiAttackTimer = 0;
     unit.aiAbilityTimer = 0;
     unit.aiCooldowns = {}; // abilityKey → remaining seconds
+    // Physics-based systems (optional — falls back to distance checks if absent)
+    unit.aiDetector = physics?.detector || null;
+    unit.aiBehaviorFSM = physics?.behaviorFSM || null;
+    unit.physicsBody = physics?.physicsBody || null;
     this.units.push(unit);
   }
 
@@ -48,8 +62,19 @@ export class ArenaAI {
     return allUnits.filter(u => u.team === teamId && !u.entity.hasTag('dead'));
   }
 
-  /** Find nearest enemy unit */
+  /**
+   * Find nearest enemy unit.
+   * If the unit has a physics AIDetector with an active target, use that
+   * (trigger-based acquisition). Otherwise fall back to distance scanning.
+   */
   findNearestEnemy(unit, allUnits) {
+    // Physics detector target (annihilatetrainer Ai.js pattern)
+    if (unit.aiDetector) {
+      const detected = unit.aiDetector.getTarget();
+      if (detected?.unit) return detected.unit;
+    }
+
+    // Fallback: distance scan
     const enemyTeam = unit.team === 'A' ? 'B' : 'A';
     const enemies = this.getTeamAlive(allUnits, enemyTeam);
     if (enemies.length === 0) return null;
@@ -146,18 +171,23 @@ export class ArenaAI {
           return;
         }
 
-        // Determine movement direction:
-        //   too far          → approach target
-        //   too close (ranged) → back off to optimal band
+        // Annihilatetrainer Ai.js movement pattern:
+        // Compute direction toward target, normalize, scale by speed × dt
         const toTarget = new THREE.Vector3()
           .subVectors(unit.aiTarget.mesh.position, unit.mesh.position);
         const moveDir = toTarget.clone().normalize();
         if (isRanged && dist < RANGED_KITE_MIN) moveDir.multiplyScalar(-1);
 
-        unit.mesh.position.addScaledVector(moveDir, MOVE_SPEED * delta);
+        // Move via physics body if available, else direct mesh mutation
+        if (unit.physicsBody) {
+          unit.physicsBody.position.x += moveDir.x * MOVE_SPEED * delta;
+          unit.physicsBody.position.z += moveDir.z * MOVE_SPEED * delta;
+        } else {
+          unit.mesh.position.addScaledVector(moveDir, MOVE_SPEED * delta);
+        }
         this._clampToArena(unit.mesh);
 
-        // Always face target (even when backpedalling — WoW strafe feel)
+        // Face target (annihilatetrainer canFacing pattern)
         unit.mesh.lookAt(
           unit.aiTarget.mesh.position.x,
           unit.mesh.position.y,
@@ -213,7 +243,7 @@ export class ArenaAI {
           unit.aiTarget.mesh.position.z
         );
 
-        // Try to use an ability
+      // Try to use an ability
         if (unit.aiAbilityTimer <= 0 && unit.weaponDef?.abilities) {
           const used = this._tryUseAbility(unit);
           if (used) {
@@ -222,8 +252,10 @@ export class ArenaAI {
           }
         }
 
-        // Basic attack
-        if (unit.aiAttackTimer <= 0) {
+        // Basic attack — use per-class AIBehaviorFSM if available
+        if (unit.aiBehaviorFSM) {
+          unit.aiBehaviorFSM.attack();
+        } else if (unit.aiAttackTimer <= 0) {
           this._performAttack(unit);
           unit.aiAttackTimer = ATTACK_COOLDOWN / (unit.weaponDef?.attackSpeed || 1);
         } else {

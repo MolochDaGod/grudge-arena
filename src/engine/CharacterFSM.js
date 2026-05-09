@@ -39,6 +39,7 @@ export function createCharacterFSM(char) {
             air: "fall",
             die: "dead",
           },
+          tags: ["canFacing"],
         },
         run: {
           entry: "playRun",
@@ -54,7 +55,7 @@ export function createCharacterFSM(char) {
             air: "fall",
             die: "dead",
           },
-          tags: ["canMove"],
+          tags: ["canMove", "canFacing"],
         },
 
         // ── Attack combo chain (annihilate: attack → fist → strike) ──

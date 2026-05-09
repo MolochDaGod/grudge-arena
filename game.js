@@ -27,6 +27,17 @@ import { InventoryUI } from "./src/inventoryUI.js";
 import { generateGrudgeUuid } from "./src/grudgeUuid.js";
 import { getHero, DefaultHeroForRace } from "./src/HeroRegistry.js";
 
+// Physics & combat systems (annihilatetrainer patterns)
+import { PhysicsWorld, GROUP_PLAYER, GROUP_ENEMY, GROUP_SCENE, GROUP_TRIGGER } from './src/engine/PhysicsWorld.js';
+import { HitboxManager } from './src/engine/HitboxSystem.js';
+import { AIDetector } from './src/engine/AIDetector.js';
+import { createAIBehaviorFSM } from './src/engine/AIBehaviorFSM.js';
+import { activeProjectiles as physicsProjectiles } from './src/engine/ProjectilePhysics.js';
+import { updateSplashes, HitSplash } from './src/engine/HitSplash.js';
+import { AoEIndicator } from './src/engine/AoEIndicator.js';
+import { SplineTrajectory, TrajectoryMover } from './src/engine/SplineTrajectory.js';
+import { spawnGroundSlamVFX, updateGroundSlamVFX, disposeAllGroundSlamVFX } from './src/engine/GroundSlamVFX.js';
+
 const VALID_RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
 const VALID_CLASSES = ["warlord", "arcanist", "ranger", "assassin"];
 
@@ -73,6 +84,8 @@ class GrudgeArena {
 
     this.world = new World();
     this.collisionSystem = new CollisionSystem();
+    this.physicsWorld = null;       // cannon-es PhysicsWorld
+    this.hitboxManager = null;      // HitboxManager (weapon hitboxes)
     this.particleSystem = null;
     this.spriteSystem = null;
     this.orbitCamera = null;
@@ -94,6 +107,11 @@ class GrudgeArena {
     this._gcdDuration = 1.5;
     this._autoAttackTimer = 0;
     this._autoAttackOn = false;
+
+    // ── AoE / spline systems ────────────────────────────────────
+    this.aoeIndicator   = null;   // AoEIndicator instance (pre-cast targeting circle)
+    this._activeMovers  = [];     // TrajectoryMover[] updated each frame
+    this._terrainMeshes = [];     // ground meshes registered for indicator terrain snap
   }
 
   async init(config) {
@@ -108,6 +126,11 @@ class GrudgeArena {
 
     this.particleSystem = new ParticleSystem(this.scene);
     this.spriteSystem = new SpriteSystem(this.scene);
+
+    // Initialize physics world (cannon-es) and hitbox manager
+    this.physicsWorld = new PhysicsWorld();
+    this.hitboxManager = new HitboxManager(this.physicsWorld.world);
+
     await this._createArena();
     createSkybox(this.scene);
 
@@ -194,8 +217,20 @@ class GrudgeArena {
         this.renderer,
       );
       for (const u of this.allUnits) this.targeting.register(u);
+
+      // Create physics bodies + hitboxes for all units, detectors for AI
+      this._initPhysicsBodies();
+
       for (const u of this.allUnits) {
-        if (!u.isPlayer) this.arenaAI.register(u);
+        if (!u.isPlayer) {
+          // Build physics AI context for this unit
+          const physicsCtx = {
+            physicsBody: u.physicsBody || null,
+            detector: u.aiDetector || null,
+            behaviorFSM: u.aiBehaviorFSM || null,
+          };
+          this.arenaAI.register(u, physicsCtx);
+        }
       }
       this.match.registerTeams(teamAUnits, teamBUnits);
 
@@ -351,6 +386,8 @@ class GrudgeArena {
       });
       this.scene.add(mapScene);
       this.collisionSystem.addCollider(mapScene, 'environment');
+      // Register map meshes for AoEIndicator terrain snap (Raycaster)
+      mapScene.traverse(child => { if (child.isMesh) this._terrainMeshes.push(child); });
       mapLoaded = true;
       console.log('[arena] MOBA map loaded');
     } catch (err) {
@@ -367,7 +404,13 @@ class GrudgeArena {
       ground.receiveShadow = true;
       this.scene.add(ground);
       this.collisionSystem.addCollider(ground, 'environment');
+      this._terrainMeshes.push(ground);
     }
+
+    // AoEIndicator — created here so it has the scene and terrain meshes.
+    // The terrain meshes list is populated above, enabling accurate ground snap
+    // via Raycaster when the player aims a targeted AoE skill (Meteor Strike, etc.)
+    this.aoeIndicator = new AoEIndicator(this.scene, this._terrainMeshes);
 
     // Spawn markers for both teams (visible on top of any map)
     for (const teamId of ['A', 'B']) {
@@ -570,6 +613,99 @@ class GrudgeArena {
     };
   }
 
+  /**
+   * Create cannon-es physics bodies, hitboxes, AI detectors, and behavior FSMs
+   * for all loaded units. Called once after all units are loaded.
+   */
+  _initPhysicsBodies() {
+    if (!this.physicsWorld) return;
+    const pw = this.physicsWorld;
+
+    for (const unit of this.allUnits) {
+      const isTeamA = unit.team === 'A';
+      const group = isTeamA ? GROUP_PLAYER : GROUP_ENEMY;
+      const mask  = GROUP_SCENE
+        | (isTeamA ? GROUP_ENEMY : GROUP_PLAYER)
+        | (isTeamA ? GROUP_ENEMY : GROUP_PLAYER)  // same — for clarity
+        | GROUP_TRIGGER;
+
+      // Character physics body
+      const spawnPos = unit.mesh.position;
+      const body = pw.createCharacterBody(
+        { x: spawnPos.x, y: 0.9, z: spawnPos.z },
+        0.5, 1.8, group, mask,
+      );
+      body.belongTo = {
+        unit,
+        isPlayer: isTeamA,
+        isEnemy: !isTeamA,
+        // Callbacks for HitboxSystem collision resolution
+        onHit: (evt, attackerOwner) => {
+          const hp = unit.entity.getComponent('Health');
+          if (!hp || hp.invulnerable) return;
+          const dmg = (attackerOwner?.unit?.weaponDef?.baseAttackDamage || 30)
+            * (0.8 + Math.random() * 0.4);
+          hp.current = Math.max(0, hp.current - dmg);
+          hp.lastDamageTime = performance.now();
+          unit.controller?.playOnce('hit', 1.5);
+
+          // Spawn hit splash at contact point
+          if (evt?.body?.position) {
+            new HitSplash(this.scene, new THREE.Vector3(
+              evt.body.position.x, evt.body.position.y, evt.body.position.z,
+            ));
+          }
+
+          if (hp.current <= 0) {
+            unit.entity.addTag('dead');
+            unit.controller?.play('death', { loop: false });
+          }
+        },
+        onBlocked: () => {
+          unit.controller?.playOnce('block', 1.0);
+        },
+      };
+      unit.physicsBody = body;
+
+      // Hitbox (weapon collider)
+      this.hitboxManager.register(unit);
+
+      // AI-only: detector + behavior FSM
+      if (!unit.isPlayer) {
+        const detectorRadius = (unit.weaponDef?.range ?? 0) > 5 ? 20 : 12;
+        const targetGroup = isTeamA ? GROUP_ENEMY : GROUP_PLAYER;
+        const detector = new AIDetector(pw.world, body, {
+          radius: detectorRadius,
+          targetGroup,
+        });
+        unit.aiDetector = detector;
+
+        // Infer class from weapon for behavior FSM
+        const classId = this._inferClassFromWeapon(unit.weaponDef);
+        // AI units don't have ArenaController, so we create a lightweight
+        // character FSM actor for them if not already present.
+        const charFSM = unit.controller?._fsmService || unit._fsmService;
+        if (charFSM) {
+          const behaviorFSM = createAIBehaviorFSM(classId, charFSM);
+          unit.aiBehaviorFSM = behaviorFSM;
+        }
+      }
+    }
+
+    console.log('[arena] Physics bodies created for', this.allUnits.length, 'units');
+  }
+
+  /** Map weapon definition to one of the 4 class archetypes. */
+  _inferClassFromWeapon(weaponDef) {
+    if (!weaponDef) return 'warlord';
+    const range = weaponDef.range ?? 0;
+    const speed = weaponDef.attackSpeed ?? 1;
+    if (range > 5) return 'ranger';
+    if (speed >= 1.8) return 'assassin';
+    if (weaponDef.primaryResource === 'mana') return 'arcanist';
+    return 'warlord';
+  }
+
   _createFallbackPlayer() {
     const player = new THREE.Group();
     const body = new THREE.Mesh(
@@ -748,109 +884,248 @@ class GrudgeArena {
   _executeAbility(ability) {
     if (!this.playerUnit) return;
     const mesh = this.playerUnit.mesh;
-    const pos = mesh.position.clone();
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(mesh.quaternion);
+    const pos  = mesh.position.clone();
+    const fwd  = new THREE.Vector3(0, 0, -1).applyQuaternion(mesh.quaternion);
     const LIMIT = 35;
 
+    // Resolve target position: use current target's position if alive + in range,
+    // otherwise aim directly in front of the player.
+    const _targetPos = () => {
+      const t = this.targeting?.currentTarget;
+      if (t && t.team !== this.playerUnit.team && !t.entity?.hasTag('dead'))
+        return t.mesh.position.clone().setY(0);
+      return pos.clone().add(fwd.clone().multiplyScalar(10)).setY(0);
+    };
+
     switch (ability.effect) {
-      case "fireball":
+
+      // ── Fireball (unchanged) ────────────────────────────────────────
+      case 'fireball':
         this._createProjectile({
-          position: pos
-            .clone()
-            .add(fwd)
-            .add(new THREE.Vector3(0, 1, 0)),
+          position:  pos.clone().add(fwd).add(new THREE.Vector3(0, 1, 0)),
           direction: fwd,
-          speed: 20,
-          damage: ability.damage,
-          color: 0xff4400,
-          shader: "fireball",
-          lifetime: 3,
-          onHit: (_t, pt) =>
-            this.particleSystem.emitExplosion(
-              pt,
-              new THREE.Color(0xff4400),
-              50,
-            ),
+          speed: 20,  damage: ability.damage,  color: 0xff4400,
+          shader: 'fireball',  lifetime: 3,
+          onHit: (_t, pt) => this.particleSystem.emitExplosion(pt, new THREE.Color(0xff4400), 50),
         });
         break;
-      case "frost_nova": {
+
+      // ── Frost Nova — upgraded with GroundSlamVFX + AoE damage ────────────
+      case 'frost_nova': {
+        const r = ability.radius ?? ability.freezeDuration ?? 5;
+        // Existing frost ring shader
         const ring = new THREE.Mesh(
-          new THREE.RingGeometry(0.5, 5, 32),
-          createShaderMaterial("frost"),
+          new THREE.RingGeometry(0.5, r, 32),
+          createShaderMaterial('frost'),
         );
         ring.rotation.x = -Math.PI / 2;
-        ring.position.copy(pos);
-        ring.position.y = 0.1;
+        ring.position.copy(pos).setComponent(1, 0.1);
         this.scene.add(ring);
-        this.gameTimers.add(2, () => this.scene.remove(ring));
-        this.particleSystem.emit({
-          position: pos,
-          color: new THREE.Color(0x88ccff),
-          count: 100,
-          velocity: new THREE.Vector3(0, 2, 0),
-          spread: 5,
-          lifetime: 1,
-          size: 0.3,
+        this.gameTimers.add(2.5, () => { this.scene.remove(ring); ring.geometry.dispose(); ring.material.dispose(); });
+        // New: ice-colored GroundSlamVFX
+        spawnGroundSlamVFX(this.scene, pos, { radius: r, color: 0x44aaff, debrisCount: 50 });
+        this._applyAoEDamage(pos, r, ability.damage ?? 30);
+        this.particleSystem.emit({ position: pos, color: new THREE.Color(0x88ccff),
+          count: 80, velocity: new THREE.Vector3(0, 2, 0), spread: r, lifetime: 1, size: 0.25 });
+        break;
+      }
+
+      // ── Colossus Smash / aoe_strike — fire+lightning ground slam ───────
+      case 'aoe_strike': {
+        const r = ability.aoeRadius ?? 4;
+        spawnGroundSlamVFX(this.scene, pos, { radius: r, color: 0xff8800, debrisCount: 70 });
+        this._applyAoEDamage(pos, r, ability.damage ?? 120);
+        // Show brief AoE indicator flash
+        this.aoeIndicator?.show(pos, r, 0xff8800);
+        this.gameTimers.add(0.35, () => this.aoeIndicator?.hide());
+        break;
+      }
+
+      // ── Blade Dance / aoe_melee — spinning close-range AoE ──────────
+      case 'aoe_melee': {
+        const r = ability.radius ?? 3;
+        spawnGroundSlamVFX(this.scene, pos, { radius: r, color: 0xffffff, debrisCount: 30 });
+        this._applyAoEDamage(pos, r, ability.damage ?? 40);
+        this.particleSystem.emit({ position: pos.clone().add(new THREE.Vector3(0, 1, 0)),
+          color: new THREE.Color(0xffffff), count: 40, velocity: new THREE.Vector3(0, 1, 0),
+          spread: r, lifetime: 0.4, size: 0.15 });
+        break;
+      }
+
+      // ── Meteor Strike — castTime indicator + SplineTrajectory arc + GroundSlamVFX
+      case 'meteor': {
+        const r        = ability.radius   ?? 6;
+        const castTime = ability.castTime ?? 1.5;
+        const targetP  = _targetPos();
+
+        // Show AoE indicator during cast
+        this.aoeIndicator?.show(targetP, r, 0xff4400);
+
+        // After cast completes, hide indicator and launch the meteor
+        this.gameTimers.add(castTime, () => {
+          this.aoeIndicator?.hide();
+
+          // Spawn point: high above the target
+          const skyPos = targetP.clone();
+          skyPos.y = 18;
+
+          const traj = SplineTrajectory.arcPath(skyPos, targetP, {
+            apexHeight: 1.5,  // barely arcs — mostly straight drop
+            apexBias:   0.08, // apex near the start (sky side)
+          });
+
+          // Meteor mesh — fireball shader sphere
+          const mGeo  = new THREE.SphereGeometry(0.55, 12, 12);
+          const mMat  = createShaderMaterial('fireball');
+          const mMesh = new THREE.Mesh(mGeo, mMat);
+          mMesh.add(new THREE.PointLight(0xff4400, 4, 10));
+          this.scene.add(mMesh);
+
+          // Fading trail attached to scene
+          const trail = traj.buildFadingTrail({ color: 0xff4400, radius: 0.14 });
+          this.scene.add(trail);
+
+          const mover = new TrajectoryMover(mMesh, traj, {
+            duration:    0.75,
+            easing:      'easeIn',
+            faceForward: true,
+            onComplete: () => {
+              this.scene.remove(mMesh);
+              mGeo.dispose(); mMat.dispose();
+              this.scene.remove(trail);
+              trail.geometry?.dispose(); trail.material?.dispose();
+              // Impact!
+              spawnGroundSlamVFX(this.scene, targetP, {
+                radius: r, color: 0xff4400, meteor: true, debrisCount: 90,
+              });
+              this._applyAoEDamage(targetP, r, ability.damage ?? 150);
+              this.particleSystem.emitExplosion(targetP, new THREE.Color(0xff4400), 70);
+            },
+          });
+          mover.start();
+          this._activeMovers.push(mover);
         });
         break;
       }
-      case "shield": {
+
+      // ── Cloudkill / aoe_zone — indicator + persistent poison zone ─────
+      case 'aoe_zone': {
+        const r        = ability.radius   ?? 5;
+        const duration = ability.duration ?? 5;
+        const tickRate = ability.tickRate ?? 0.5;
+        const targetP  = _targetPos();
+        // Brief indicator flash, then detonate
+        this.aoeIndicator?.show(targetP, r, 0x44cc44);
+        this.gameTimers.add(0.3, () => {
+          this.aoeIndicator?.hide();
+          spawnGroundSlamVFX(this.scene, targetP, { radius: r, color: 0x44cc44, debrisCount: 25 });
+          // Tick damage
+          let ticks    = 0;
+          const maxT   = Math.floor(duration / tickRate);
+          const tick   = () => {
+            if (ticks++ >= maxT) return;
+            this._applyAoEDamage(targetP, r, ability.damage ?? 10);
+            this.particleSystem.emit({ position: targetP.clone().add(new THREE.Vector3(0, 0.5, 0)),
+              color: new THREE.Color(0x44cc44), count: 15, velocity: new THREE.Vector3(0, 0.8, 0),
+              spread: r * 0.7, lifetime: 0.8, size: 0.2 });
+            this.gameTimers.add(tickRate, tick);
+          };
+          tick();
+        });
+        break;
+      }
+
+      // ── Consecration / ground_zone — holy ground at caster ─────────
+      case 'ground_zone': {
+        const r        = ability.radius   ?? 4;
+        const duration = ability.duration ?? 6;
+        const dmgTick  = ability.damagePerTick ?? 20;
+        spawnGroundSlamVFX(this.scene, pos, { radius: r, color: 0xffdd88, debrisCount: 20 });
+        this.aoeIndicator?.show(pos, r, 0xffdd88);
+        this.gameTimers.add(duration, () => this.aoeIndicator?.hide());
+        // Initial + 3 additional ticks over duration
+        this._applyAoEDamage(pos, r, dmgTick);
+        for (let i = 1; i <= 3; i++) {
+          this.gameTimers.add(duration * (i / 4), () => this._applyAoEDamage(pos, r, dmgTick));
+        }
+        break;
+      }
+
+      // ── Shield (unchanged) ────────────────────────────────────────
+      case 'shield': {
         const s = new THREE.Mesh(
           new THREE.SphereGeometry(1.5, 32, 32),
-          new THREE.MeshBasicMaterial({
-            color: 0x4488ff,
-            transparent: true,
-            opacity: 0.3,
-            side: THREE.DoubleSide,
-          }),
+          new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.3, side: THREE.DoubleSide }),
         );
         mesh.add(s);
         this.gameTimers.add(ability.duration || 3, () => mesh.remove(s));
         break;
       }
-      case "dash":
+
+      // ── Dash (unchanged) ───────────────────────────────────────
+      case 'dash':
         mesh.position.addScaledVector(fwd, ability.distance || 10);
         mesh.position.x = Math.max(-LIMIT, Math.min(LIMIT, mesh.position.x));
         mesh.position.z = Math.max(-LIMIT, Math.min(LIMIT, mesh.position.z));
         this.particleSystem?.emit({
-          position: pos,
-          color: new THREE.Color(0x3366ff),
-          count: 30,
-          velocity: fwd.clone().multiplyScalar(-5),
-          spread: 1,
-          lifetime: 0.5,
-          size: 0.2,
+          position: pos, color: new THREE.Color(0x3366ff),
+          count: 30, velocity: fwd.clone().multiplyScalar(-5), spread: 1, lifetime: 0.5, size: 0.2,
         });
         break;
-      case "blink": {
-        const np = pos
-          .clone()
-          .add(fwd.clone().multiplyScalar(ability.distance || 8));
+
+      // ── Blink (unchanged) ───────────────────────────────────────
+      case 'blink': {
+        const np = pos.clone().add(fwd.clone().multiplyScalar(ability.distance || 8));
         np.x = Math.max(-LIMIT, Math.min(LIMIT, np.x));
         np.z = Math.max(-LIMIT, Math.min(LIMIT, np.z));
         mesh.position.copy(np);
         for (const p of [pos, np])
-          this.particleSystem.emit({
-            position: p,
-            color: new THREE.Color(0x8844ff),
-            count: 30,
-            velocity: new THREE.Vector3(0, 2, 0),
-            spread: 2,
-            lifetime: 0.5,
-            size: 0.3,
-          });
+          this.particleSystem.emit({ position: p, color: new THREE.Color(0x8844ff),
+            count: 30, velocity: new THREE.Vector3(0, 2, 0), spread: 2, lifetime: 0.5, size: 0.3 });
         break;
       }
+
+      // ── Default particle burst ───────────────────────────────────
       default:
         this.particleSystem.emit({
           position: pos.clone().add(new THREE.Vector3(0, 1, 0)),
-          color: new THREE.Color(0xffffff),
-          count: 20,
-          velocity: fwd.clone().add(new THREE.Vector3(0, 1, 0)),
-          spread: 1,
-          lifetime: 0.5,
-          size: 0.2,
+          color: new THREE.Color(0xffffff), count: 20,
+          velocity: fwd.clone().add(new THREE.Vector3(0, 1, 0)), spread: 1, lifetime: 0.5, size: 0.2,
         });
+    }
+  }
+
+  /**
+   * Apply AoE damage to all enemy units inside a sphere.
+   * Uses CollisionSystem.checkAoE (THREE.Sphere + THREE.Box3 two-phase check)
+   * and displays floating damage numbers via SpriteSystem.
+   *
+   * @param {THREE.Vector3} center
+   * @param {number}        radius
+   * @param {number}        damage    — base damage before crit/variance
+   */
+  _applyAoEDamage(center, radius, damage) {
+    if (!this.playerUnit || this.allUnits.length === 0) return;
+    const enemies = this.allUnits.filter(
+      u => u.team !== this.playerUnit.team && !u.entity?.hasTag('dead')
+    );
+    const hits = this.collisionSystem.checkAoE(center, radius, enemies, /*flatY=*/true);
+    for (const u of hits) {
+      const hp = u.entity.getComponent('Health');
+      if (!hp || hp.invulnerable) continue;
+      const isCrit   = Math.random() < 0.18;
+      const variance = 0.8 + Math.random() * 0.4;
+      const finalDmg = Math.round(damage * variance * (isCrit ? 1.6 : 1));
+      hp.current = Math.max(0, hp.current - finalDmg);
+      hp.lastDamageTime = performance.now();
+      u.controller?.playOnce('hit', 1.2);
+      // Floating damage number above the hit unit
+      const numPos = u.mesh.position.clone().add(new THREE.Vector3(0, 2.2, 0));
+      this.spriteSystem?.createDamageNumber(finalDmg, numPos, isCrit);
+      if (hp.current <= 0) {
+        u.entity.addTag('dead');
+        u.controller?.play('death', { loop: false });
+      }
     }
   }
 
@@ -1135,6 +1410,37 @@ class GrudgeArena {
       this._updateAutoAttack(delta);
       this._updateProjectiles(delta);
     }
+
+    // ── Physics step & sync (annihilatetrainer pattern) ──
+    if (this.physicsWorld) {
+      // Sync player mesh → physics body (player drives mesh directly)
+      if (this.playerUnit?.physicsBody) {
+        this.physicsWorld.syncBodyToMesh(this.playerUnit.physicsBody, this.playerUnit.mesh);
+      }
+
+      this.physicsWorld.step(delta);
+
+      // Sync AI physics bodies → meshes
+      for (const u of this.allUnits) {
+        if (!u.isPlayer && u.physicsBody) {
+          this.physicsWorld.syncMeshToBody(u.mesh, u.physicsBody);
+        }
+        // Update AI detectors
+        if (u.aiDetector) u.aiDetector.update();
+      }
+
+      // Hitbox sync + resolve
+      this.hitboxManager?.update();
+
+      // Physics projectiles
+      for (let i = physicsProjectiles.length - 1; i >= 0; i--) {
+        physicsProjectiles[i].update(delta);
+      }
+
+      // Hit splashes
+      updateSplashes(delta);
+    }
+
     this.gameTimers.update(delta, active);
     if (this.arenaAI) this.arenaAI.update(delta, this.allUnits, active);
     this._updateShaders(delta);
@@ -1144,6 +1450,21 @@ class GrudgeArena {
     this.particleSystem?.update(delta);
     this.spriteSystem?.update(delta);
     this.orbitCamera?.update(delta);
+
+    // ── AoE / spline systems ──────────────────────────────────
+    // updateGroundSlamVFX drives all active slam/meteor impact VFX instances.
+    // aoeIndicator.update animates the pre-cast targeting ring shader.
+    // _activeMovers advances any in-flight TrajectoryMover (Meteor Strike arc, etc.)
+    updateGroundSlamVFX(delta);
+    this.aoeIndicator?.update(delta);
+    if (this._activeMovers.length > 0) {
+      for (let i = this._activeMovers.length - 1; i >= 0; i--) {
+        if (this._activeMovers[i].update(delta)) {
+          this._activeMovers.splice(i, 1); // remove completed movers
+        }
+      }
+    }
+
     this._updateUI();
     this._updateAbilityCooldownSweep();
     this.inventoryUI?.update();
@@ -1249,6 +1570,11 @@ class GrudgeArena {
     this.particleSystem?.dispose();
     this.spriteSystem?.dispose();
     this.gameTimers.clear();
+    // AoE / spline systems
+    disposeAllGroundSlamVFX();
+    this.aoeIndicator?.dispose();
+    this._activeMovers.forEach(m => m.dispose());
+    this._activeMovers.length = 0;
 
     // Traverse scene and dispose all geometries/materials/textures
     this.scene?.traverse((child) => {

@@ -91,6 +91,65 @@ export const ShaderLibrary = {
         vec3 color = mix(color1, color2, vWave * 2.0 + 0.5 + ripple * 0.3) + vec3(pow(ripple, 4.0) * 0.5);
         gl_FragColor = vec4(color, 0.8); }`
   },
+  // ── Ground crack / impact shader ─────────────────────────────────────────
+  // Drives a persistent decal-like disc that shows glowing crack patterns.
+  // Used on the arena floor after a Hammer Slam or Meteor Strike lands.
+  // Uniforms:
+  //   time      — elapsed seconds (advances crack glow animation)
+  //   progress  — 0→1 reveal (crack spreads outward on impact)
+  //   color     — impact tint (0xff6600 fire, 0x00aaff ice, 0x88ff00 nature)
+  groundCrack: {
+    uniforms: {
+      time:     { value: 0 },
+      progress: { value: 0 },
+      color:    { value: new THREE.Color(0xff6600) },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      #define PI 3.14159265359
+      uniform float time;
+      uniform float progress;
+      uniform vec3  color;
+      varying vec2  vUv;
+
+      float random(vec2 s) { return fract(sin(dot(s, vec2(127.1, 311.7))) * 43758.5453); }
+
+      // Star-shaped crack SDF — 8 arms radiating from center
+      float crackSDF(vec2 uv, float arms) {
+        float angle = atan(uv.y, uv.x);
+        float r     = length(uv);
+        float sector = abs(mod(angle / PI * arms * 0.5, 1.0) - 0.5) * 2.0;
+        return r - (0.9 - sector * 0.3) * progress;
+      }
+
+      void main() {
+        vec2 uv  = vUv - 0.5;
+        float d  = length(uv) * 2.0;
+        if (d > 1.05) discard;
+
+        // Crack pattern: star SDF with noise displacement
+        float jitter = random(floor(uv * 12.0)) * 0.06;
+        float crack8 = crackSDF(uv + jitter, 8.0);
+        float crack5 = crackSDF(uv - jitter, 5.0);
+        float crack  = min(abs(crack8), abs(crack5));
+
+        // Glow inside cracks
+        float glow   = smoothstep(0.06, 0.0, crack);
+        // Pulse the glow
+        float pulse  = 0.6 + 0.4 * sin(time * 4.0 - d * 5.0);
+        // Dark fill with glowing lines
+        float fill   = (1.0 - d * d) * 0.08 * progress;
+        float alpha  = (glow * pulse + fill) * (1.0 - d * 0.6);
+
+        gl_FragColor = vec4(color + glow * 0.4, clamp(alpha, 0.0, 0.88));
+      }`
+  },
+
   arenaGround: {
     uniforms: {
       time: { value: 0 }, colorA: { value: new THREE.Color(0x1a1a2e) },
