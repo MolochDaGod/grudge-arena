@@ -14,7 +14,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { getRaceConfig, getRaceFactionColors, resolveWeapon, TierConfig } from './engine/RaceConfig.js';
 import { EquipmentManager, isD1ModularScene } from "./EquipmentManager.js";
-import { assetUrl, charUrl, animUrl } from "./assetConfig.js";
+import { assetUrl, charUrl, animUrl, audioUrl, modelUrl } from "./assetConfig.js";
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
 
@@ -385,69 +385,69 @@ const ANIM_FILE_MAP = {
   },
 };
 
-/** Audio SFX paths per weapon type (matched to actual filenames) */
+/** Audio SFX paths per weapon type — routed through assetConfig for R2 in prod */
 export const WEAPON_SFX = {
   greatsword: {
     attack: [
-      "/audio/sfx/sword/swing_1.mp3",
-      "/audio/sfx/sword/swing_2.mp3",
-      "/audio/sfx/sword/swing_3.mp3",
+      audioUrl("sfx/sword/swing_1.mp3"),
+      audioUrl("sfx/sword/swing_2.mp3"),
+      audioUrl("sfx/sword/swing_3.mp3"),
     ],
     skill: [
-      "/audio/sfx/sword/charge.mp3",
-      "/audio/sfx/sword/colossus_strike.mp3",
-      "/audio/sfx/sword/windshear.mp3",
+      audioUrl("sfx/sword/charge.mp3"),
+      audioUrl("sfx/sword/colossus_strike.mp3"),
+      audioUrl("sfx/sword/windshear.mp3"),
     ],
-    block: ["/audio/sfx/sword/deflect.mp3"],
+    block: [audioUrl("sfx/sword/deflect.mp3")],
   },
   scythe: {
-    attack: ["/audio/sfx/scythe/entropic_bolts.mp3"],
+    attack: [audioUrl("sfx/scythe/entropic_bolts.mp3")],
     skill: [
-      "/audio/sfx/scythe/cryoflame.mp3",
-      "/audio/sfx/scythe/crossentropy.mp3",
-      "/audio/sfx/scythe/frost_nova.mp3",
-      "/audio/sfx/scythe/sunwell.mp3",
+      audioUrl("sfx/scythe/cryoflame.mp3"),
+      audioUrl("sfx/scythe/crossentropy.mp3"),
+      audioUrl("sfx/scythe/frost_nova.mp3"),
+      audioUrl("sfx/scythe/sunwell.mp3"),
     ],
   },
   sabres: {
-    attack: ["/audio/sfx/sabres/sabres_swing.mp3"],
+    attack: [audioUrl("sfx/sabres/sabres_swing.mp3")],
     skill: [
-      "/audio/sfx/sabres/backstab.mp3",
-      "/audio/sfx/sabres/flourish.mp3",
-      "/audio/sfx/sabres/shadow_step.mp3",
-      "/audio/sfx/sabres/skyfall.mp3",
+      audioUrl("sfx/sabres/backstab.mp3"),
+      audioUrl("sfx/sabres/flourish.mp3"),
+      audioUrl("sfx/sabres/shadow_step.mp3"),
+      audioUrl("sfx/sabres/skyfall.mp3"),
     ],
   },
   runeblade: {
-    attack: ["/audio/sfx/runeblade/smite.mp3"],
+    attack: [audioUrl("sfx/runeblade/smite.mp3")],
     skill: [
-      "/audio/sfx/runeblade/heartrend.mp3",
-      "/audio/sfx/runeblade/wraithblade.mp3",
-      "/audio/sfx/runeblade/void_grasp.mp3",
+      audioUrl("sfx/runeblade/heartrend.mp3"),
+      audioUrl("sfx/runeblade/wraithblade.mp3"),
+      audioUrl("sfx/runeblade/void_grasp.mp3"),
     ],
   },
   bow: {
-    attack: ["/audio/sfx/bow/draw.mp3", "/audio/sfx/bow/release.mp3"],
+    attack: [audioUrl("sfx/bow/draw.mp3"), audioUrl("sfx/bow/release.mp3")],
     skill: [
-      "/audio/sfx/bow/cobra_shot_release.mp3",
-      "/audio/sfx/bow/viper_sting_release.mp3",
-      "/audio/sfx/bow/barrage_release.mp3",
-      "/audio/sfx/bow/cloudkill_release.mp3",
+      audioUrl("sfx/bow/cobra_shot_release.mp3"),
+      audioUrl("sfx/bow/viper_sting_release.mp3"),
+      audioUrl("sfx/bow/barrage_release.mp3"),
+      audioUrl("sfx/bow/cloudkill_release.mp3"),
     ],
   },
   staff: {
-    attack: ["/audio/sfx/scythe/entropic_bolts.mp3"],
-    skill: ["/audio/sfx/scythe/mantra.mp3", "/audio/sfx/scythe/cryoflame.mp3"],
+    attack: [audioUrl("sfx/scythe/entropic_bolts.mp3")],
+    skill: [audioUrl("sfx/scythe/mantra.mp3"), audioUrl("sfx/scythe/cryoflame.mp3")],
   },
   wand: {
-    attack: ["/audio/sfx/scythe/entropic_bolts.mp3"],
-    skill: ["/audio/sfx/scythe/mantra.mp3"],
+    attack: [audioUrl("sfx/scythe/entropic_bolts.mp3")],
+    skill: [audioUrl("sfx/scythe/mantra.mp3")],
   },
   // UI sounds
   ui: {
-    select: "/audio/sfx/ui/selection.mp3",
-    dash: "/audio/sfx/ui/dash.mp3",
-    countdown: "/audio/sfx/ui/interface.mp3",
+    select: audioUrl("sfx/ui/selection.mp3"),
+    dash: audioUrl("sfx/ui/dash.mp3"),
+    countdown: audioUrl("sfx/ui/interface.mp3"),
   },
 };
 
@@ -626,12 +626,12 @@ function raceModelPaths(race) {
   // Fallback: /models/${race}.glb served from /public/models/ on Vercel + dev.
   // (Removed the legacy /api/assets/models/characters/... rewrite — it 404s.)
   const local = RACE_CHARACTER_PATHS[race];
-  return [local, `/models/${race}.glb`].filter(Boolean);
+  return [local, modelUrl(`${race}.glb`)].filter(Boolean);
 }
 
 async function loadCharacterManifest() {
   if (_characterManifestPromise) return _characterManifestPromise;
-  _characterManifestPromise = fetch("/models/characterManifest.json")
+  _characterManifestPromise = fetch(modelUrl("characterManifest.json"))
     .then((r) => {
       if (!r.ok) throw new Error(`manifest http ${r.status}`);
       return r.json();
@@ -1476,7 +1476,7 @@ async function loadAnimationLibrary() {
 
   const gltf = await new Promise((resolve, reject) => {
     gltfLoader.load(
-      "/models/animation-library.glb",
+      modelUrl("animation-library.glb"),
       resolve,
       undefined,
       reject,

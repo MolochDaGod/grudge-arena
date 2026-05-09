@@ -17,6 +17,7 @@ import { getRaceConfig, resolveWeapon } from './src/engine/RaceConfig.js';
 import { ShaderLibrary, createShaderMaterial } from './src/engine/ShaderLibrary.js';
 import { ParticleSystem } from './src/engine/ParticleSystem.js';
 import { CollisionSystem } from './src/engine/CollisionSystem.js';
+import { mapUrl } from './src/assetConfig.js';
 import { OrbitCamera } from './src/engine/OrbitCamera.js';
 import { ArenaController } from './src/engine/ArenaController.js';
 import { SpriteSystem, createSkybox } from './src/engine/SpriteSystem.js';
@@ -335,7 +336,7 @@ class GrudgeArena {
     try {
       const loader = new GLTFLoader();
       const gltf = await new Promise((resolve, reject) => {
-        loader.load('/assets/maps/moba/scene.gltf', resolve, undefined, reject);
+        loader.load(mapUrl('moba/scene.gltf'), resolve, undefined, reject);
       });
       const mapScene = gltf.scene;
       // Scale the MOBA map to a reasonable arena size and center it.
