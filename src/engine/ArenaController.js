@@ -5,16 +5,18 @@
  * Works with AnimationController (from modelLoader).
  *
  * Controls (WoW / MMO style):
- *   W/S   = move forward / backward (camera-relative)
- *   A/D   = turn character left / right
+ *   W/S   = move forward / backward (always camera-relative, Fortnite style)
+ *   A/D   = turn character left / right (camera follows behind aggressively)
  *   Q/E   = strafe left / right (camera-relative, no rotation)
  *   Shift = sprint
  *   Space = jump
  *   Ctrl  = dash/roll
  *   V     = block (hold)
  *   RMB   = toggle auto-attack
- *   1-5   = skills
- *   Tab   = cycle target
+ *   1-4   = skill slots (Q/E/R/F in combat, mapped to ability bar)
+ *   5     = empty / reserved (no action)
+ *   6-8   = consumable / on-use relic slots
+ *   Tab   = cycle next enemy target (WoW-style)
  *
  * Features:
  *   - Camera-relative W/S + Q/E movement
@@ -80,9 +82,10 @@ export class ArenaController {
     this._activeSkill = 0;
 
     // Callbacks set by game.js
-    this.onAttack = null;    // (type: number|string) => void
-    this.onAbility = null;   // (skillIndex: number) => void
-    this.onDash = null;      // () => void
+    this.onAttack  = null;   // (type: number|string) => void
+    this.onAbility = null;   // (slotKey: string) => void  — 'Q'/'E'/'R'/'F' (skills) or '6'/'7'/'8' (consumables)
+    this.onDash    = null;   // () => void
+    this.onTarget  = null;   // () => void — Tab: cycle next enemy target (WoW-style)
 
     this._setupListeners();
   }
@@ -209,38 +212,60 @@ export class ArenaController {
     this._doubleTapCooldown = Math.max(0, this._doubleTapCooldown - delta);
 
     // ── Process tick keys (one-shot actions) ──
-    // RMB → toggle auto-attack (WoW-style). Swing anims are driven by
-    // game.js _performAttack inside the auto-attack loop, so we don't
-    // dispatch the FSM 'attack' event here.
+    //
+    // Hotbar layout (matches game.js ability bar + user rule):
+    //   Slots 1-4  = skill abilities  (keys Q / E / R / F or Digit1-4)
+    //   Slot  5    = EMPTY  (no action — reserved / visual separator)
+    //   Slots 6-8  = consumables / on-use relics  (Digit6-8)
+    //
+    // RMB → toggle auto-attack (WoW-style).
+    // Tab → cycle to next enemy target (WoW-style).
+
     if (this.tickKey._RMB) {
       this.onAttack?.("toggle");
-    } else if (this.tickKey.Space) {
+    }
+
+    // Tab: cycle target
+    if (this.tickKey.Tab) {
+      this.onTarget?.();
+    }
+
+    if (this.tickKey.Space) {
       fsm.send({ type: "jump" });
     } else if (this.tickKey.ControlLeft || this.tickKey.ControlRight) {
       fsm.send({ type: "dash" });
     } else if (this.tickKey.KeyV) {
       fsm.send({ type: "block" });
-    } else if (this.tickKey.Digit1 || this.tickKey.Numpad1) {
-      this._activeSkill = 1;
-      fsm.send({ type: "skill" });
-    } else if (this.tickKey.Digit2 || this.tickKey.Numpad2) {
-      this._activeSkill = 2;
-      fsm.send({ type: "skill" });
-    } else if (this.tickKey.Digit3 || this.tickKey.Numpad3) {
-      this._activeSkill = 3;
-      fsm.send({ type: "skill" });
-    } else if (this.tickKey.Digit4 || this.tickKey.Numpad4) {
-      this._activeSkill = 4;
-      fsm.send({ type: "skill" });
-    } else if (this.tickKey.Digit5 || this.tickKey.Numpad5) {
-      this._activeSkill = 5;
-      fsm.send({ type: "skill" });
     }
+
+    // ─ Skill slots 1-4 (Digit1-4 OR Numpad1-4) ─
+    if (this.tickKey.Digit1 || this.tickKey.Numpad1) {
+      this._activeSkill = 1; this._fireSkill('Q');
+    } else if (this.tickKey.Digit2 || this.tickKey.Numpad2) {
+      this._activeSkill = 2; this._fireSkill('E');
+    } else if (this.tickKey.Digit3 || this.tickKey.Numpad3) {
+      this._activeSkill = 3; this._fireSkill('R');
+    } else if (this.tickKey.Digit4 || this.tickKey.Numpad4) {
+      this._activeSkill = 4; this._fireSkill('F');
+    }
+    // Slot 5 = empty (intentional no-op)
+
+    // ─ Consumable slots 6-8 (Digit6-8 OR Numpad6-8) ─
+    if (this.tickKey.Digit6 || this.tickKey.Numpad6) {
+      this.onAbility?.('6');
+    } else if (this.tickKey.Digit7 || this.tickKey.Numpad7) {
+      this.onAbility?.('7');
+    } else if (this.tickKey.Digit8 || this.tickKey.Numpad8) {
+      this.onAbility?.('8');
+    }
+
     this.tickKey = {};
 
     // ── A/D keyboard turning (MMO-style) ──
-    // A/D rotate the character's facing. They do NOT produce movement.
-    const turningLeft = this.holdKey.KeyA || this.holdKey.ArrowLeft;
+    // A/D rotate the character's facing.  No strafe movement — use Q/E for that.
+    // When A/D are held the OrbitCamera's aggressive passive-follow (PASSIVE_FOLLOW_MOVING)
+    // will keep the camera aligned behind the turning character automatically.
+    const turningLeft  = this.holdKey.KeyA || this.holdKey.ArrowLeft;
     const turningRight = this.holdKey.KeyD || this.holdKey.ArrowRight;
     if (this.canMove && (turningLeft || turningRight)) {
       const turnDir = (turningLeft ? 1 : 0) - (turningRight ? 1 : 0);
@@ -251,28 +276,29 @@ export class ArenaController {
     }
 
     // ── Build input direction from held keys ──
-    // W/S = forward/back (camera-relative), Q/E = strafe (camera-relative)
-    let ix = 0,
-      iz = 0;
-    if (this.holdKey.KeyW || this.holdKey.ArrowUp) iz -= 1;
-    if (this.holdKey.KeyS || this.holdKey.ArrowDown) iz += 1;
-    if (this.holdKey.KeyQ) ix -= 1;   // Strafe left
-    if (this.holdKey.KeyE) ix += 1;   // Strafe right
+    // W   = always forward in camera direction (Fortnite style — character turns to face it).
+    // S   = backward relative to camera.
+    // Q/E = strafe left/right (camera-relative, no character rotation).
+    // A/D = keyboard turn (handled above); they do NOT contribute to movement direction here.
+    let ix = 0, iz = 0;
+    if (this.holdKey.KeyW || this.holdKey.ArrowUp)   iz -= 1;  // Forward (away from camera)
+    if (this.holdKey.KeyS || this.holdKey.ArrowDown)  iz += 1;  // Backward
+    if (this.holdKey.KeyQ) ix -= 1;   // Strafe left  (camera-relative)
+    if (this.holdKey.KeyE) ix += 1;   // Strafe right (camera-relative)
 
     const hasInput = ix !== 0 || iz !== 0;
     const isSprint = this.holdKey.ShiftLeft || this.holdKey.ShiftRight;
     const maxSpeed = isSprint ? MOVE_SPEED * SPRINT_MULTIPLIER : MOVE_SPEED;
 
-    // ── Camera-relative direction ──
-    let worldDirX = 0,
-      worldDirZ = 0;
+    // ── Camera-relative world direction ──
+    // All movement axes are resolved relative to the camera yaw so W always
+    // goes in the direction the camera is pointing (Fortnite feel).
+    let worldDirX = 0, worldDirZ = 0;
     if (hasInput) {
       const len = Math.sqrt(ix * ix + iz * iz);
-      ix /= len;
-      iz /= len;
+      ix /= len; iz /= len;
       const yaw = this.camera.getYaw();
-      const cos = Math.cos(yaw),
-        sin = Math.sin(yaw);
+      const cos = Math.cos(yaw), sin = Math.sin(yaw);
       worldDirX = ix * cos - iz * sin;
       worldDirZ = ix * sin + iz * cos;
     }
@@ -317,6 +343,12 @@ export class ArenaController {
       this.currentSpeed = Math.max(0, this.currentSpeed - DECEL_RATE * delta);
     }
 
+    // ── Notify camera of movement state ──
+    // OrbitCamera uses this to ramp up passive follow speed while moving
+    // (Fortnite-style snap-behind behaviour when running).
+    const isActuallyMoving = hasInput || turningLeft || turningRight;
+    this.camera.setPlayerMoving?.(isActuallyMoving);
+
     // ── Smooth rotation ──
     // Lerp mesh.rotation.y toward targetYaw
     let diff = this.targetYaw - this.mesh.rotation.y;
@@ -334,6 +366,18 @@ export class ArenaController {
     while (this.mesh.rotation.y < -Math.PI) this.mesh.rotation.y += Math.PI * 2;
 
     // ── Animation mixer update is handled by game.js loop via animCtrl.update(delta) ──
+  }
+
+  // ── Skill helper ───────────────────────────────────────────────
+
+  /**
+   * Fire a skill slot and emit the FSM skill event.
+   * @param {string} slotKey - 'Q' | 'E' | 'R' | 'F'
+   */
+  _fireSkill(slotKey) {
+    const fsm = this._fsmService;
+    fsm.send({ type: 'skill' });
+    this.onAbility?.(slotKey);
   }
 
   // ── Double-tap Dodge ───────────────────────────────────────────

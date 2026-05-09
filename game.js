@@ -241,8 +241,8 @@ class GrudgeArena {
           this.renderer.domElement,
         );
         this.orbitCamera.setTarget(this.playerUnit.mesh);
-        // Set initial camera yaw to face the player's direction
-        this.orbitCamera.yaw = this.playerUnit.mesh.rotation.y + Math.PI;
+        // Snap camera to sit behind the player immediately on spawn.
+        this.orbitCamera.snapBehind();
 
         this.playerController = new ArenaController(
           this.playerUnit.mesh,
@@ -252,10 +252,28 @@ class GrudgeArena {
         // Wire combat callbacks. RMB toggles auto-attack (WoW-style) —
         // _performAttack is driven by _updateAutoAttack each frame.
         this.playerController.onAttack = (_type) => this._toggleAutoAttack();
-        this.playerController.onAbility = (idx) => {
-          const keys = ["Q", "E", "R", "F", "P"];
-          if (idx >= 1 && idx <= 5) this.useAbility(keys[idx - 1]);
+
+        // onAbility receives:
+        //   'Q' | 'E' | 'R' | 'F'  → skill slots 1-4 (mapped to weapon ability keys)
+        //   '6' | '7' | '8'         → consumable slots 6-8 (hotbar positions)
+        this.playerController.onAbility = (slotKey) => {
+          if (['Q','E','R','F'].includes(slotKey)) {
+            // Skill slots 1-4 — slotKey is the ability map key used by WeaponDefinitions
+            this.useAbility(slotKey);
+          } else if (['6','7','8'].includes(slotKey)) {
+            // Consumable slots — route to inventory system's use-item handler
+            const idx = parseInt(slotKey, 10);  // 6, 7, or 8
+            this.inventoryUI?.useConsumableSlot?.(idx - 5);  // slot index 1-3
+          }
         };
+
+        // Tab → cycle to next enemy target (WoW-style)
+        this.playerController.onTarget = () => {
+          this.targeting?.cycleTarget(
+            this.allUnits.filter(u => u.team !== this.playerUnit.team && !u.entity?.hasTag('dead'))
+          );
+        };
+
         this.playerController.onDash = () => {
           const fwd = this.playerController.getForward();
           this.particleSystem?.emit({
