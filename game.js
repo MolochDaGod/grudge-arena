@@ -268,10 +268,11 @@ class GrudgeArena {
         };
 
         // Tab → cycle to next enemy target (WoW-style)
+        // TargetSystem.cycleEnemies() already handles Tab natively via its own
+        // _setupInput() listener; this callback lets ArenaController's onTarget
+        // also trigger it programmatically (e.g. from gamepad or custom binds).
         this.playerController.onTarget = () => {
-          this.targeting?.cycleTarget(
-            this.allUnits.filter(u => u.team !== this.playerUnit.team && !u.entity?.hasTag('dead'))
-          );
+          this.targeting?.cycleEnemies();
         };
 
         this.playerController.onDash = () => {
