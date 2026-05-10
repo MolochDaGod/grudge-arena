@@ -1,11 +1,12 @@
 {
+  "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
     {
       "source": "/api/grudge/game/:path*",
-      "destination": "https://api.grudge-studio.com/:path*"
+      "destination": "https://api.grudge-studio.com/api/:path*"
     },
     {
       "source": "/api/grudge/id/:path*",
@@ -69,7 +70,7 @@
     },
     {
       "source": "/api/game/:path*",
-      "destination": "https://api.grudge-studio.com/:path*"
+      "destination": "https://api.grudge-studio.com/api/game/:path*"
     },
     {
       "source": "/api/assets/:path*",
