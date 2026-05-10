@@ -22,36 +22,40 @@ import * as THREE from 'three';
 const PI2 = Math.PI * 2;
 
 // ── Tunable constants ────────────────────────────────────────────
+// Tuned from RacalvinController souls-like reference:
+//   cameraDistance: 6.5, cameraSmoothing: 0.15, cameraSensitivity: 0.002
 const CAMERA_CONFIG = {
   // Starting state
-  INITIAL_YAW:       0,     // Radians (0 = facing -Z)
-  INITIAL_PITCH:     0.30,  // Radians (slight downward look)
-  INITIAL_DISTANCE:  6.5,   // Units from player pivot
+  INITIAL_YAW:       0,
+  INITIAL_PITCH:     0.35,  // Slightly more downward (RacalvinController: 0.4)
+  INITIAL_DISTANCE:  6.5,   // Souls-like distance
 
   // Distance / zoom
   ZOOM_MIN:          2.5,
-  ZOOM_MAX:          18,
-  ZOOM_SENSITIVITY:  0.10,  // Wheel multiplier (1+delta*sensitivity)
+  ZOOM_MAX:          14,    // Smaller arena, don't need 18m zoom
+  ZOOM_SENSITIVITY:  0.10,
 
   // Pitch / vertical
-  PITCH_MIN:        -0.08,  // Slightly below horizon
-  PITCH_MAX:         1.15,  // ~66° above horizon
+  PITCH_MIN:        -0.5,   // Match RacalvinController minPitch: -0.5
+  PITCH_MAX:         1.4,   // Match RacalvinController maxPitch: 1.4
 
-  // Mouse orbit sensitivity
-  ORBIT_SENSITIVITY_X: 0.0028,
-  ORBIT_SENSITIVITY_Y: 0.0028,
+  // Mouse orbit sensitivity — RacalvinController uses 0.002
+  ORBIT_SENSITIVITY_X: 0.002,
+  ORBIT_SENSITIVITY_Y: 0.002,
 
   // Pivot & shoulder
-  PIVOT_HEIGHT:      1.45,  // Camera look-at height above player root
-  SHOULDER_OFFSET:   0.45,  // Rightward shift for over-shoulder view
+  PIVOT_HEIGHT:      1.5,   // Slightly taller — more over-shoulder
+  SHOULDER_OFFSET:   0.3,
 
-  // Camera position smoothing (exponential lerp)
-  FOLLOW_SPEED:      9,     // Radians/sec equivalent (higher = tighter)
+  // Camera position smoothing — RacalvinController cameraSmoothing: 0.15
+  FOLLOW_SPEED:      7,
 
   // Passive yaw follow (camera drifts behind character)
-  PASSIVE_FOLLOW_IDLE:    1.8,  // Speed when player is standing still
-  PASSIVE_FOLLOW_MOVING: 10.0,  // Speed when player is running (Fortnite feel)
-  PASSIVE_FOLLOW_THRESHOLD: 0.015, // Min angle diff before following
+  // RacalvinController auto-follows at followSpeed=3.0 when no RMB held.
+  // We keep it gentler so the camera doesn't fight the player on A/D turns.
+  PASSIVE_FOLLOW_IDLE:    2.0,  // Gentle idle drift
+  PASSIVE_FOLLOW_MOVING:  4.0,  // Moderate follow while running (not Fortnite-snap)
+  PASSIVE_FOLLOW_THRESHOLD: 0.02,
 };
 // ─────────────────────────────────────────────────────────────────
 
@@ -124,23 +128,20 @@ export class OrbitCamera {
   _setupInput() {
     const el = this.domElement;
 
-    // LMB drag = orbit (button 0). RMB (button 2) belongs to ArenaController.
+    // LMB drag = orbit.  NO pointer-lock — it fights with normal mouse use.
+    // RacalvinController uses free-look only when RMB is held; we mirror that:
+    //   LMB drag = manual camera orbit
+    //   No RMB action here (RMB = attack, handled by ArenaController)
     el.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      this._isDragging = true;
-      // Request pointer-lock so mouse movement is raw delta (no edge clamping).
-      el.requestPointerLock?.();
+      if (e.button === 0) this._isDragging = true;
     });
 
     window.addEventListener('mouseup', (e) => {
-      if (e.button !== 0) return;
-      this._isDragging = false;
-      // Release pointer lock when orbit ends.
-      if (document.pointerLockElement === el) document.exitPointerLock?.();
+      if (e.button === 0) this._isDragging = false;
     });
 
-    // Mouse movement — accumulate into TARGET yaw/pitch while dragging.
-    // Works both with pointer-lock (movementX/Y) and without.
+    // Mouse movement — accumulate into TARGET yaw/pitch while LMB is held.
+    // movementX/Y works without pointer-lock in modern browsers.
     window.addEventListener('mousemove', (e) => {
       if (!this._isDragging) return;
       this._targetYaw   -= e.movementX * this._cfg.ORBIT_SENSITIVITY_X;
@@ -151,17 +152,14 @@ export class OrbitCamera {
       );
     });
 
-    // Scroll = proportional zoom.
-    // Zooming in/out scales BOTH distance AND pitch so the camera angle
-    // stays constant — identical to the pattern in the reference code.
+    // Scroll = proportional zoom (distance + pitch scale together).
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
-      // Normalise deltaY magnitude to avoid huge jumps on trackpads.
       const normalised = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 30) * 0.01;
       const factor     = 1.0 + normalised * this._cfg.ZOOM_SENSITIVITY;
 
       this._targetDistance *= factor;
-      this._targetPitch    *= factor; // Keeps angle constant while zooming.
+      this._targetPitch    *= factor;
 
       this._targetDistance = Math.max(
         this._cfg.ZOOM_MIN,
@@ -173,7 +171,6 @@ export class OrbitCamera {
       );
     }, { passive: false });
 
-    // Prevent right-click context menu on canvas.
     el.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 

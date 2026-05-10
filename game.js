@@ -890,19 +890,18 @@ class GrudgeArena {
         this.scene.add(ring);
         this.gameTimers.add(2.5, () => { this.scene.remove(ring); ring.geometry.dispose(); ring.material.dispose(); });
         // New: ice-colored GroundSlamVFX
-        spawnGroundSlamVFX(this.scene, pos, { radius: r, color: 0x44aaff, debrisCount: 50 });
+        spawnGroundSlamVFX(this.scene, pos, { radius: r, color: 0x44aaff, debrisCount: 40 });
         this._applyAoEDamage(pos, r, ability.damage ?? 30);
         this.particleSystem.emit({ position: pos, color: new THREE.Color(0x88ccff),
-          count: 80, velocity: new THREE.Vector3(0, 2, 0), spread: r, lifetime: 1, size: 0.25 });
+          count: 50, velocity: new THREE.Vector3(0, 0.8, 0), spread: r * 0.6, lifetime: 1.5, size: 0.2 });
         break;
       }
 
       // ── Colossus Smash / aoe_strike — fire+lightning ground slam ───────
       case 'aoe_strike': {
         const r = ability.aoeRadius ?? 4;
-        spawnGroundSlamVFX(this.scene, pos, { radius: r, color: 0xff8800, debrisCount: 70 });
+        spawnGroundSlamVFX(this.scene, pos, { radius: r, color: 0xff8800, debrisCount: 50 });
         this._applyAoEDamage(pos, r, ability.damage ?? 120);
-        // Show brief AoE indicator flash
         this.aoeIndicator?.show(pos, r, 0xff8800);
         this.gameTimers.add(0.35, () => this.aoeIndicator?.hide());
         break;
@@ -911,11 +910,11 @@ class GrudgeArena {
       // ── Blade Dance / aoe_melee — spinning close-range AoE ──────────
       case 'aoe_melee': {
         const r = ability.radius ?? 3;
-        spawnGroundSlamVFX(this.scene, pos, { radius: r, color: 0xffffff, debrisCount: 30 });
+        spawnGroundSlamVFX(this.scene, pos, { radius: r, color: 0xffffff, debrisCount: 25 });
         this._applyAoEDamage(pos, r, ability.damage ?? 40);
         this.particleSystem.emit({ position: pos.clone().add(new THREE.Vector3(0, 1, 0)),
-          color: new THREE.Color(0xffffff), count: 40, velocity: new THREE.Vector3(0, 1, 0),
-          spread: r, lifetime: 0.4, size: 0.15 });
+          color: new THREE.Color(0xffffff), count: 30, velocity: new THREE.Vector3(0, 0.5, 0),
+          spread: r * 0.5, lifetime: 0.6, size: 0.12 });
         break;
       }
 
@@ -966,7 +965,7 @@ class GrudgeArena {
                 radius: r, color: 0xff4400, meteor: true, debrisCount: 90,
               });
               this._applyAoEDamage(targetP, r, ability.damage ?? 150);
-              this.particleSystem.emitExplosion(targetP, new THREE.Color(0xff4400), 70);
+              this.particleSystem.emitExplosion(targetP, new THREE.Color(0xff4400), 45);
             },
           });
           mover.start();
@@ -985,16 +984,15 @@ class GrudgeArena {
         this.aoeIndicator?.show(targetP, r, 0x44cc44);
         this.gameTimers.add(0.3, () => {
           this.aoeIndicator?.hide();
-          spawnGroundSlamVFX(this.scene, targetP, { radius: r, color: 0x44cc44, debrisCount: 25 });
-          // Tick damage
+          spawnGroundSlamVFX(this.scene, targetP, { radius: r, color: 0x44cc44, debrisCount: 20 });
           let ticks    = 0;
           const maxT   = Math.floor(duration / tickRate);
           const tick   = () => {
             if (ticks++ >= maxT) return;
             this._applyAoEDamage(targetP, r, ability.damage ?? 10);
-            this.particleSystem.emit({ position: targetP.clone().add(new THREE.Vector3(0, 0.5, 0)),
-              color: new THREE.Color(0x44cc44), count: 15, velocity: new THREE.Vector3(0, 0.8, 0),
-              spread: r * 0.7, lifetime: 0.8, size: 0.2 });
+            this.particleSystem.emit({ position: targetP.clone().add(new THREE.Vector3(0, 0.3, 0)),
+              color: new THREE.Color(0x44cc44), count: 10, velocity: new THREE.Vector3(0, 0.4, 0),
+              spread: r * 0.5, lifetime: 1.2, size: 0.15 });
             this.gameTimers.add(tickRate, tick);
           };
           tick();
@@ -1036,7 +1034,7 @@ class GrudgeArena {
         mesh.position.z = Math.max(-LIMIT, Math.min(LIMIT, mesh.position.z));
         this.particleSystem?.emit({
           position: pos, color: new THREE.Color(0x3366ff),
-          count: 30, velocity: fwd.clone().multiplyScalar(-5), spread: 1, lifetime: 0.5, size: 0.2,
+          count: 18, velocity: fwd.clone().multiplyScalar(-2.5), spread: 0.6, lifetime: 0.5, size: 0.15,
         });
         break;
 
@@ -1048,7 +1046,7 @@ class GrudgeArena {
         mesh.position.copy(np);
         for (const p of [pos, np])
           this.particleSystem.emit({ position: p, color: new THREE.Color(0x8844ff),
-            count: 30, velocity: new THREE.Vector3(0, 2, 0), spread: 2, lifetime: 0.5, size: 0.3 });
+            count: 18, velocity: new THREE.Vector3(0, 1, 0), spread: 1, lifetime: 0.6, size: 0.2 });
         break;
       }
 
@@ -1351,12 +1349,71 @@ class GrudgeArena {
     const weapon = this.getCurrentWeapon();
     const bar = document.getElementById("abilityBar");
     if (!weapon || !bar) return;
+
+    // Real ability icons from ObjectStore abilities pack, served via R2 CDN.
+    // Keys = WeaponDefinitions ability.effect strings.
+    const IS_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const ICON_BASE = IS_DEV ? '/assets/icons/abilities/' : '/cdn/assets/icons/abilities/';
+    const i = (name) => `${ICON_BASE}${name}.png`;
+
+    const EFFECT_ICONS = {
+      fireball:            i('ability_fireball'),
+      dot_projectile:      i('ability_venom_edge'),
+      lifesteal_projectile:i('ability_life_drain'),
+      multi_projectile:    i('ability_multishot'),
+      debuff_target:       i('ability_enfeeble'),
+      frost_nova:          i('ability_holy_nova'),
+      meteor:              i('ability_meteor_strike'),
+      aoe_zone:            i('ability_molotov'),
+      shield:              i('ability_divine_shield'),
+      buff_damage:         i('ability_damage_surge'),
+      reset_cooldowns:     i('ability_mana_flow'),
+      dash:                i('ability_wind_walk'),
+      blink:               i('ability_evasion'),
+      teleport_behind:     i('ability_evasive'),
+      aoe_melee:           i('ability_whirlwind'),
+      execute:             i('ability_execute'),
+      aoe_strike:          i('ability_thunderclap'),
+      stealth:             i('ability_sleep_dart'),
+      projectile_pull:     i('ability_entangle'),
+      melee_lifesteal:     i('ability_lacerate'),
+      aoe_shield:          i('ability_mana_shield'),
+      beam:                i('ability_lightning'),
+      ground_zone:         i('ability_rejuvenate'),
+      full_heal_invuln:    i('ability_invincible'),
+    };
+    const FALLBACK_ICON = i('ability_arcane_bolt');
+
     bar.innerHTML = "";
-    Object.entries(weapon.abilities).forEach(([key, ability], idx) => {
+    const entries = Object.entries(weapon.abilities);
+
+    entries.forEach(([key, ability], idx) => {
       const slot = document.createElement("div");
       slot.className = "ability-slot";
-      slot.innerHTML = `<span class="ability-key">${idx + 1}</span><span class="ability-name">${ability.name}</span>`;
-      slot.title = `[${idx + 1}] ${ability.name}: ${ability.description}`;
+      slot.dataset.key = key;
+
+      const iconSrc = EFFECT_ICONS[ability.effect] || FALLBACK_ICON;
+      const hotkey = idx + 1;
+
+      let costStr = '';
+      if (ability.cost && ability.costType) {
+        const resource = ability.costType.charAt(0).toUpperCase() + ability.costType.slice(1);
+        costStr = `<span class="ab-cost">${ability.cost} ${resource}</span>`;
+      }
+      const cdStr = ability.cooldown ? `<span class="ab-cd">${ability.cooldown}s</span>` : '';
+
+      slot.innerHTML = `
+        <span class="ability-key">${hotkey}</span>
+        <img class="ability-icon" src="${iconSrc}" alt="${ability.name}"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+        <span class="ability-icon ability-icon-fallback" style="display:none">✨</span>
+        <div class="ability-tooltip">
+          <div class="ab-title">${ability.name}</div>
+          <div class="ab-desc">${ability.description || ''}</div>
+          <div class="ab-meta">${costStr}${cdStr}</div>
+        </div>`;
+
+      slot.setAttribute('title', `[${hotkey}] ${ability.name}`);
       slot.addEventListener("click", () => this.useAbility(key));
       bar.appendChild(slot);
     });

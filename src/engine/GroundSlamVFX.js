@@ -223,11 +223,11 @@ function _makeDebris(color, count, radius) {
     positions[i * 3 + 1] = 0;
     positions[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
 
-    // Outward velocity + upward arc
+    // Outward velocity + upward arc — halved from original for smaller arena
     const angle = Math.random() * Math.PI * 2;
-    const speed = 1.5 + Math.random() * radius * 0.8;
+    const speed = 0.6 + Math.random() * radius * 0.35; // was 1.5 + radius*0.8
     velocities[i * 3]     = Math.cos(angle) * speed;
-    velocities[i * 3 + 1] = 2 + Math.random() * 3;   // upward
+    velocities[i * 3 + 1] = 0.8 + Math.random() * 1.2; // was 2 + 3
     velocities[i * 3 + 2] = Math.sin(angle) * speed;
 
     // Color varies slightly (lighter = more yellow/white for rock dust)

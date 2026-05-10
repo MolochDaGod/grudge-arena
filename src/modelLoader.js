@@ -47,6 +47,23 @@ export const WeaponToAnimPack = {
 };
 
 /**
+ * Secondary animation packs from the Unity / 3dmotion Grudge-Studio game.
+ * All FBX files were Mixamo-exported — same retargeting pipeline as the primary packs.
+ * These are loaded as supplemental clips after the primary pack succeeds.
+ * Keys map to subdirectory names under public/assets/animations/
+ */
+export const WeaponToAnimPack3dm = {
+  greatsword: "axe_3dm",
+  scythe:     "axe_3dm",
+  unarmed:    "axe_3dm",
+  sabres:     "sword_shield_3dm",
+  runeblade:  "sword_shield_3dm",
+  staff:      "magic_3dm",
+  wand:       "magic_3dm",
+  bow:        "longbow_3dm",
+};
+
+/**
  * Map weapon type → animation class key used by the pre-built animation library
  * (see scripts/build-anim-library.mjs). Clips inside animation-library.glb are
  * keyed as `${animClass}__${state}` e.g. 'greatsword__attack1', 'swordShield__cast'.
@@ -348,6 +365,73 @@ const ANIM_FILE_MAP = {
     turnLeft: "Standing Turn Left 90.glb",
     turnRight: "Standing Turn Right 90.glb",
   },
+  // ── Unity 3dmotion supplemental packs ────────────────────────────────────
+  // Converted from Mixamo FBX via fbx2gltf. Same Bip001 retargeting applies.
+  // Used as secondary animation layer (unique combo attacks not in primary packs).
+  axe_3dm: {
+    idle:         "melee idle.glb",
+    run:          "melee run.glb",
+    runBack:      "melee run back.glb",
+    walk:         "melee walk.glb",
+    walkBack:     "melee walk back.glb",
+    strafeLeft:   "melee strafe left.glb",
+    strafeRight:  "melee strafe right.glb",
+    attack1:      "melee attack 1.glb",
+    attack2:      "melee attack 2.glb",
+    attack3:      "melee attack 3.glb",
+    combo1:       "melee combo 1.glb",
+    combo2:       "melee combo 2.glb",
+    combo3:       "melee combo 3.glb",
+    block:        "melee block.glb",
+    jump:         "melee jump.glb",
+    crouch:       "melee crouch.glb",
+  },
+  sword_shield_3dm: {
+    idle:         "ss idle.glb",
+    run:          "ss run.glb",
+    runBack:      "ss run back.glb",
+    strafeLeft:   "ss strafe left.glb",
+    strafeRight:  "ss strafe right.glb",
+    attack1:      "ss attack 1.glb",
+    attack2:      "ss attack 2.glb",
+    attack3:      "ss attack 3.glb",
+    attack4:      "ss attack 4.glb",
+    block:        "ss block.glb",
+    blockIdle:    "ss block idle.glb",
+    blockHit:     "ss block hit.glb",
+    draw:         "ss draw sword.glb",
+  },
+  magic_3dm: {
+    idle:         "staff idle.glb",
+    idle2:        "staff idle 2.glb",
+    run:          "staff run.glb",
+    runBack:      "staff run back.glb",
+    walk:         "staff walk.glb",
+    walkBack:     "staff walk back.glb",
+    cast:         "staff cast 1.glb",
+    cast2H:       "staff cast 2.glb",
+    hit:          "staff hit large.glb",
+    hitSmall:     "staff hit small.glb",
+    death:        "staff death.glb",
+    jump:         "staff jump.glb",
+  },
+  longbow_3dm: {
+    idle:         "bow idle.glb",
+    run:          "bow run.glb",
+    runBack:      "bow run back.glb",
+    walk:         "bow walk.glb",
+    walkBack:     "bow walk back.glb",
+    strafeLeft:   "bow strafe left.glb",
+    strafeRight:  "bow strafe right.glb",
+    aimIdle:      "bow aim.glb",
+    aimWalkFwd:   "bow aim walk fwd.glb",
+    aimWalkBack:  "bow aim walk bwd.glb",
+    draw:         "bow draw.glb",
+    attack1:      "bow fire.glb",
+    block:        "bow block.glb",
+    jump:         "bow jump.glb",
+  },
+
   rifle: {
     // Locomotion
     idle: "idle.glb",
@@ -1630,31 +1714,33 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
     );
   }
 
-  // Load character model and animation library in parallel
-  const [{ scene, mixer, actions: embeddedActions }, animClips] =
-    await Promise.all([loadRaceModel(race), loadAnimationLibrary()]);
+  // Load model + weapon pack GLBs + animation library all in parallel.
+  // Weapon packs are loaded FIRST priority — they use Mixamo FBX->GLB with
+  // remapClipBoneNames() which is proven to map correctly to Bip001 bones.
+  // Animation library is supplementary (adds variety states).
+  const { scene, mixer, actions: embeddedActions } = await loadRaceModel(race);
 
   const controller = new AnimationController(mixer, scene);
-
-  // Register embedded animations from the character GLB (Running, Walking)
   controller.registerActions(embeddedActions);
 
-  // Resolve the weapon's animation class so we can expose its clips under
-  // bare names (e.g. 'greatsword__attack1' → also 'attack1'). This is what
-  // lets CharacterFSM / arenaAI / game.js call play('attack1'), play('hurt'),
-  // play('dodge'), etc. without knowing the weapon class.
   const animClass = WeaponToAnimClass[resolvedWeapon] || "greatsword";
   const prefix = `${animClass}__`;
 
-  // Register all animations from the pre-built library. For clips matching
-  // this unit's weapon class, also register under the bare state name so
-  // calls like play('attack1') resolve to greatsword__attack1.
+  // ─ Step 1: Load weapon pack GLBs (primary — proven Mixamo→Bip001 remapping) ─
+  const weaponPackActions = await preloadWeaponAnims(resolvedWeapon, mixer, scene);
+  controller.registerActions(weaponPackActions);
+  const wpIdleStats = getTrackBindingStats(controller.actions.get('idle'));
+  console.log(`[modelLoader] ${race} weapon-pack: ${weaponPackActions.size} clips, idle bound=${wpIdleStats.bound}/${wpIdleStats.total}`);
+
+  // ─ Step 2: Supplement with animation library (adds extra named states) ─
+  const animClips = await loadAnimationLibrary();
   let bareRegistered = 0;
   for (const [name, clip] of animClips) {
     const clonedClip = clip.clone();
     clonedClip.name = name;
     const action = mixer.clipAction(clonedClip, scene);
-    controller.actions.set(name, action);
+    // Only add if not already covered by weapon pack
+    if (!controller.actions.has(name)) controller.actions.set(name, action);
     if (name.startsWith(prefix)) {
       const bare = name.slice(prefix.length);
       if (!controller.actions.has(bare)) {
@@ -1668,7 +1754,7 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   await registerCompatibleBasemeshAnimations(controller, mixer, scene);
 
   console.log(
-    `[modelLoader] ${raceConfig.name} (${raceConfig.faction}) unit ready: ${controller.actions.size} anims (${bareRegistered} bare-aliased from '${animClass}'), weapon: ${resolvedWeapon}, tier: ${tierCfg.name}`,
+    `[modelLoader] ${raceConfig.name} (${raceConfig.faction}) unit ready: ${controller.actions.size} anims (${bareRegistered} library-supplemented), weapon: ${resolvedWeapon}`,
   );
 
   let equipment = null;
@@ -1700,24 +1786,17 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
     }
   }
 
-  // Start idle animation — weapon library clips are now registered.
-  // Check that the idle clip actually bound to bones (non-null action with
-  // bound tracks). A zero-binding action plays silently, causing T-pose.
+  // Weapon pack is now the primary loader so idle should be bound.
+  // Still verify and log binding stats.
   controller.play("idle");
-
   const idleStats = getTrackBindingStats(controller.currentAction);
   if (!controller.currentAction || idleStats.bound === 0) {
-    console.warn(
-      `[modelLoader] ${race}: idle from animation library has 0 bound tracks (T-pose). Loading weapon pack directly…`,
-    );
-    const packActions = await preloadWeaponAnims(resolvedWeapon, mixer, scene);
-    controller.registerActions(packActions);
+    // Last-resort: force-reload weapon pack directly onto mixer
+    console.warn(`[modelLoader] ${race}: idle still unbound after weapon pack load. Forcing reload…`);
+    const retry = await preloadWeaponAnims(resolvedWeapon, mixer, scene);
+    controller.registerActions(retry);
     applyCommonClipAliases(controller.actions);
     controller.play("idle");
-    const packStats = getTrackBindingStats(controller.currentAction);
-    console.log(
-      `[modelLoader] ${race}: weapon-pack fallback: ${controller.actions.size} anims, idle bound=${packStats.bound}/${packStats.total} tracks`,
-    );
   }
 
   return {
