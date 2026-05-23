@@ -21,7 +21,15 @@ import * as THREE from 'three';
 
 const PI2 = Math.PI * 2;
 
-// ── Tunable constants ────────────────────────────────────────────
+  // ── Camera collision constants ──────────────────────────────────
+const COLLISION_OFFSET = 0.3;   // Pull camera slightly in front of hit point
+const COLLISION_LAYERS = 0xff;  // Raycast against all layers
+
+// ── Tab-target nudge constants ───────────────────────────────────
+const TAB_NUDGE_ANGLE = 0.25;   // ~15° nudge toward target
+const TAB_NUDGE_SPEED = 4.0;    // How fast the nudge decays back
+
+  // ── Tunable constants ────────────────────────────────────────────
 // Tuned from RacalvinController souls-like reference:
 //   cameraDistance: 6.5, cameraSmoothing: 0.15, cameraSensitivity: 0.002
 const CAMERA_CONFIG = {
@@ -87,6 +95,14 @@ export class OrbitCamera {
     this._isDragging    = false;   // LMB held
     this._isMoving      = false;   // Set by ArenaController via setPlayerMoving()
 
+    // Camera collision
+    this._raycaster     = new THREE.Raycaster();
+    this._collisionMeshes = [];    // Populated by setCollisionMeshes()
+
+    // Tab-target nudge
+    this._tabNudge      = 0;       // Current nudge angle (decays to 0)
+    this._tabNudgeDir   = 0;       // Direction of nudge (+1 or -1)
+
     // Cached config refs
     this._cfg = CAMERA_CONFIG;
 
@@ -112,6 +128,32 @@ export class OrbitCamera {
    * @param {boolean} moving
    */
   setPlayerMoving(moving) { this._isMoving = moving; }
+
+  /**
+   * Register arena meshes for camera collision raycasting.
+   * Call once after arena geometry is built.
+   * @param {THREE.Mesh[]} meshes
+   */
+  setCollisionMeshes(meshes) { this._collisionMeshes = meshes; }
+
+  /**
+   * Nudge the camera briefly toward a world position (Tab-target feel).
+   * The nudge decays back to 0 over a few frames.
+   * @param {THREE.Vector3} targetPos — world position of the new target
+   */
+  nudgeToward(targetPos) {
+    if (!this.target) return;
+    const toTarget = Math.atan2(
+      targetPos.x - this.target.position.x,
+      targetPos.z - this.target.position.z,
+    );
+    // Compute shortest signed angle between current yaw and target direction
+    let diff = (toTarget + Math.PI) - this._targetYaw;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    this._tabNudge = TAB_NUDGE_ANGLE;
+    this._tabNudgeDir = Math.sign(diff) || 1;
+  }
 
   /**
    * Instantly snap the camera yaw to sit directly behind the character.
@@ -229,6 +271,30 @@ export class OrbitCamera {
     const desiredLookAt = this._pivotWorld.clone().addScaledVector(
       new THREE.Vector3(-sinYaw, 0, -cosYaw), lookAtBias,
     );
+
+    // ── Camera collision raycast ──────────────────────────────────
+    // Cast a ray from the pivot toward the desired camera position.
+    // If it hits arena geometry, pull the camera in front of the hit.
+    if (this._collisionMeshes.length > 0) {
+      const rayDir = desiredPos.clone().sub(this._pivotWorld);
+      const maxDist = rayDir.length();
+      if (maxDist > 0.01) {
+        rayDir.normalize();
+        this._raycaster.set(this._pivotWorld, rayDir);
+        this._raycaster.far = maxDist;
+        const hits = this._raycaster.intersectObjects(this._collisionMeshes, true);
+        if (hits.length > 0 && hits[0].distance < maxDist) {
+          const safeDist = Math.max(0.5, hits[0].distance - COLLISION_OFFSET);
+          desiredPos.copy(this._pivotWorld).addScaledVector(rayDir, safeDist);
+        }
+      }
+    }
+
+    // ── Tab-target nudge ─────────────────────────────────────────
+    if (this._tabNudge > 0.001) {
+      this._targetYaw += this._tabNudgeDir * this._tabNudge * delta * TAB_NUDGE_SPEED;
+      this._tabNudge *= Math.max(0, 1 - TAB_NUDGE_SPEED * delta);
+    }
 
     // ── Apply (snap on first frame, smooth thereafter) ───────────
     if (!this._initialized) {

@@ -198,9 +198,22 @@ export class ArenaController {
       }
     });
 
-    // RMB = attack (LMB is camera orbit, handled by OrbitCamera)
+    // RMB hold = strafe mode (WoW standard: A/D become strafe, character faces camera)
+    // RMB click (tap) = toggle auto-attack
     window.addEventListener('mousedown', (e) => {
-      if (e.button === 2) this.tickKey._RMB = true;
+      if (e.button === 2) {
+        this.holdKey._RMB = true;
+        this._rmbDownTime = performance.now();
+      }
+    });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 2) {
+        this.holdKey._RMB = false;
+        // Short click = auto-attack toggle; long hold = strafe only
+        if (performance.now() - (this._rmbDownTime || 0) < 200) {
+          this.tickKey._RMB = true;
+        }
+      }
     });
 
     window.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -262,30 +275,39 @@ export class ArenaController {
 
     this.tickKey = {};
 
-    // ── A/D keyboard turning (MMO-style) ──
-    // A/D rotate the character's facing.  No strafe movement — use Q/E for that.
-    // When A/D are held the OrbitCamera's aggressive passive-follow (PASSIVE_FOLLOW_MOVING)
-    // will keep the camera aligned behind the turning character automatically.
-    const turningLeft  = this.holdKey.KeyA || this.holdKey.ArrowLeft;
-    const turningRight = this.holdKey.KeyD || this.holdKey.ArrowRight;
-    if (this.canMove && (turningLeft || turningRight)) {
-      const turnDir = (turningLeft ? 1 : 0) - (turningRight ? 1 : 0);
+    // ── A/D behaviour depends on RMB (WoW standard) ──
+    // RMB NOT held: A/D = keyboard turn (character rotates, camera follows)
+    // RMB held:     A/D = strafe (camera-relative movement, character faces camera yaw)
+    const rmbHeld = !!this.holdKey._RMB;
+    const pressA  = this.holdKey.KeyA || this.holdKey.ArrowLeft;
+    const pressD  = this.holdKey.KeyD || this.holdKey.ArrowRight;
+
+    if (!rmbHeld && this.canMove && (pressA || pressD)) {
+      // Keyboard turn mode
+      const turnDir = (pressA ? 1 : 0) - (pressD ? 1 : 0);
       this.targetYaw += turnDir * KB_TURN_SPEED * delta;
-      // Normalize
       while (this.targetYaw > Math.PI) this.targetYaw -= Math.PI * 2;
       while (this.targetYaw < -Math.PI) this.targetYaw += Math.PI * 2;
     }
 
+    // When RMB is held, snap character facing to camera yaw (WoW strafe mode)
+    if (rmbHeld && this.canMove) {
+      this.targetYaw = this.camera.getYaw() + Math.PI;
+    }
+
     // ── Build input direction from held keys ──
-    // W   = always forward in camera direction (Fortnite style — character turns to face it).
-    // S   = backward relative to camera.
-    // Q/E = strafe left/right (camera-relative, no character rotation).
-    // A/D = keyboard turn (handled above); they do NOT contribute to movement direction here.
+    // W   = forward (camera-relative)
+    // S   = backward (camera-relative)
+    // Q/E = strafe (always camera-relative)
+    // A/D = strafe ONLY when RMB held; otherwise turn-only (no movement)
     let ix = 0, iz = 0;
-    if (this.holdKey.KeyW || this.holdKey.ArrowUp)   iz -= 1;  // Forward (away from camera)
-    if (this.holdKey.KeyS || this.holdKey.ArrowDown)  iz += 1;  // Backward
-    if (this.holdKey.KeyQ) ix -= 1;   // Strafe left  (camera-relative)
-    if (this.holdKey.KeyE) ix += 1;   // Strafe right (camera-relative)
+    if (this.holdKey.KeyW || this.holdKey.ArrowUp)   iz -= 1;
+    if (this.holdKey.KeyS || this.holdKey.ArrowDown)  iz += 1;
+    if (this.holdKey.KeyQ) ix -= 1;
+    if (this.holdKey.KeyE) ix += 1;
+    // A/D strafe when RMB held (WoW standard)
+    if (rmbHeld && pressA) ix -= 1;
+    if (rmbHeld && pressD) ix += 1;
 
     const hasInput = ix !== 0 || iz !== 0;
     const isSprint = this.holdKey.ShiftLeft || this.holdKey.ShiftRight;
@@ -347,7 +369,7 @@ export class ArenaController {
     // ── Notify camera of movement state ──
     // OrbitCamera uses this to ramp up passive follow speed while moving
     // (Fortnite-style snap-behind behaviour when running).
-    const isActuallyMoving = hasInput || turningLeft || turningRight;
+    const isActuallyMoving = hasInput || (!rmbHeld && (pressA || pressD));
     this.camera.setPlayerMoving?.(isActuallyMoving);
 
     // ── Smooth rotation ──
