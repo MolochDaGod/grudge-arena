@@ -1227,14 +1227,22 @@ export class AnimationController {
     let action = this.actions.get(stateName);
     if (!action) {
       const requestFallbacks = {
-        swing: ["attack3", "attack2", "attack1"],
-        combo3: ["combo2", "combo1", "attack3"],
-        combo2: ["combo1", "attack3", "attack2"],
-        combo1: ["attack3", "attack2", "attack1"],
-        jumpAttack: ["dash", "attack3", "jump"],
-        cast2H: ["cast", "attack3", "attack2"],
-        aoe2: ["aoe", "cast", "attack3"],
-        powerUp: ["taunt", "cast", "attack2"],
+        // FSM state names → closest available animation in any weapon pack
+        heavy:      ["combo1", "spin", "attack2H1", "attack3", "attack2"],
+        dodge:      ["dodgeBack", "dive", "jump"],
+        fall:       ["fallLoop", "jumpLoop", "jump", "idle"],
+        swing:      ["attack3", "attack2", "attack1"],
+        combo3:     ["combo2", "combo1", "attack3"],
+        combo2:     ["combo1", "attack3", "attack2"],
+        combo1:     ["attack3", "attack2", "attack1"],
+        jumpAttack: ["attack1", "combo1", "jump"],
+        cast2H:     ["cast", "attack2H1", "attack3", "attack2"],
+        aoe2:       ["aoe", "cast", "attack3"],
+        powerUp:    ["taunt", "cast", "attack2"],
+        dashAttack: ["combo1", "attack3", "attack1"],
+        airAttack:  ["jumpAttack", "attack1", "combo1"],
+        running:    ["run"],
+        walking:    ["walk"],
       };
       for (const fb of requestFallbacks[stateName] || []) {
         action = this.actions.get(fb);
