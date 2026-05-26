@@ -107,7 +107,8 @@ export function buildArena(scene) {
   const group = new THREE.Group();
   group.name = 'proceduralArena';
 
-  const terrainMeshes = []; // surfaces returned for AoEIndicator raycasting
+  const terrainMeshes  = []; // surfaces returned for AoEIndicator raycasting
+  const obstacleMeshes = []; // walls, pillars, boulders for camera collision
 
   const FLOOR_R   = 17;  // arena floor radius (metres)
   const WALL_H    = 3.2; // perimeter wall height
@@ -143,6 +144,7 @@ export function buildArena(scene) {
   wallOuter.castShadow = true;
   wallOuter.receiveShadow = true;
   group.add(wallOuter);
+  obstacleMeshes.push(wallOuter);
 
   // Inner ring face (visible from inside the arena)
   const wallInner = new THREE.Mesh(
@@ -152,6 +154,7 @@ export function buildArena(scene) {
   wallInner.position.y = WALL_H / 2;
   wallInner.material.side = THREE.BackSide; // face inward
   group.add(wallInner);
+  obstacleMeshes.push(wallInner);
 
   // Wall crenellations (merlons) — equally spaced boxes around the top
   const MERLON_COUNT = 24;
@@ -177,7 +180,8 @@ export function buildArena(scene) {
     [ PILLAR_R, 0],      // East
   ];
   for (const [x, z] of PILLAR_POSITIONS) {
-    pillar(group, x, z);
+    const parts = pillar(group, x, z);
+    obstacleMeshes.push(...parts);
   }
 
   // ── Scatter boulders (smaller LoS obstacles) ───────────────────────
@@ -210,9 +214,10 @@ export function buildArena(scene) {
     m.castShadow = true;
     m.receiveShadow = true;
     group.add(m);
+    obstacleMeshes.push(m);
   });
 
-  // ── Team spawn pads (raised coloured circles for visual clarity) ───
+  // ── Team spawn pads
   const spawnPads = [
     { x: -13, z: 0, color: 0x3366ff }, // Team A — west
     { x:  13, z: 0, color: 0xff3333 }, // Team B — east
@@ -274,7 +279,7 @@ export function buildArena(scene) {
 
   scene.add(group);
 
-  return { group, terrainMeshes };
+  return { group, terrainMeshes, obstacleMeshes };
 }
 
 /**

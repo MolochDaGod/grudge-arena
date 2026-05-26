@@ -242,6 +242,10 @@ class GrudgeArena {
           this.renderer.domElement,
         );
         this.orbitCamera.setTarget(this.playerUnit.mesh);
+        // Register arena obstacles for souls-like camera wall collision
+        if (this._obstacleMeshes?.length) {
+          this.orbitCamera.setCollisionMeshes(this._obstacleMeshes);
+        }
         // Snap camera to sit behind the player immediately on spawn.
         this.orbitCamera.snapBehind();
 
@@ -387,14 +391,16 @@ class GrudgeArena {
   // ── Arena construction ──
 
   async _createArena() {
-    // Build the procedural WoW-style PvP arena (no external assets required).
-    // terrainMeshes are the collidable floor surfaces for AoEIndicator snapping.
-    const { terrainMeshes } = buildArena(this.scene);
+    // Build the procedural PvP arena (no external assets required).
+    // terrainMeshes = floor (for AoE snap), obstacleMeshes = walls/pillars/boulders (for camera)
+    const { terrainMeshes, obstacleMeshes } = buildArena(this.scene);
     for (const mesh of terrainMeshes) {
       this.collisionSystem.addCollider(mesh, 'environment');
       this._terrainMeshes.push(mesh);
     }
-    console.log('[arena] Procedural PvP arena built');
+    // Store obstacle meshes for souls-like camera collision
+    this._obstacleMeshes = obstacleMeshes || [];
+    console.log(`[arena] Procedural PvP arena built — ${obstacleMeshes.length} camera collision meshes`);
 
     // AoEIndicator — terrain meshes registered above.
     this.aoeIndicator = new AoEIndicator(this.scene, this._terrainMeshes);
