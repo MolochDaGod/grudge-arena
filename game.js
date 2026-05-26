@@ -396,6 +396,19 @@ class GrudgeArena {
     }
     console.log('[arena] Procedural PvP arena built');
 
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const group = new THREE.Group();
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 4, 8), new THREE.MeshStandardMaterial({ color: 0x2a2a4e, metalness: 0.6, roughness: 0.4, emissive: 0x3366ff, emissiveIntensity: 0.1 }));
+      col.position.y = 2; col.castShadow = true; group.add(col);
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), createShaderMaterial('frost'));
+      orb.position.y = 4.2; group.add(orb);
+      const pillarLight = new THREE.PointLight(0x4488ff, 1, 8, 2);
+      pillarLight.position.set(0, 4.5, 0);
+      group.add(pillarLight);
+      group.position.set(Math.cos(angle) * 35, 0, Math.sin(angle) * 35);
+      this.scene.add(group);
+    }
     // AoEIndicator — terrain meshes registered above.
     this.aoeIndicator = new AoEIndicator(this.scene, this._terrainMeshes);
   }
