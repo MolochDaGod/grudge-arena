@@ -1,0 +1,191 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88dd9eaaa87e09c46ad3b5384c9d2f26, type: 3}
+  m_Name: Berserker Rush 1
+  m_EditorClassIdentifier: 
+  useScriptableName: 1
+  animationTag: 
+  noAnimation: 0
+  skillConditions:
+    activationChance: 1
+    healthThreshold: 0
+    casterHealth: 0
+    activeBuff: {fileID: 0}
+  usageRequirements:
+    isActive: 1
+    aliveOnly: 1
+    stateType: 0
+    minLevel: 0
+    maxLevel: 0
+    minHealth: 0
+    minMana: 0
+    dayStart: 0
+    dayEnd: 0
+    activeMonth: 0
+    cannotUseInCombat: 0
+    waitSecondsAfterCombat: 10
+    requiredSkills: []
+    requiresAllSkills: 0
+    requiredBuff: {fileID: 0}
+    prohibitedBuff: {fileID: 0}
+    allowedClasses: []
+    requiresParty: 0
+    requiresGuild: 0
+    requiredEquipment: []
+    requiresAllEquipment: 0
+    requiredItems: []
+    requiresAllItems: 0
+    allowedPrestigeClasses: []
+    requiredAttributes: []
+    requiresAllAttributes: 0
+    requiredRealm: {fileID: 0}
+    requiredAlly: {fileID: 0}
+    lootableBy: 0
+    requiredQuest: {fileID: 0}
+    questMustBeInProgress: 0
+    factionRequirements: []
+    requiresAllFactionRatings: 0
+    harvestProfessionRequirements: []
+    requiresAllHarvestingProfessions: 0
+    craftProfessionRequirements: []
+    requiresAllCraftingProfessions: 0
+    requiredTravelrouteName: 
+    worldEvent: {fileID: 0}
+    minEventCount: 0
+    maxEventCount: 0
+    minGuildLevel: 0
+    accountUnlockable: 
+  usageEquipmentId: 0
+  usageAreaId: 0
+  learnablePrestigeClasses: []
+  emptyPrestigeClass: 1
+  skillType: 0
+  unlearnable: 0
+  disadvantageous: 0
+  category: 
+  cancelWhenMoving: 0
+  followupDefaultAttack: 1
+  toolTip: '<b>{NAME} Lvl {LEVEL}</b>
+
+    Rush your target
+
+
+    Damage: {DAMAGE}
+
+    Cast
+    Time: {CASTTIME}
+
+    Cooldown: {COOLDOWN}'
+  image: {fileID: 21300000, guid: 298efe4e7168a4745bf5e87aa336d660, type: 3}
+  learnDefault: 1
+  showCastBar: 0
+  cancelCastIfTargetDied: 0
+  allowMovement: 1
+  predecessor: {fileID: 0}
+  predecessorLevel: 1
+  requiredWeaponCategory: 
+  requiredLevel:
+    baseValue: 0
+    bonusPerLevel: 0
+  requiredSkillExperience:
+    baseValue: 5
+    bonusPerLevel: 0
+  maxLevel: 5
+  manaCosts:
+    baseValue: 0
+    bonusPerLevel: 0
+  castTime:
+    baseValue: 0
+    bonusPerLevel: 0
+  cooldown:
+    baseValue: 5
+    bonusPerLevel: 0
+  castRange:
+    baseValue: 20
+    bonusPerLevel: 0
+  isAOE: 0
+  castSound: {fileID: 0}
+  AttributeModifiers: []
+  bonusBlockFactor:
+    baseValue: 0
+    bonusPerLevel: 0
+  bonusCriticalFactor:
+    baseValue: 1.5
+    bonusPerLevel: 0
+  bonusAccuracy:
+    baseValue: 0
+    bonusPerLevel: 0
+  bonusResistance:
+    baseValue: 0
+    bonusPerLevel: 0
+  bonusDrainHealthFactor:
+    baseValue: 0
+    bonusPerLevel: 0
+  bonusDrainManaFactor:
+    baseValue: 0
+    bonusPerLevel: 0
+  bonusReflectDamageFactor:
+    baseValue: 0
+    bonusPerLevel: 0
+  bonusDefenseBreakFactor:
+    baseValue: 0
+    bonusPerLevel: 0
+  bonusBlockBreakFactor:
+    baseValue: 0
+    bonusPerLevel: 0
+  bonusCriticalEvasion:
+    baseValue: 0
+    bonusPerLevel: 0
+  bonusAbsorbHealthFactor:
+    baseValue: 0
+    bonusPerLevel: 0
+  bonusAbsorbManaFactor:
+    baseValue: 0
+    bonusPerLevel: 0
+  elementalResistances: []
+  cannotRemove: 0
+  blockNerfs: 0
+  blockBuffs: 0
+  boostGold: 0
+  invincibility: 0
+  healthMaxBonus:
+    baseValue: 0
+    bonusPerLevel: 0
+  manaMaxBonus:
+    baseValue: 0
+    bonusPerLevel: 0
+  damageBonus:
+    baseValue: 0
+    bonusPerLevel: 0
+  defenseBonus:
+    baseValue: 0
+    bonusPerLevel: 0
+  blockChanceBonus:
+    baseValue: 0
+    bonusPerLevel: 0
+  criticalChanceBonus:
+    baseValue: 0
+    bonusPerLevel: 0
+  healthPercentPerSecondBonus:
+    baseValue: 0
+    bonusPerLevel: 0
+  manaPercentPerSecondBonus:
+    baseValue: 0
+    bonusPerLevel: 0
+  speedBonus:
+    baseValue: 11
+    bonusPerLevel: 0
+  buffTime:
+    baseValue: 1
+    bonusPerLevel: 0
+  remainAfterDeath: 0
+  effect: {fileID: 1361822279024433138, guid: 16f9e4565d007674493e7f82357b2a0c, type: 3}

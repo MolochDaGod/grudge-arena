@@ -1,105 +1,119 @@
 /**
- * PhysicsWorld — Cannon-ES world for arena combat
- * 
- * Follows annihilate/index.js patterns:
- * - Fixed timestep world.step(1/60, dt, 3)
- * - Collision groups as powers of 2
- * - Ground plane + arena walls
- * - body↔mesh sync helper
+ * PhysicsWorld — cannon-es rigid-body physics with collision groups.
+ *
+ * Collision-group bitmask pattern from annihilatetrainer global.js.
+ * Powers of 2 starting at 2 to avoid the cannon-es default (1).
  */
 
 import * as CANNON from 'cannon-es';
 
-// ── Collision groups (annihilate global.js pattern) ────────────────
-export const GROUP = {
-  SCENE:          2,    // Ground, walls, pillars
-  ROLE:           4,    // Player character
-  ENEMY:          8,    // Enemy characters
-  ROLE_ATTACKER:  16,   // Player's hitbox (sword swing, projectile)
-  ENEMY_ATTACKER: 32,   // Enemy's hitbox
-  TRIGGER:        64,   // Pickups, area effects
-  SHIELD:         128,  // Shield collision
-};
+// ── Collision Groups (power-of-2 bitmask) ───────────────────────
+export const GROUP_SCENE            = 2;
+export const GROUP_PLAYER           = 4;
+export const GROUP_ENEMY            = 8;
+export const GROUP_PLAYER_ATTACKER  = 16;
+export const GROUP_ENEMY_ATTACKER   = 32;
+export const GROUP_TRIGGER          = 64;
+export const GROUP_SHIELD           = 128;
+
+// ── Fixed timestep config ───────────────────────────────────────
+const FIXED_DT = 1 / 60;
+const MAX_SUB_STEPS = 3;
 
 export class PhysicsWorld {
   constructor() {
     this.world = new CANNON.World();
-    this.world.gravity.set(0, -20, 0); // Match annihilate gravity
-    this.world.broadphase = new CANNON.NaiveBroadphase();
-    this.world.defaultContactMaterial.friction = 0;
-    this.world.defaultContactMaterial.restitution = 0;
+    this.world.gravity.set(0, -9.82, 0);
+    this.world.broadphase = new CANNON.SAPBroadphase(this.world);
+    this.world.solver.iterations = 10;
+    this.world.allowSleep = false;
 
-    // Bodies tracked for mesh sync
-    this.bodies = []; // { body, mesh, offset? }
+    // Default contact material — low friction, no bounce
+    this.world.defaultContactMaterial = new CANNON.ContactMaterial(
+      new CANNON.Material(), new CANNON.Material(),
+      { friction: 0.1, restitution: 0 },
+    );
 
-    this._createGround();
-    this._createArenaWalls();
-  }
-
-  _createGround() {
+    // Ground plane (Y=0)
     const groundBody = new CANNON.Body({
       mass: 0,
-      shape: new CANNON.Plane(),
-      collisionFilterGroup: GROUP.SCENE,
-      collisionFilterMask: GROUP.ROLE | GROUP.ENEMY | GROUP.ROLE_ATTACKER | GROUP.ENEMY_ATTACKER,
+      collisionFilterGroup: GROUP_SCENE,
+      collisionFilterMask: GROUP_PLAYER | GROUP_ENEMY,
     });
-    groundBody.quaternion.setFromEulerXYZ(-Math.PI / 2, 0, 0);
+    groundBody.addShape(new CANNON.Plane());
+    groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+    groundBody.belongTo = { isScene: true };
     this.world.addBody(groundBody);
-    this.groundBody = groundBody;
   }
 
-  _createArenaWalls() {
-    // Invisible cylinder wall at arena boundary (radius 28)
-    // Approximated with 8 box walls around the perimeter
-    const wallSize = 20;
-    const wallThickness = 2;
-    const radius = 30;
-    const wallShape = new CANNON.Box(new CANNON.Vec3(wallSize / 2, 5, wallThickness / 2));
-
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2;
-      const wall = new CANNON.Body({
-        mass: 0,
-        shape: wallShape,
-        collisionFilterGroup: GROUP.SCENE,
-        collisionFilterMask: GROUP.ROLE | GROUP.ENEMY,
-      });
-      wall.position.set(
-        Math.cos(angle) * radius,
-        5,
-        Math.sin(angle) * radius
-      );
-      wall.quaternion.setFromEulerXYZ(0, -angle, 0);
-      this.world.addBody(wall);
-    }
+  /** Step physics forward by `delta` seconds. */
+  step(delta) {
+    this.world.step(FIXED_DT, delta, MAX_SUB_STEPS);
   }
 
-  /** Add a pillar collision body at position */
-  addPillar(x, z, radius = 1.5, height = 6) {
+  /**
+   * Create a character capsule body (sphere + cylinder, fixedRotation).
+   * Mirrors the annihilatetrainer Maria.js body construction.
+   *
+   * @param {CANNON.Vec3|{x,y,z}} position
+   * @param {number} radius   — capsule radius (default 0.5)
+   * @param {number} height   — total capsule height (default 1.8)
+   * @param {number} group    — collision group bitmask
+   * @param {number} mask     — collision mask bitmask
+   * @returns {CANNON.Body}
+   */
+  createCharacterBody(position, radius = 0.5, height = 1.8, group, mask) {
     const body = new CANNON.Body({
-      mass: 0,
-      shape: new CANNON.Cylinder(radius, radius, height, 8),
-      collisionFilterGroup: GROUP.SCENE,
-      collisionFilterMask: GROUP.ROLE | GROUP.ENEMY | GROUP.ROLE_ATTACKER | GROUP.ENEMY_ATTACKER,
+      mass: 60,
+      fixedRotation: true,
+      collisionFilterGroup: group,
+      collisionFilterMask: mask,
     });
-    body.position.set(x, height / 2, z);
+
+    const cylHeight = height - radius * 2;
+    body.addShape(new CANNON.Sphere(radius), new CANNON.Vec3(0, cylHeight / 2, 0));
+    body.addShape(new CANNON.Sphere(radius), new CANNON.Vec3(0, -cylHeight / 2, 0));
+    body.addShape(new CANNON.Cylinder(radius, radius, cylHeight, 8));
+
+    body.position.set(position.x || 0, position.y || 0, position.z || 0);
     this.world.addBody(body);
     return body;
   }
 
-  /** Register a body+mesh pair for automatic sync */
-  register(body, mesh, offset = null) {
-    this.bodies.push({ body, mesh, offset });
+  /**
+   * One-way sync: physics body position → Three.js mesh position.
+   * @param {THREE.Object3D} mesh
+   * @param {CANNON.Body} body
+   * @param {number} heightOffset — subtract from Y so mesh feet align with ground
+   */
+  syncMeshToBody(mesh, body, heightOffset = 0.9) {
+    mesh.position.set(
+      body.position.x,
+      body.position.y - heightOffset,
+      body.position.z,
+    );
   }
 
-  /** Step physics and sync all meshes to bodies */
-  update(dt) {
-    this.world.step(1 / 60, dt, 3);
+  /**
+   * One-way sync: Three.js mesh position → physics body position.
+   * Used when the controller directly moves the mesh (player input).
+   */
+  syncBodyToMesh(body, mesh, heightOffset = 0.9) {
+    body.position.set(
+      mesh.position.x,
+      mesh.position.y + heightOffset,
+      mesh.position.z,
+    );
+    body.velocity.set(0, 0, 0);
+  }
 
-    for (const { body, mesh, offset } of this.bodies) {
-      mesh.position.set(body.position.x, body.position.y, body.position.z);
-      if (offset) mesh.position.add(offset);
-      // Only sync Y rotation (annihilate: fixedRotation, mesh.rotation.y controlled by facing)
-    }
+  /** Remove a body from the world. */
+  removeBody(body) {
+    if (body) this.world.removeBody(body);
+  }
+
+  /** Add a raw body (for hitboxes, detectors, projectiles). */
+  addBody(body) {
+    this.world.addBody(body);
   }
 }

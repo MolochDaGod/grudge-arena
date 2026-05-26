@@ -1,0 +1,313 @@
+/**
+ * OrbitCamera — Fortnite/MMO hybrid third-person camera
+ *
+ * Controls:
+ *   LMB hold + drag = orbit (yaw + pitch) around the player
+ *     → Requests pointer-lock for precision mouse movement
+ *   Scroll           = proportional zoom (distance + pitch scale together)
+ *   RMB              = attack (handled by ArenaController, NOT camera)
+ *
+ * When LMB is NOT held the camera passively drifts behind the character.
+ * Passive follow speed increases when the player is actively moving,
+ * giving a Fortnite-style "camera stays behind you while running" feel.
+ *
+ * API:
+ *   getYaw()              → current yaw (used by ArenaController)
+ *   setPlayerMoving(bool) → signal from ArenaController; ramps follow speed
+ *   snapBehind()          → instantly align camera behind character
+ */
+
+import * as THREE from 'three';
+
+const PI2 = Math.PI * 2;
+
+  // ── Camera collision constants ──────────────────────────────────
+const COLLISION_OFFSET = 0.3;   // Pull camera slightly in front of hit point
+const COLLISION_LAYERS = 0xff;  // Raycast against all layers
+
+// ── Tab-target nudge constants ───────────────────────────────────
+const TAB_NUDGE_ANGLE = 0.25;   // ~15° nudge toward target
+const TAB_NUDGE_SPEED = 4.0;    // How fast the nudge decays back
+
+  // ── Tunable constants ────────────────────────────────────────────
+// Tuned from RacalvinController souls-like reference:
+//   cameraDistance: 6.5, cameraSmoothing: 0.15, cameraSensitivity: 0.002
+const CAMERA_CONFIG = {
+  // Starting state
+  INITIAL_YAW:       0,
+  INITIAL_PITCH:     0.35,  // Slightly more downward (RacalvinController: 0.4)
+  INITIAL_DISTANCE:  6.5,   // Souls-like distance
+
+  // Distance / zoom
+  ZOOM_MIN:          2.5,
+  ZOOM_MAX:          14,    // Smaller arena, don't need 18m zoom
+  ZOOM_SENSITIVITY:  0.10,
+
+  // Pitch / vertical
+  PITCH_MIN:        -0.5,   // Match RacalvinController minPitch: -0.5
+  PITCH_MAX:         1.4,   // Match RacalvinController maxPitch: 1.4
+
+  // Mouse orbit sensitivity — RacalvinController uses 0.002
+  ORBIT_SENSITIVITY_X: 0.002,
+  ORBIT_SENSITIVITY_Y: 0.002,
+
+  // Pivot & shoulder
+  PIVOT_HEIGHT:      1.5,   // Slightly taller — more over-shoulder
+  SHOULDER_OFFSET:   0.3,
+
+  // Camera position smoothing — RacalvinController cameraSmoothing: 0.15
+  FOLLOW_SPEED:      7,
+
+  // Passive yaw follow (camera drifts behind character)
+  // RacalvinController auto-follows at followSpeed=3.0 when no RMB held.
+  // We keep it gentler so the camera doesn't fight the player on A/D turns.
+  PASSIVE_FOLLOW_IDLE:    2.0,  // Gentle idle drift
+  PASSIVE_FOLLOW_MOVING:  4.0,  // Moderate follow while running (not Fortnite-snap)
+  PASSIVE_FOLLOW_THRESHOLD: 0.02,
+};
+// ─────────────────────────────────────────────────────────────────
+
+export class OrbitCamera {
+  constructor(camera, domElement) {
+    this.camera     = camera;
+    this.domElement = domElement;
+    this.target     = null;   // THREE.Object3D to follow
+
+    // Current spherical coords (what the camera actually uses)
+    this.yaw      = CAMERA_CONFIG.INITIAL_YAW;
+    this.pitch    = CAMERA_CONFIG.INITIAL_PITCH;
+    this.distance = CAMERA_CONFIG.INITIAL_DISTANCE;
+
+    // Target spherical coords (mouse input goes here; current lerps toward these)
+    this._targetYaw      = this.yaw;
+    this._targetPitch    = this.pitch;
+    this._targetDistance = this.distance;
+
+    // Pivot / look-at offset
+    this.pivotOffset    = new THREE.Vector3(0, CAMERA_CONFIG.PIVOT_HEIGHT, 0);
+    this.shoulderOffset = CAMERA_CONFIG.SHOULDER_OFFSET;
+
+    // Internal state
+    this._currentPos    = new THREE.Vector3();
+    this._currentLookAt = new THREE.Vector3();
+    this._pivotWorld    = new THREE.Vector3();
+    this._initialized   = false;
+    this._isDragging    = false;   // LMB held
+    this._isMoving      = false;   // Set by ArenaController via setPlayerMoving()
+
+    // Camera collision
+    this._raycaster     = new THREE.Raycaster();
+    this._collisionMeshes = [];    // Populated by setCollisionMeshes()
+
+    // Tab-target nudge
+    this._tabNudge      = 0;       // Current nudge angle (decays to 0)
+    this._tabNudgeDir   = 0;       // Direction of nudge (+1 or -1)
+
+    // Cached config refs
+    this._cfg = CAMERA_CONFIG;
+
+    this._setupInput();
+  }
+
+  // ── Public API ───────────────────────────────────────────────────
+
+  setTarget(target) {
+    this.target       = target;
+    this._initialized = false;
+  }
+
+  /** Current yaw in radians — read by ArenaController for camera-relative movement */
+  getYaw() { return this.yaw; }
+
+  /** Whether the player is actively orbiting (LMB held + pointer-locked) */
+  get isDragging() { return this._isDragging; }
+
+  /**
+   * Called by ArenaController every frame so the camera knows when to apply
+   * aggressive Fortnite-style passive follow vs. gentle idle drift.
+   * @param {boolean} moving
+   */
+  setPlayerMoving(moving) { this._isMoving = moving; }
+
+  /**
+   * Register arena meshes for camera collision raycasting.
+   * Call once after arena geometry is built.
+   * @param {THREE.Mesh[]} meshes
+   */
+  setCollisionMeshes(meshes) { this._collisionMeshes = meshes; }
+
+  /**
+   * Nudge the camera briefly toward a world position (Tab-target feel).
+   * The nudge decays back to 0 over a few frames.
+   * @param {THREE.Vector3} targetPos — world position of the new target
+   */
+  nudgeToward(targetPos) {
+    if (!this.target) return;
+    const toTarget = Math.atan2(
+      targetPos.x - this.target.position.x,
+      targetPos.z - this.target.position.z,
+    );
+    // Compute shortest signed angle between current yaw and target direction
+    let diff = (toTarget + Math.PI) - this._targetYaw;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    this._tabNudge = TAB_NUDGE_ANGLE;
+    this._tabNudgeDir = Math.sign(diff) || 1;
+  }
+
+  /**
+   * Instantly snap the camera yaw to sit directly behind the character.
+   * Useful when the player spawns or respawns.
+   */
+  snapBehind() {
+    if (!this.target) return;
+    this.yaw         = this.target.rotation.y + Math.PI;
+    this._targetYaw  = this.yaw;
+  }
+
+  // ── Input setup ──────────────────────────────────────────────────
+
+  _setupInput() {
+    const el = this.domElement;
+
+    // LMB drag = orbit.  NO pointer-lock — it fights with normal mouse use.
+    // RacalvinController uses free-look only when RMB is held; we mirror that:
+    //   LMB drag = manual camera orbit
+    //   No RMB action here (RMB = attack, handled by ArenaController)
+    el.addEventListener('mousedown', (e) => {
+      if (e.button === 0) this._isDragging = true;
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this._isDragging = false;
+    });
+
+    // Mouse movement — accumulate into TARGET yaw/pitch while LMB is held.
+    // movementX/Y works without pointer-lock in modern browsers.
+    window.addEventListener('mousemove', (e) => {
+      if (!this._isDragging) return;
+      this._targetYaw   -= e.movementX * this._cfg.ORBIT_SENSITIVITY_X;
+      this._targetPitch += e.movementY * this._cfg.ORBIT_SENSITIVITY_Y;
+      this._targetPitch = Math.max(
+        this._cfg.PITCH_MIN,
+        Math.min(this._cfg.PITCH_MAX, this._targetPitch),
+      );
+    });
+
+    // Scroll = proportional zoom (distance + pitch scale together).
+    el.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const normalised = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 30) * 0.01;
+      const factor     = 1.0 + normalised * this._cfg.ZOOM_SENSITIVITY;
+
+      this._targetDistance *= factor;
+      this._targetPitch    *= factor;
+
+      this._targetDistance = Math.max(
+        this._cfg.ZOOM_MIN,
+        Math.min(this._cfg.ZOOM_MAX, this._targetDistance),
+      );
+      this._targetPitch = Math.max(
+        this._cfg.PITCH_MIN,
+        Math.min(this._cfg.PITCH_MAX, this._targetPitch),
+      );
+    }, { passive: false });
+
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  // ── Per-frame update ─────────────────────────────────────────────
+
+  update(delta) {
+    if (!this.target) return;
+
+    // ── Passive follow-behind ──────────────────────────────────────
+    // When NOT dragging the camera passively drifts to sit behind
+    // the character's facing. Speed ramps up while the player moves
+    // so the camera snaps behind quickly (Fortnite style).
+    if (!this._isDragging) {
+      const behindYaw = this.target.rotation.y + Math.PI;
+      let diff = behindYaw - this._targetYaw;
+      // Wrap diff to [-PI, PI]
+      while (diff >  Math.PI) diff -= PI2;
+      while (diff < -Math.PI) diff += PI2;
+
+      if (Math.abs(diff) > this._cfg.PASSIVE_FOLLOW_THRESHOLD) {
+        const speed = this._isMoving
+          ? this._cfg.PASSIVE_FOLLOW_MOVING
+          : this._cfg.PASSIVE_FOLLOW_IDLE;
+        const t = 1 - Math.exp(-speed * delta);
+        this._targetYaw += diff * t;
+      }
+    }
+
+    // ── Smooth actual values toward targets ──────────────────────
+    // Orbit inputs write to _targetYaw/_targetPitch/_targetDistance;
+    // we lerp the live values for smooth camera glide.
+    const st = 1 - Math.exp(-this._cfg.FOLLOW_SPEED * delta);
+    let yawDiff = this._targetYaw - this.yaw;
+    while (yawDiff >  Math.PI) yawDiff -= PI2;
+    while (yawDiff < -Math.PI) yawDiff += PI2;
+    this.yaw      += yawDiff * st;
+    this.pitch    += (this._targetPitch    - this.pitch)    * st;
+    this.distance += (this._targetDistance - this.distance) * st;
+
+    // ── Build desired camera position (spherical → world) ────────
+    this._pivotWorld.copy(this.target.position).add(this.pivotOffset);
+
+    const cosPitch = Math.cos(this.pitch);
+    const sinPitch = Math.sin(this.pitch);
+    const cosYaw   = Math.cos(this.yaw);
+    const sinYaw   = Math.sin(this.yaw);
+
+    const desiredPos = new THREE.Vector3(
+      this._pivotWorld.x - sinYaw * cosPitch * this.distance + cosYaw * this.shoulderOffset,
+      this._pivotWorld.y + sinPitch * this.distance,
+      this._pivotWorld.z - cosYaw * cosPitch * this.distance - sinYaw * this.shoulderOffset,
+    );
+
+    // Look slightly ahead of the pivot (less tunnel-vision on tight zooms)
+    const lookAtBias = Math.max(0, 1.0 - this.distance / 8) * 0.4;
+    const desiredLookAt = this._pivotWorld.clone().addScaledVector(
+      new THREE.Vector3(-sinYaw, 0, -cosYaw), lookAtBias,
+    );
+
+    // ── Camera collision raycast ──────────────────────────────────
+    // Cast a ray from the pivot toward the desired camera position.
+    // If it hits arena geometry, pull the camera in front of the hit.
+    if (this._collisionMeshes.length > 0) {
+      const rayDir = desiredPos.clone().sub(this._pivotWorld);
+      const maxDist = rayDir.length();
+      if (maxDist > 0.01) {
+        rayDir.normalize();
+        this._raycaster.set(this._pivotWorld, rayDir);
+        this._raycaster.far = maxDist;
+        const hits = this._raycaster.intersectObjects(this._collisionMeshes, true);
+        if (hits.length > 0 && hits[0].distance < maxDist) {
+          const safeDist = Math.max(0.5, hits[0].distance - COLLISION_OFFSET);
+          desiredPos.copy(this._pivotWorld).addScaledVector(rayDir, safeDist);
+        }
+      }
+    }
+
+    // ── Tab-target nudge ─────────────────────────────────────────
+    if (this._tabNudge > 0.001) {
+      this._targetYaw += this._tabNudgeDir * this._tabNudge * delta * TAB_NUDGE_SPEED;
+      this._tabNudge *= Math.max(0, 1 - TAB_NUDGE_SPEED * delta);
+    }
+
+    // ── Apply (snap on first frame, smooth thereafter) ───────────
+    if (!this._initialized) {
+      this._currentPos.copy(desiredPos);
+      this._currentLookAt.copy(desiredLookAt);
+      this._initialized = true;
+    } else {
+      const ft = 1 - Math.exp(-this._cfg.FOLLOW_SPEED * delta);
+      this._currentPos.lerp(desiredPos, ft);
+      this._currentLookAt.lerp(desiredLookAt, ft);
+    }
+
+    this.camera.position.copy(this._currentPos);
+    this.camera.lookAt(this._currentLookAt);
+  }
+}

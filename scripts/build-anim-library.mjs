@@ -226,26 +226,78 @@ for (const [weapon, anims] of Object.entries(WEAPON_ANIMS)) {
 const PUBLIC = resolve('public');
 
 // ── Bone name remapping ─────────────────────────────────────────────
+// Maps Mixamo bone names (with or without 'mixamorig:' prefix) to
+// the Bip001 bone names used in WK/BRB/ELF/DWF/ORC/UD_Characters.glb.
+// Must match the BONE_ALIASES and VALID_BONES in src/modelLoader.js.
 
 const BONE_ALIASES = {
-  'Spine1': 'Spine01', 'Spine2': 'Spine02',
-  'Neck': 'neck', 'HeadTop_End': 'head_end',
-  'Reye': 'headfront', 'Leye': 'headfront',
+  // Root / spine
+  'Hips':        'Bip001 Pelvis',
+  'Spine':       'Bip001 Spine',
+  'Spine1':      'Bip001 Spine',   // Mixamo Spine1 → same Bip001 Spine
+  'Spine2':      'Bip001 Spine1',
+  // Head / neck
+  'Neck':        'Bip001 Neck',
+  'Head':        'Bip001 Head',
+  'HeadTop_End': 'Bip001 Head',
+  // Left arm
+  'LeftShoulder':  'Bip001 L Clavicle',
+  'LeftArm':       'Bip001 L UpperArm',
+  'LeftForeArm':   'Bip001 L Forearm',
+  'LeftHand':      'Bip001 L Hand',
+  // Right arm
+  'RightShoulder': 'Bip001 R Clavicle',
+  'RightArm':      'Bip001 R UpperArm',
+  'RightForeArm':  'Bip001 R Forearm',
+  'RightHand':     'Bip001 R Hand',
+  // Left leg
+  'LeftUpLeg':   'Bip001 L Thigh',
+  'LeftLeg':     'Bip001 L Calf',
+  'LeftFoot':    'Bip001 L Foot',
+  'LeftToeBase': 'Bip001 L Toe0',
+  // Right leg
+  'RightUpLeg':   'Bip001 R Thigh',
+  'RightLeg':     'Bip001 R Calf',
+  'RightFoot':    'Bip001 R Foot',
+  'RightToeBase': 'Bip001 R Toe0',
+  // Eyes — ignore
+  'Reye': null,
+  'Leye': null,
 };
 
+// Exactly the Bip001 bone names that exist in all 6 race GLBs.
 const VALID_BONES = new Set([
-  'Hips', 'Spine', 'Spine01', 'Spine02', 'neck', 'Head', 'head_end', 'headfront',
-  'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
-  'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
-  'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'LeftToeBase',
-  'RightUpLeg', 'RightLeg', 'RightFoot', 'RightToeBase',
+  'Bip001 Pelvis',
+  'Bip001 Spine',
+  'Bip001 Spine1',
+  'Bip001 Neck',
+  'Bip001 Head',
+  'Bip001 L Clavicle',
+  'Bip001 L UpperArm',
+  'Bip001 L Forearm',
+  'Bip001 L Hand',
+  'Bip001 R Clavicle',
+  'Bip001 R UpperArm',
+  'Bip001 R Forearm',
+  'Bip001 R Hand',
+  'Bip001 L Thigh',
+  'Bip001 L Calf',
+  'Bip001 L Foot',
+  'Bip001 L Toe0',
+  'Bip001 R Thigh',
+  'Bip001 R Calf',
+  'Bip001 R Foot',
+  'Bip001 R Toe0',
 ]);
 
 function remapNodeName(name) {
-  // Strip mixamorig: prefix
+  // Strip 'mixamorig:' or 'mixamorig' prefix variants
   if (name.includes(':')) name = name.split(':').pop();
-  // Apply aliases
-  if (BONE_ALIASES[name]) name = BONE_ALIASES[name];
+  else if (name.startsWith('mixamorig')) name = name.slice('mixamorig'.length);
+  // Apply Bip001 alias
+  const alias = BONE_ALIASES[name];
+  if (alias === null) return null; // explicitly ignored (eyes etc.)
+  if (alias) name = alias;
   return name;
 }
 
@@ -282,8 +334,8 @@ function extractAnimation(filePath, animName) {
     const nodeName = nodes[nodeIdx]?.name || `node_${nodeIdx}`;
     const remapped = remapNodeName(nodeName);
     
-    // Skip bones not in our skeleton
-    if (!VALID_BONES.has(remapped) && remapped !== 'Armature') continue;
+    // Skip bones not in our skeleton (null = explicitly ignored like eyes)
+    if (!remapped || (!VALID_BONES.has(remapped) && remapped !== 'Armature')) continue;
     
     remappedNodes.set(nodeIdx, remapped);
     channels.push({

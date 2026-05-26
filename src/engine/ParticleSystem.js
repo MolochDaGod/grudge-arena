@@ -98,6 +98,7 @@ export class ParticleSystem {
     this.geometry.attributes.position.needsUpdate = true;
     this.geometry.attributes.color.needsUpdate = true;
     this.geometry.attributes.size.needsUpdate = true;
+    this.geometry.setDrawRange(0, this.particles.length);
   }
 
   emitExplosion(position, color, count = 50) {

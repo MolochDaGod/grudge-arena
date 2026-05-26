@@ -51,6 +51,88 @@ export class CollisionSystem {
       .filter(r => r.hit);
   }
 
+  /**
+   * AoE sphere hit detection using THREE.Sphere + THREE.Box3.
+   * Far more accurate than the 6-direction raycasts for area skills.
+   *
+   * Uses a two-phase approach matching the AoEIndicator.checkHits pattern:
+   *   Phase 1: THREE.Box3 AABB pre-filter (cheap, eliminates far objects)
+   *   Phase 2: THREE.Sphere containsPoint on the mesh center (accurate)
+   *
+   * @param {THREE.Vector3} center     — world-space AoE origin
+   * @param {number}        radius     — AoE radius in world units
+   * @param {Array}         entities   — array of { mesh, id, ... }
+   * @param {boolean}       [flatY]    — ignore Y axis (ground-plane AoE, default true)
+   * @returns {Array}  entities whose center falls inside the sphere
+   */
+  checkAoE(center, radius, entities, flatY = true) {
+    const sphere = new THREE.Sphere(center.clone(), radius);
+    const box3   = new THREE.Box3();
+    const hits   = [];
+
+    for (const entity of entities) {
+      if (!entity.mesh) continue;
+
+      // Phase 1: cheap AABB pre-filter
+      box3.setFromObject(entity.mesh);
+      if (!sphere.intersectsBox(box3)) continue;
+
+      // Phase 2: sphere containsPoint using mesh center
+      const entityCenter = new THREE.Vector3();
+      box3.getCenter(entityCenter);
+      if (flatY) entityCenter.y = center.y;  // flatten to XZ plane for ground AoE
+
+      if (sphere.containsPoint(entityCenter)) {
+        hits.push(entity);
+      }
+    }
+
+    return hits;
+  }
+
+  /**
+   * Cone sweep — hits entities in a forward-facing cone (directional AoE).
+   * Useful for: sword cleave, charge path, Judgment beam width check.
+   *
+   * Uses THREE.Raycaster fan pattern internally for per-angle hits,
+   * then filters by cone geometry using dot product.
+   *
+   * @param {THREE.Vector3} origin    — cone tip (caster position)
+   * @param {THREE.Vector3} forward   — unit vector, cone axis direction
+   * @param {number}        halfAngle — cone half-angle in radians (e.g. Math.PI/4 = 45°)
+   * @param {number}        range     — max distance from origin
+   * @param {Array}         entities  — array of { mesh, id, ... }
+   * @returns {Array}  entities inside the cone
+   */
+  checkCone(origin, forward, halfAngle, range, entities) {
+    const fwdNorm = forward.clone().normalize();
+    const cosHalf = Math.cos(halfAngle);
+    const box3    = new THREE.Box3();
+    const hits    = [];
+
+    for (const entity of entities) {
+      if (!entity.mesh) continue;
+
+      box3.setFromObject(entity.mesh);
+      const entityCenter = new THREE.Vector3();
+      box3.getCenter(entityCenter);
+
+      // Vector from origin to entity center
+      const toEntity = entityCenter.clone().sub(origin);
+      const dist = toEntity.length();
+
+      if (dist > range) continue;
+
+      // Dot product against forward: cos(angle between them)
+      const dot = toEntity.normalize().dot(fwdNorm);
+      if (dot >= cosHalf) {
+        hits.push(entity);
+      }
+    }
+
+    return hits;
+  }
+
   resolveCollision(entity, collisions) {
     const transform = entity.getComponent('Transform');
     if (!transform) return;

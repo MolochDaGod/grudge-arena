@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Grudge Arena — PvP Combat</title>
+  <meta name="description" content="Grudge Arena — 3D PvP combat arena with 6 playable races, 5 weapon classes, and real-time multiplayer. Built on Grudge Studio.">
+  <meta name="theme-color" content="#07070f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta property="og:title" content="Grudge Arena — PvP Combat">
+  <meta property="og:description" content="3D PvP combat arena with 6 playable races and 5 weapon classes">
+  <meta property="og:image" content="/grudge-logo.png">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/png" href="/grudge-logo.png">
+  <link rel="apple-touch-icon" href="/grudge-logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/arena.css">
+  <script src="https://js.puter.com/v2/"></script>
+</head>
+<body>
+
+<!-- ═══ ERROR OVERLAY ═══ -->
+<div id="error-overlay">
+  <div class="error-icon">⚠️</div>
+  <div class="error-title">Engine Load Failed</div>
+  <div class="error-message" id="error-message">An error occurred while loading the arena.</div>
+  <button class="error-retry" onclick="location.reload()">Retry</button>
+</div>
+
+<!-- ═══ LOBBY OVERLAY ═══ -->
+<div id="lobby-overlay">
+  <div class="lobby-brand">
+    <div class="lobby-logo"><img src="/grudge-logo.png" alt="Grudge"></div>
+    <div class="lobby-title">GRUDGE ARENA</div>
+    <div class="lobby-sub">3D PvP Combat · 6 Races · 5 Weapon Classes</div>
+  </div>
+
+  <div class="lobby-card">
+    <!-- Auth gate (shown when not logged in) -->
+    <div id="auth-gate">
+      <p>Connect to enter the arena</p>
+      <div class="auth-methods">
+        <button class="auth-btn auth-btn--phantom" id="phantom-btn">
+          <svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M110.6 56.1C104.1 23.7 73.5 2 41.1 8.5 19.3 13 3.2 30.3.3 52.5c-3.5 27 12.4 52.8 37.9 62.3 3 1.1 6.3-.4 7.4-3.4 1.1-3-0.4-6.3-3.4-7.4C22.1 96.2 9.2 76.5 11.8 55.2c2.2-17.4 14.8-31 31.7-35.5 25.3-6.8 51.1 8.6 57.3 33.9.1.5.2 1 .3 1.5H89.4c-3.1 0-5.9 1.8-7.2 4.6l-2.5 5.4-6.1-18.2c-1.2-3.5-4.4-5.9-8.1-5.9h-.3c-3.8.1-7 2.8-7.9 6.4l-7.6 29.8-4.6-12.7c-1.3-3.5-4.6-5.8-8.3-5.8H20.2c-3.2 0-5.8 2.6-5.8 5.8s2.6 5.8 5.8 5.8h13.9l10.4 28.7c1.3 3.6 4.7 6 8.4 5.9 3.7-.1 6.9-2.6 8.1-6.2l8.1-32.1 5.9 17.7c1.2 3.6 4.5 6.1 8.3 6.1 3.7 0 7.1-2.3 8.3-5.9l5.5-11.9h13.6c3.2 0 5.8-2.6 5.8-5.8-.1-3.4-2.7-6-5.9-6z" fill="white"/></svg>
+          Connect Phantom
+        </button>
+        <div class="auth-divider">or</div>
+        <button class="auth-btn auth-btn--puter" id="puter-btn">
+          <img src="/grudge-logo.png" alt="" class="auth-btn-icon">
+          Sign in with Grudge ID
+        </button>
+        <button class="auth-btn auth-btn--guest" id="guest-btn">
+          ⚔ Play as Guest
+        </button>
+      </div>
+      <div class="auth-status" id="auth-status"></div>
+    </div>
+
+    <!-- Race selection (shown when logged in) -->
+    <div id="race-select">
+      <div class="user-info">
+        <div class="user-avatar" id="ua">⚔</div>
+        <div>
+          <div class="user-name" id="un">Warlord</div>
+          <div class="user-gid" id="ug"></div>
+        </div>
+      </div>
+
+      <div class="race-title">Create Arena Champion</div>
+      
+      <div class="builder-grid">
+        <div class="builder-column">
+          <div class="builder-section-title">Race</div>
+      <div class="race-grid">
+        <div class="race-card selected" data-race="human" onclick="selectRace(this)">
+          <div class="race-icon">🛡️</div>
+          <div class="race-name">Human</div>
+          <div class="race-desc">Balanced · Versatile</div>
+        </div>
+        <div class="race-card" data-race="barbarian" onclick="selectRace(this)">
+          <div class="race-icon">⚔️</div>
+          <div class="race-name">Barbarian</div>
+          <div class="race-desc">Strength · Rage</div>
+        </div>
+        <div class="race-card" data-race="elf" onclick="selectRace(this)">
+          <div class="race-icon">🏹</div>
+          <div class="race-name">Elf</div>
+          <div class="race-desc">Agility · Magic</div>
+        </div>
+        <div class="race-card" data-race="dwarf" onclick="selectRace(this)">
+          <div class="race-icon">🔨</div>
+          <div class="race-name">Dwarf</div>
+          <div class="race-desc">Toughness · Defense</div>
+        </div>
+        <div class="race-card" data-race="orc" onclick="selectRace(this)">
+          <div class="race-icon">🪓</div>
+          <div class="race-name">Orc</div>
+          <div class="race-desc">Power · Ferocity</div>
+        </div>
+        <div class="race-card" data-race="undead" onclick="selectRace(this)">
+          <div class="race-icon">💀</div>
+          <div class="race-name">Undead</div>
+          <div class="race-desc">Shadow · Drain</div>
+        </div>
+      </div>
+
+      <div class="builder-section-title">Class</div>
+      <div class="class-grid" id="class-grid">
+        <div class="class-card selected" data-class="warlord" onclick="selectClassCard(this)">
+          <div class="class-name">Warlord</div>
+          <div class="class-desc">Frontline bruiser</div>
+        </div>
+        <div class="class-card" data-class="arcanist" onclick="selectClassCard(this)">
+          <div class="class-name">Arcanist</div>
+          <div class="class-desc">Spell pressure + control</div>
+        </div>
+        <div class="class-card" data-class="ranger" onclick="selectClassCard(this)">
+          <div class="class-name">Ranger</div>
+          <div class="class-desc">Ranged burst + kiting</div>
+        </div>
+        <div class="class-card" data-class="assassin" onclick="selectClassCard(this)">
+          <div class="class-name">Assassin</div>
+          <div class="class-desc">Stealth opener + execute</div>
+        </div>
+      </div>
+      
+      <div class="builder-section-title">Weapon</div>
+      <div class="weapon-grid" id="weapon-grid">
+        <button class="weapon-pill active" data-weapon="greatsword" onclick="selectWeaponPill(this)">Greatsword</button>
+        <button class="weapon-pill" data-weapon="runeblade" onclick="selectWeaponPill(this)">Runeblade</button>
+        <button class="weapon-pill" data-weapon="bow" onclick="selectWeaponPill(this)">Bow</button>
+        <button class="weapon-pill" data-weapon="sabres" onclick="selectWeaponPill(this)">Sabres</button>
+        <button class="weapon-pill" data-weapon="scythe" onclick="selectWeaponPill(this)">Scythe</button>
+      </div>
+      </div>
+      
+      <div class="builder-column">
+        <div class="builder-section-title">Ring of Titans</div>
+        <div class="ring-panel">
+          <label class="ring-label" for="ring-tier-select">Titan Tier</label>
+          <select id="ring-tier-select" class="ring-tier-select">
+            <option value="iron">Iron Ring</option>
+            <option value="bronze">Bronze Ring</option>
+            <option value="mythic" selected>Mythic Ring</option>
+            <option value="ascendant">Ascendant Ring</option>
+          </select>
+          <div class="ring-perks" id="ring-perks"></div>
+        </div>
+      
+        <div class="builder-section-title">Attributes (160)</div>
+        <div class="builder-points" id="builder-points">160 / 160</div>
+        <div class="attribute-builder" id="attribute-builder"></div>
+        <div class="builder-actions">
+          <button class="builder-btn" onclick="applyBuildPreset('tank')">Tank Preset</button>
+          <button class="builder-btn" onclick="applyBuildPreset('burst')">Burst Preset</button>
+          <button class="builder-btn" onclick="applyBuildPreset('control')">Control Preset</button>
+          <button class="builder-btn" onclick="randomizeBuildAttributes()">Randomize</button>
+        </div>
+      </div>
+      </div>
+      
+      <div class="build-summary" id="build-summary">
+        <div class="build-power"><span>Combat Power</span><strong id="builder-power">0</strong></div>
+        <div class="build-rank"><span>Build Rating</span><strong id="builder-rating">D</strong></div>
+        <div class="build-meta" id="builder-meta">Human Warlord · Greatsword · Mythic Ring</div>
+        <div class="build-advice" id="builder-advice">Balanced setup ready for arena skirmishes.</div>
+      </div>
+      
+      <div class="builder-share-row">
+        <button class="builder-btn builder-btn-share" onclick="shareBuildCode()">Share Build</button>
+      </div>
+
+      <button class="enter-btn" id="enter-btn" onclick="enterArena()">⚔ ENTER THE ARENA</button>
+      <button class="queue-btn" onclick="joinQueue()">🔍 Find PvP Match</button>
+      <a class="back-link" href="https://grudge-studio.com">← Back to The Engine</a>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LOADING OVERLAY ═══ -->
+<div id="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loading-text">Loading arena...</div>
+  <div class="loading-progress"><div class="loading-progress-bar" id="loading-bar"></div></div>
+</div>
+
+<!-- ═══ GAME CANVAS ═══ -->
+<div id="game-root">
+  <canvas id="arena-canvas"></canvas>
+</div>
+
+<!-- ═══ COUNTDOWN OVERLAY ═══ -->
+<div id="countdown-overlay">
+  <div class="countdown-number">5</div>
+  <div class="countdown-label">Arena starting...</div>
+</div>
+
+<!-- ═══ GAME HUD ═══ -->
+<div id="gameUI">
+  <!-- Match timer -->
+  <div id="match-timer">5:00</div>
+
+  <!-- Team A (allies) frames -->
+  <div class="team-frames" id="team-a-frames"></div>
+
+  <!-- Team B (enemies) frames -->
+  <div class="team-frames" id="team-b-frames"></div>
+
+  <!-- Target frame -->
+  <div id="target-frame">
+    <div class="target-name">Target</div>
+    <div class="target-hp-track"><div class="target-hp-bar"></div></div>
+    <div class="target-hp-text">1000 / 1000</div>
+  </div>
+
+  <!-- Player bars -->
+  <div class="hud-bars">
+    <div class="bar-row"><span class="bar-label">Health</span><div class="bar-track"><div class="bar-fill" id="healthBar"></div></div></div>
+    <div class="bar-row"><span class="bar-label">Mana</span><div class="bar-track"><div class="bar-fill" id="manaBar"></div></div></div>
+    <div class="bar-row"><span class="bar-label">Energy</span><div class="bar-track"><div class="bar-fill" id="energyBar"></div></div></div>
+    <div class="bar-row"><span class="bar-label">Rage</span><div class="bar-track"><div class="bar-fill" id="rageBar"></div></div></div>
+  </div>
+
+  <!-- Weapons -->
+  <div class="hud-weapons">
+    <div class="weapon-slot active" id="weapon1">1</div>
+    <div class="weapon-slot" id="weapon2">2</div>
+  </div>
+
+  <!-- Ability bar -->
+  <div id="abilityBar"></div>
+
+  <!-- Control hints -->
+  <div class="fkey-hints">
+    <div><kbd>RMB</kbd> Attack <kbd>LMB</kbd> Select</div>
+    <div><kbd>1-5</kbd> Skills <kbd>Ctrl</kbd> Roll <kbd>Alt</kbd> Dodge</div>
+    <div><kbd>Tab</kbd> Target <kbd>Shift</kbd> Sprint <kbd>Scroll</kbd> Zoom</div>
+    <div><kbd>F1</kbd> Self <kbd>F2</kbd> Ally <kbd>F3</kbd> Ally 2</div>
+  </div>
+</div>
+
+<script type="module">
+// ── Grudge Auth ───────────────────────────────────────────────
+// Auth contract: Puter SDK for identity, Phantom for wallet, Guest fallback
+// Token key: grudge_auth_token (shared across all Grudge apps for SSO)
+// API calls via /api/* → Vercel rewrites to id.grudge-studio.com & api.grudge-studio.com
+const API_BASE = '/api';
+const WS_URL = 'https://ws.grudge-studio.com';
+let selectedRace = 'human';
+  let selectedClass = 'warlord';
+  let selectedWeapon = 'greatsword';
+let grudgeUser = null;
+
+  const ATTRIBUTE_TOTAL = 160;
+  const ATTRIBUTE_KEYS = ['Strength', 'Intellect', 'Vitality', 'Dexterity', 'Endurance', 'Wisdom', 'Agility', 'Tactics'];
+  const BUILD_STORAGE_KEY = 'grudge_arena_character_build_v1';
+
+  const CLASS_WEAPON_DEFAULTS = {
+    warlord: 'greatsword',
+    arcanist: 'scythe',
+    ranger: 'bow',
+    assassin: 'sabres',
+  };
+
+  const RING_TIERS = {
+    iron: { power: 1, hp: 0, speed: 0 },
+    bronze: { power: 1.04, hp: 30, speed: 0.1 },
+    mythic: { power: 1.09, hp: 70, speed: 0.2 },
+    ascendant: { power: 1.16, hp: 120, speed: 0.35 },
+  };
+
+  const RING_PERKS = [
+    { id: 'valor', label: 'Valor Core', bonus: 'Damage +8%' },
+    { id: 'aegis', label: 'Aegis Mesh', bonus: 'Shield +12%' },
+    { id: 'celerity', label: 'Celerity Pulse', bonus: 'Move +6%' },
+    { id: 'focus', label: 'Focus Sigil', bonus: 'CDR +10%' },
+  ];
+
+  let attributePoints = {
+    Strength: 20,
+    Intellect: 20,
+    Vitality: 20,
+    Dexterity: 20,
+    Endurance: 20,
+    Wisdom: 20,
+    Agility: 20,
+    Tactics: 20,
+  };
+  let selectedRingTier = 'mythic';
+  let selectedRingPerks = ['valor', 'focus'];
+
+// ── LocalStorage keys (cross-app SSO compatible with GrudgeBuilder) ──
+const AUTH_TOKEN_KEY = 'grudge_auth_token';
+const SESSION_TOKEN_KEY = 'grudge_session_token';
+const DEVICE_ID_KEY = 'grudge_device_id';
+
+function getToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(SESSION_TOKEN_KEY);
+}
+function setToken(token) {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+  localStorage.setItem(SESSION_TOKEN_KEY, token);
+}
+function getUser() {
+  try { return JSON.parse(localStorage.getItem('grudge_user') || 'null'); } catch { return null; }
+}
+function getDeviceId() {
+  let id = localStorage.getItem(DEVICE_ID_KEY);
+  if (!id) {
+    id = 'ga_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
+    localStorage.setItem(DEVICE_ID_KEY, id);
+  }
+  return id;
+}
+
+function setAuthStatus(msg) {
+  const el = document.getElementById('auth-status');
+  if (el) el.textContent = msg;
+}
+
+  function getPointsSpent() {
+    return Object.values(attributePoints).reduce((sum, value) => sum + value, 0);
+  }
+
+  function saveBuildToStorage() {
+    try {
+      localStorage.setItem(BUILD_STORAGE_KEY, JSON.stringify({
+        race: selectedRace,
+        classId: selectedClass,
+        weapon: selectedWeapon,
+        ringTier: selectedRingTier,
+        ringPerks: selectedRingPerks,
+        attributes: attributePoints,
+      }));
+    } catch { }
+  }
+
+  function loadBuildFromStorage() {
+    try {
+      const raw = localStorage.getItem(BUILD_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.race) selectedRace = parsed.race;
+      if (parsed?.classId) selectedClass = parsed.classId;
+      if (parsed?.weapon) selectedWeapon = parsed.weapon;
+      if (parsed?.ringTier && RING_TIERS[parsed.ringTier]) selectedRingTier = parsed.ringTier;
+      if (Array.isArray(parsed?.ringPerks)) selectedRingPerks = parsed.ringPerks.slice(0, 3);
+      if (parsed?.attributes && typeof parsed.attributes === 'object') {
+        for (const key of ATTRIBUTE_KEYS) {
+          const val = Number(parsed.attributes[key]);
+          if (!Number.isNaN(val) && val >= 0) attributePoints[key] = Math.floor(val);
+        }
+        normalizeAttributes();
+      }
+    } catch { }
+  }
+
+  function normalizeAttributes() {
+    for (const key of ATTRIBUTE_KEYS) {
+      attributePoints[key] = Math.max(0, Math.min(160, Number(attributePoints[key] || 0)));
+    }
+    let total = getPointsSpent();
+    if (total === ATTRIBUTE_TOTAL) return;
+    const order = [...ATTRIBUTE_KEYS];
+    if (total > ATTRIBUTE_TOTAL) {
+      let overflow = total - ATTRIBUTE_TOTAL;
+      for (const key of order) {
+        if (overflow <= 0) break;
+        const cut = Math.min(overflow, attributePoints[key]);
+        attributePoints[key] -= cut;
+        overflow -= cut;
+      }
+    } else {
+      let remain = ATTRIBUTE_TOTAL - total;
+      for (const key of order) {
+        if (remain <= 0) break;
+        attributePoints[key] += 1;
+        remain -= 1;
+      }
+    }
+  }
+
+  function setAttributeValue(attr, next) {
+    const oldVal = attributePoints[attr] || 0;
+    let newVal = Math.max(0, Math.min(160, Number(next) || 0));
+    const diff = newVal - oldVal;
+    if (diff > 0) {
+      const remaining = ATTRIBUTE_TOTAL - getPointsSpent();
+      if (diff > remaining) newVal = oldVal + remaining;
+    }
+    attributePoints[attr] = newVal;
+    renderAttributeEditor();
+    updateBuildSummary();
+    saveBuildToStorage();
+  }
+
+  function renderAttributeEditor() {
+    const root = document.getElementById('attribute-builder');
+    const points = document.getElementById('builder-points');
+    if (!root || !points) return;
+    root.innerHTML = '';
+    const spent = getPointsSpent();
+    points.textContent = `${spent} / ${ATTRIBUTE_TOTAL}`;
+    points.classList.toggle('complete', spent === ATTRIBUTE_TOTAL);
+
+    for (const attr of ATTRIBUTE_KEYS) {
+      const row = document.createElement('div');
+      row.className = 'attribute-row';
+      row.innerHTML = `
+      <div class="attribute-row-head">
+        <span>${attr}</span>
+        <strong>${attributePoints[attr]}</strong>
+      </div>
+      <div class="attribute-row-controls">
+        <input type="range" min="0" max="160" value="${attributePoints[attr]}" data-attr="${attr}">
+        <input type="number" min="0" max="160" value="${attributePoints[attr]}" data-attr="${attr}">
+      </div>
+    `;
+      root.appendChild(row);
+    }
+
+    root.querySelectorAll('input[type="range"]').forEach((slider) => {
+      slider.addEventListener('input', (event) => setAttributeValue(event.target.dataset.attr, event.target.value));
+    });
+    root.querySelectorAll('input[type="number"]').forEach((field) => {
+      field.addEventListener('change', (event) => setAttributeValue(event.target.dataset.attr, event.target.value));
+    });
+  }
+
+  function renderRingPerks() {
+    const root = document.getElementById('ring-perks');
+    if (!root) return;
+    root.innerHTML = '';
+    for (const perk of RING_PERKS) {
+      const active = selectedRingPerks.includes(perk.id);
+      const btn = document.createElement('button');
+      btn.className = `ring-perk ${active ? 'active' : ''}`;
+      btn.type = 'button';
+      btn.innerHTML = `<span>${perk.label}</span><small>${perk.bonus}</small>`;
+      btn.addEventListener('click', () => {
+        if (selectedRingPerks.includes(perk.id)) {
+          selectedRingPerks = selectedRingPerks.filter((id) => id !== perk.id);
+        } else {
+          if (selectedRingPerks.length >= 3) selectedRingPerks.shift();
+          selectedRingPerks.push(perk.id);
+        }
+        renderRingPerks();
+        updateBuildSummary();
+        saveBuildToStorage();
+      });
+      root.appendChild(btn);
+    }
+  }
+
+  function classTargetVector(classId) {
+    const map = {
+      warlord: ['Strength', 'Vitality', 'Endurance'],
+      arcanist: ['Intellect', 'Wisdom', 'Tactics'],
+      ranger: ['Dexterity', 'Agility', 'Tactics'],
+      assassin: ['Dexterity', 'Agility', 'Strength'],
+    };
+    return map[classId] || map.warlord;
+  }
+
+  function calculateBuildPower() {
+    const ring = RING_TIERS[selectedRingTier] || RING_TIERS.iron;
+    const attr = attributePoints;
+    const offense = (attr.Strength * 2.1) + (attr.Dexterity * 2.0) + (attr.Intellect * 2.2) + (attr.Tactics * 1.8);
+    const defense = (attr.Vitality * 2.6) + (attr.Endurance * 2.1) + (attr.Wisdom * 1.6);
+    const utility = (attr.Agility * 1.4) + (attr.Tactics * 1.5) + (attr.Wisdom * 1.1);
+
+    const perks = new Set(selectedRingPerks);
+    const perkMult =
+      (perks.has('valor') ? 1.08 : 1) *
+      (perks.has('aegis') ? 1.05 : 1) *
+      (perks.has('celerity') ? 1.04 : 1) *
+      (perks.has('focus') ? 1.05 : 1);
+
+    const base = (offense * 2.5) + (defense * 1.9) + (utility * 1.4) + (ring.hp * 2.2);
+    return Math.floor(base * ring.power * perkMult);
+  }
+
+  function updateBuildSummary() {
+    const power = calculateBuildPower();
+    const meta = document.getElementById('builder-meta');
+    const advice = document.getElementById('builder-advice');
+    const powerEl = document.getElementById('builder-power');
+    const ratingEl = document.getElementById('builder-rating');
+    if (!meta || !advice || !powerEl || !ratingEl) return;
+
+    const target = classTargetVector(selectedClass);
+    const focusScore = target.reduce((sum, key) => sum + (attributePoints[key] || 0), 0);
+    const spent = getPointsSpent();
+
+    let rating = 'D';
+    if (power > 4800) rating = 'S';
+    else if (power > 4100) rating = 'A';
+    else if (power > 3400) rating = 'B';
+    else if (power > 2700) rating = 'C';
+
+    if (spent < ATTRIBUTE_TOTAL) rating = '?';
+    powerEl.textContent = power.toLocaleString();
+    ratingEl.textContent = rating;
+    meta.textContent = `${selectedRace[0].toUpperCase() + selectedRace.slice(1)} ${selectedClass[0].toUpperCase() + selectedClass.slice(1)} · ${selectedWeapon[0].toUpperCase() + selectedWeapon.slice(1)} · ${selectedRingTier[0].toUpperCase() + selectedRingTier.slice(1)} Ring`;
+
+    if (spent < ATTRIBUTE_TOTAL) {
+      advice.textContent = `Allocate all ${ATTRIBUTE_TOTAL} points to finalize your champion profile.`;
+    } else if (focusScore < 70) {
+      advice.textContent = 'Your stat spread is broad. Focus harder on class core stats for stronger arena pressure.';
+    } else if (rating === 'S' || rating === 'A') {
+      advice.textContent = 'Elite profile. Strong synergy between class path, weapon curve, and Titan ring perks.';
+    } else {
+      advice.textContent = 'Stable build. Push more points into your class triad for higher burst or survivability.';
+    }
+  }
+
+  function getCurrentBuildConfig() {
+    return {
+      race: selectedRace,
+      classId: selectedClass,
+      weapon: selectedWeapon,
+      ringTier: selectedRingTier,
+      ringPerks: [...selectedRingPerks],
+      attributes: { ...attributePoints },
+      combatPower: calculateBuildPower(),
+    };
+  }
+
+  window.applyBuildPreset = function (type) {
+    const preset = {
+      Strength: 20,
+      Intellect: 20,
+      Vitality: 20,
+      Dexterity: 20,
+      Endurance: 20,
+      Wisdom: 20,
+      Agility: 20,
+      Tactics: 20,
+    };
+    if (type === 'tank') {
+      Object.assign(preset, { Strength: 30, Intellect: 8, Vitality: 34, Dexterity: 12, Endurance: 32, Wisdom: 14, Agility: 8, Tactics: 22 });
+      selectedClass = 'warlord';
+      selectedWeapon = 'greatsword';
+    } else if (type === 'burst') {
+      Object.assign(preset, { Strength: 14, Intellect: 34, Vitality: 10, Dexterity: 20, Endurance: 8, Wisdom: 26, Agility: 14, Tactics: 34 });
+      selectedClass = 'arcanist';
+      selectedWeapon = 'scythe';
+    } else if (type === 'control') {
+      Object.assign(preset, { Strength: 10, Intellect: 24, Vitality: 14, Dexterity: 24, Endurance: 12, Wisdom: 28, Agility: 22, Tactics: 26 });
+      selectedClass = 'ranger';
+      selectedWeapon = 'bow';
+    }
+    attributePoints = preset;
+    normalizeAttributes();
+    syncBuilderSelectionUI();
+    renderAttributeEditor();
+    updateBuildSummary();
+    saveBuildToStorage();
+  };
+
+  window.randomizeBuildAttributes = function () {
+    const next = {};
+    ATTRIBUTE_KEYS.forEach((key) => { next[key] = 0; });
+    let points = ATTRIBUTE_TOTAL;
+    while (points > 0) {
+      const key = ATTRIBUTE_KEYS[Math.floor(Math.random() * ATTRIBUTE_KEYS.length)];
+      next[key] += 1;
+      points -= 1;
+    }
+    attributePoints = next;
+    renderAttributeEditor();
+    updateBuildSummary();
+    saveBuildToStorage();
+  };
+
+  window.shareBuildCode = async function () {
+    const build = getCurrentBuildConfig();
+    const code = btoa(JSON.stringify(build));
+    const url = `${window.location.origin}${window.location.pathname}?build=${encodeURIComponent(code)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setAuthStatus('Build URL copied to clipboard');
+      setTimeout(() => setAuthStatus(''), 1800);
+    } catch {
+      setAuthStatus(`Build code: ${code.slice(0, 40)}...`);
+    }
+  };
+
+  function hydrateBuildFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    const payload = params.get('build');
+    if (!payload) return;
+    try {
+      const build = JSON.parse(atob(payload));
+      if (build.race) selectedRace = build.race;
+      if (build.classId) selectedClass = build.classId;
+      if (build.weapon) selectedWeapon = build.weapon;
+      if (build.ringTier && RING_TIERS[build.ringTier]) selectedRingTier = build.ringTier;
+      if (Array.isArray(build.ringPerks)) selectedRingPerks = build.ringPerks.slice(0, 3);
+      if (build.attributes && typeof build.attributes === 'object') {
+        for (const key of ATTRIBUTE_KEYS) {
+          const value = Number(build.attributes[key]);
+          if (!Number.isNaN(value) && value >= 0) attributePoints[key] = Math.floor(value);
+        }
+        normalizeAttributes();
+      }
+    } catch (err) {
+      console.warn('[arena] Failed to decode build from URL:', err);
+    }
+  }
+
+  function syncBuilderSelectionUI() {
+    document.querySelectorAll('.race-card').forEach((card) => card.classList.toggle('selected', card.dataset.race === selectedRace));
+    document.querySelectorAll('.class-card').forEach((card) => card.classList.toggle('selected', card.dataset.class === selectedClass));
+    document.querySelectorAll('.weapon-pill').forEach((pill) => pill.classList.toggle('active', pill.dataset.weapon === selectedWeapon));
+    const ringSelect = document.getElementById('ring-tier-select');
+    if (ringSelect) ringSelect.value = selectedRingTier;
+  }
+
+  function setupCharacterBuilder() {
+    loadBuildFromStorage();
+    hydrateBuildFromURL();
+    normalizeAttributes();
+    syncBuilderSelectionUI();
+    renderAttributeEditor();
+    renderRingPerks();
+    updateBuildSummary();
+
+    const ringSelect = document.getElementById('ring-tier-select');
+    if (ringSelect) {
+      ringSelect.addEventListener('change', (event) => {
+        selectedRingTier = event.target.value;
+        updateBuildSummary();
+        saveBuildToStorage();
+      });
+    }
+  }
+
+function showLoggedIn(user) {
+  grudgeUser = user;
+  document.getElementById('auth-gate').style.display = 'none';
+  document.getElementById('race-select').classList.add('show');
+  document.getElementById('un').textContent = user.displayName || user.username || 'Warlord';
+  const gid = (user.grudgeId || user.grudge_id || localStorage.getItem('grudge_id') || '').slice(0, 8).toUpperCase();
+  document.getElementById('ug').textContent = gid ? 'GRUDGE-' + gid : '';
+  const walletAddr = user.walletAddress || user.serverWalletAddress || '';
+  if (walletAddr) {
+    document.getElementById('ug').textContent += (gid ? ' · ' : '') + walletAddr.slice(0, 4) + '...' + walletAddr.slice(-4);
+  }
+  if (user.avatarUrl) {
+    document.getElementById('ua').innerHTML = '<img src="' + user.avatarUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+  } else {
+    document.getElementById('ua').textContent = (user.username || 'W')[0].toUpperCase();
+  }
+}
+
+function showLoggedOut() {
+  document.getElementById('auth-gate').style.display = 'block';
+  document.getElementById('race-select').classList.remove('show');
+}
+
+function storeAuth(token, user) {
+  if (token) setToken(token);
+  if (user) {
+    localStorage.setItem('grudge_user', JSON.stringify(user));
+    if (user.grudgeId || user.grudge_id) localStorage.setItem('grudge_id', user.grudgeId || user.grudge_id);
+    if (user.username) localStorage.setItem('grudge_username', user.username);
+    if (user.id) localStorage.setItem('grudge_user_id', String(user.id));
+  }
+}
+
+function clearAuth() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(SESSION_TOKEN_KEY);
+  localStorage.removeItem('grudge_user');
+  localStorage.removeItem('grudge_id');
+  localStorage.removeItem('grudge_username');
+  localStorage.removeItem('grudge_user_id');
+  localStorage.removeItem('grudge-session');
+}
+
+function handleAuthData(data) {
+  const token = data.sessionToken || data.token;
+  const user = data.user || {};
+  if (!user.grudgeId && data.grudgeId) user.grudgeId = data.grudgeId;
+  if (!user.username && data.username) user.username = data.username;
+  storeAuth(token, user);
+  try {
+    localStorage.setItem('grudge-session', JSON.stringify({
+      type: user.walletAddress ? 'wallet' : (user.isGuest ? 'guest' : (user.puterUuid ? 'puter' : 'grudge')),
+      username: user.username || 'Warlord',
+      grudgeId: user.grudgeId,
+      accountId: user.id,
+      walletAddress: user.walletAddress,
+      puterUuid: user.puterUuid,
+      loginTime: Date.now()
+    }));
+  } catch {}
+  return user;
+}
+
+async function fetchUserProfile(token) {
+  try {
+    const r = await fetch(API_BASE + '/auth/user', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+async function verifyToken(token) {
+  try {
+    const r = await fetch(API_BASE + '/auth/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+    const d = await r.json();
+    return d.valid === true;
+  } catch { return false; }
+}
+
+// ── Phantom Wallet Connect (with message signing) ────────────
+function getPhantomProvider() {
+  if (window.phantom?.solana?.isPhantom) return window.phantom.solana;
+  if (window.solana?.isPhantom) return window.solana;
+  return null;
+}
+
+document.getElementById('phantom-btn').addEventListener('click', async () => {
+  const provider = getPhantomProvider();
+  if (!provider) {
+    window.open('https://phantom.app/', '_blank');
+    setAuthStatus('Install Phantom wallet extension, then try again');
+    return;
+  }
+
+  const btn = document.getElementById('phantom-btn');
+  btn.disabled = true;
+  setAuthStatus('Connecting to Phantom...');
+
+  try {
+    const resp = await provider.connect();
+    const walletAddress = resp.publicKey.toString();
+    setAuthStatus('Wallet connected · Verifying ownership...');
+
+    // Sign a message to prove wallet ownership
+    const timestamp = Date.now();
+    const message = `Grudge Arena Login: ${timestamp}`;
+    const encodedMessage = new TextEncoder().encode(message);
+    let signature = null;
+    try {
+      const signResult = await provider.signMessage(encodedMessage, 'utf8');
+      signature = btoa(String.fromCharCode(...signResult.signature));
+    } catch (signErr) {
+      if (signErr.message?.includes('rejected')) {
+        setAuthStatus('Signature cancelled');
+        btn.disabled = false;
+        return;
+      }
+      // If signing fails (older Phantom), proceed without signature
+      console.warn('[arena] signMessage not supported, proceeding without signature');
+    }
+
+    setAuthStatus('Signing in...');
+
+    // Auth with Grudge backend
+    try {
+      const r = await fetch(API_BASE + '/auth/wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet_address: walletAddress, signature, message, timestamp })
+      });
+
+      if (r.ok) {
+        const data = await r.json();
+        const user = handleAuthData(data);
+        if (!user.walletAddress) user.walletAddress = walletAddress;
+        storeAuth(null, user);
+        setAuthStatus('');
+        showLoggedIn(user);
+        return;
+      }
+    } catch (netErr) {
+      console.warn('[arena] Backend unreachable for wallet auth:', netErr.message);
+    }
+
+    // Fallback: offline wallet session (no Grudge ID, play with wallet identity)
+    console.log('[arena] Using offline wallet session');
+    const offlineUser = {
+      username: walletAddress.slice(0, 4) + '...' + walletAddress.slice(-4),
+      walletAddress,
+      isOffline: true,
+    };
+    storeAuth(null, offlineUser);
+    setAuthStatus('');
+    showLoggedIn(offlineUser);
+  } catch (err) {
+    console.error('[arena] Phantom auth error:', err);
+    setAuthStatus(err.message === 'User rejected the request.' ? 'Connection cancelled' : err.message || 'Wallet connection failed');
+    btn.disabled = false;
+  }
+});
+
+// ── Puter Auth (Grudge ID via Puter SDK) ─────────────────────
+document.getElementById('puter-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('puter-btn');
+  btn.disabled = true;
+  setAuthStatus('Connecting to Grudge ID...');
+
+  try {
+    // Use Puter SDK to authenticate
+    if (typeof puter === 'undefined' || !puter.auth) {
+      throw new Error('Auth service unavailable. Please refresh and try again.');
+    }
+
+    const puterUser = await puter.auth.signIn();
+    if (!puterUser) throw new Error('Sign-in was cancelled');
+
+    const puterUuid = puterUser.uuid || puterUser.id || puterUser.username;
+    const puterUsername = puterUser.username || puterUser.email || 'Warlord';
+    setAuthStatus('Signed in · Linking Grudge ID...');
+
+    // Register/login with Grudge backend using Puter identity
+    try {
+      const r = await fetch(API_BASE + '/auth/puter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ puterUuid, puterUsername })
+      });
+
+      if (r.ok) {
+        const data = await r.json();
+        const user = handleAuthData(data);
+        if (!user.username) user.username = puterUsername;
+        user.puterUuid = puterUuid;
+        storeAuth(null, user);
+        setAuthStatus('');
+        showLoggedIn(user);
+        return;
+      }
+    } catch (netErr) {
+      console.warn('[arena] Backend unreachable for Puter auth:', netErr.message);
+    }
+
+    // Fallback: offline Puter session
+    console.log('[arena] Using offline Puter session');
+    const offlineUser = {
+      username: puterUsername,
+      puterUuid,
+      isOffline: true,
+    };
+    storeAuth(null, offlineUser);
+    setAuthStatus('');
+    showLoggedIn(offlineUser);
+  } catch (err) {
+    console.error('[arena] Puter auth error:', err);
+    setAuthStatus(err.message || 'Sign-in failed');
+    btn.disabled = false;
+  }
+});
+
+// ── Guest Login (client-first, backend registration in background) ──
+document.getElementById('guest-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('guest-btn');
+  btn.disabled = true;
+  setAuthStatus('Entering as Guest...');
+
+  const deviceId = getDeviceId();
+  const guestUser = {
+    username: 'Guest',
+    displayName: 'Guest',
+    isGuest: true,
+    deviceId,
+  };
+
+  // Immediately show the game — don't block on backend
+  storeAuth(null, guestUser);
+  setAuthStatus('');
+  showLoggedIn(guestUser);
+
+  // Attempt backend registration in the background (creates Grudge ID for guest)
+  try {
+    const r = await fetch(API_BASE + '/auth/puter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ puterUuid: 'guest_' + deviceId, puterUsername: 'Guest' })
+    });
+    if (r.ok) {
+      const data = await r.json();
+      const user = handleAuthData(data);
+      user.isGuest = true;
+      user.username = user.username || 'Guest';
+      storeAuth(null, user);
+      grudgeUser = user;
+      // Update GID display if we got one
+      const gid = (user.grudgeId || user.grudge_id || '').slice(0, 8).toUpperCase();
+      if (gid) document.getElementById('ug').textContent = 'GRUDGE-' + gid;
+      console.log('[arena] Guest linked to Grudge ID:', gid);
+    }
+  } catch (err) {
+    console.warn('[arena] Guest backend registration failed (playing offline):', err.message);
+  }
+});
+
+// ── Boot auth flow ───────────────────────────────
+(async function initAuth() {
+  const params = new URLSearchParams(location.search);
+  const incomingToken = params.get('token') || params.get('sso_token');
+  const incomingGrudgeId = params.get('grudge_id') || params.get('grudgeId');
+  const incomingUsername = params.get('grudge_username') || params.get('username');
+
+  // Case 1: Returning from OAuth/SSO with a token in the URL
+  if (incomingToken) {
+    storeAuth(incomingToken, null);
+    if (incomingGrudgeId) localStorage.setItem('grudge_id', incomingGrudgeId);
+    if (incomingUsername) localStorage.setItem('grudge_username', incomingUsername);
+    const user = await fetchUserProfile(incomingToken);
+    if (user) {
+      storeAuth(incomingToken, user);
+    } else {
+      storeAuth(incomingToken, { grudgeId: incomingGrudgeId || '', username: incomingUsername || 'Warlord' });
+    }
+    history.replaceState({}, '', location.pathname);
+    showLoggedIn(getUser() || { username: incomingUsername || 'Warlord', grudgeId: incomingGrudgeId || '' });
+    return;
+  }
+
+  // Case 2: Existing token in localStorage
+  const existingToken = getToken();
+  if (existingToken) {
+    const valid = await verifyToken(existingToken);
+    if (valid) {
+      let user = getUser();
+      if (!user || !user.username) {
+        user = await fetchUserProfile(existingToken);
+        if (user) storeAuth(existingToken, user);
+      }
+      if (user) { showLoggedIn(user); return; }
+    }
+    clearAuth();
+  }
+
+  // Case 3: Existing local user data (offline session from wallet/guest)
+  const localUser = getUser();
+  if (localUser && (localUser.walletAddress || localUser.puterUuid || localUser.isGuest)) {
+    showLoggedIn(localUser);
+    return;
+  }
+
+  // Case 4: Try silent Puter auth if SDK is loaded and user is already signed in
+  try {
+    if (typeof puter !== 'undefined' && puter.auth) {
+      const puterUser = await puter.auth.getUser();
+      if (puterUser && puterUser.uuid) {
+        const user = { username: puterUser.username || 'Warlord', puterUuid: puterUser.uuid };
+        storeAuth(null, user);
+        showLoggedIn(user);
+        // Background: sync with backend
+        fetch(API_BASE + '/auth/puter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ puterUuid: puterUser.uuid, puterUsername: puterUser.username })
+        }).then(r => r.ok ? r.json() : null).then(data => {
+          if (data) { const u = handleAuthData(data); u.puterUuid = puterUser.uuid; storeAuth(null, u); grudgeUser = u; }
+        }).catch(() => {});
+        return;
+      }
+    }
+  } catch { /* Puter SDK not ready or not signed in */ }
+
+  // Case 5: No session — show auth gate
+  showLoggedOut();
+})();
+
+// ── Race Selection ───────────────────────────────────
+window.selectRace = function(el) {
+  document.querySelectorAll('.race-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedRace = el.dataset.race;
+      updateBuildSummary();
+      saveBuildToStorage();
+    };
+
+    window.selectClassCard = function (el) {
+      document.querySelectorAll('.class-card').forEach((card) => card.classList.remove('selected'));
+      el.classList.add('selected');
+      selectedClass = el.dataset.class;
+      const preferred = CLASS_WEAPON_DEFAULTS[selectedClass];
+      if (preferred) {
+        selectedWeapon = preferred;
+        syncBuilderSelectionUI();
+      }
+      updateBuildSummary();
+      saveBuildToStorage();
+    };
+
+    window.selectWeaponPill = function (el) {
+      document.querySelectorAll('.weapon-pill').forEach((pill) => pill.classList.remove('active'));
+      el.classList.add('active');
+      selectedWeapon = el.dataset.weapon;
+      updateBuildSummary();
+      saveBuildToStorage();
+};
+
+// ── Enter Arena ──────────────────────────────
+window.enterArena = function() {
+  if (getPointsSpent() !== ATTRIBUTE_TOTAL) {
+    setAuthStatus(`Spend all ${ATTRIBUTE_TOTAL} points before entering arena`);
+    return;
+  }
+  document.getElementById('lobby-overlay').classList.add('hidden');
+  document.getElementById('loading-overlay').classList.add('active');
+  loadArenaGame(selectedRace, null, getCurrentBuildConfig());
+};
+
+// ── PvP Queue ────────────────────────────────────────
+window.joinQueue = async function() {
+  if (getPointsSpent() !== ATTRIBUTE_TOTAL) {
+    setAuthStatus(`Spend all ${ATTRIBUTE_TOTAL} points before queueing`);
+    return;
+  }
+  const token = getToken();
+  if (!token && !grudgeUser) return;
+  const btn = document.querySelector('.queue-btn');
+  btn.textContent = '🔍 Searching for opponent...';
+  btn.disabled = true;
+
+  try {
+    const { io } = await import('socket.io-client');
+    const pvpSocket = io(WS_URL + '/pvp', {
+      auth: { token: token || 'guest_' + getDeviceId() },
+      transports: ['websocket', 'polling'],
+    });
+
+    pvpSocket.on('connect', () => console.log('[arena] Connected to PvP service'));
+
+    pvpSocket.on('pvp:queue_matched', (data) => {
+      console.log('[arena] Match found!', data);
+      btn.textContent = '⚔ MATCH FOUND!';
+      setTimeout(() => {
+        document.getElementById('lobby-overlay').classList.add('hidden');
+        document.getElementById('game-root').classList.add('active');
+        loadArenaGame(selectedRace, data, getCurrentBuildConfig());
+      }, 1500);
+    });
+
+    pvpSocket.on('connect_error', (err) => {
+      console.warn('[arena] PvP connect error:', err.message);
+      btn.textContent = '🔍 Find PvP Match';
+      btn.disabled = false;
+    });
+  } catch (err) {
+    console.error('[arena] Queue error:', err);
+    btn.textContent = '🔍 Find PvP Match';
+    btn.disabled = false;
+  }
+};
+
+// ── Load Arena Game ──────────────────────────
+function setLoadingProgress(pct, text) {
+  const bar = document.getElementById('loading-bar');
+  const label = document.getElementById('loading-text');
+  if (bar) bar.style.width = pct + '%';
+  if (label && text) label.textContent = text;
+}
+
+  async function loadArenaGame(race, matchData, buildConfig) {
+  const root = document.getElementById('game-root');
+  const playerName = grudgeUser?.username || 'Warlord';
+  const raceName = race.charAt(0).toUpperCase() + race.slice(1);
+
+  setLoadingProgress(10, 'Loading game engine...');
+
+  try {
+    const { GrudgeArena } = await import('./game.js');
+    setLoadingProgress(40, 'Initializing arena...');
+
+    const arena = new GrudgeArena({
+      container: root,
+      race: race,
+      weapon: buildConfig?.weapon || selectedWeapon,
+      classId: buildConfig?.classId || selectedClass,
+      buildConfig: buildConfig || getCurrentBuildConfig(),
+      playerName: playerName,
+      grudgeId: grudgeUser?.grudgeId || localStorage.getItem('grudge_id') || '',
+      matchData: matchData || null,
+      wsUrl: WS_URL,
+      token: getToken(),
+    });
+
+    setLoadingProgress(60, 'Building world...');
+    await arena.init();
+
+    setLoadingProgress(100, 'Ready!');
+
+    const hudInfo = document.getElementById('hud-player-info');
+    if (hudInfo) hudInfo.textContent = playerName + ' · ' + raceName;
+
+    setTimeout(() => {
+      document.getElementById('loading-overlay').classList.remove('active');
+      root.classList.add('active');
+    }, 300);
+
+    console.log('[arena] Game loaded —', raceName);
+  } catch (err) {
+    console.error('[arena] Failed to load game engine:', err);
+    setLoadingProgress(100, 'Loading failed — ' + (err.message || 'unknown error'));
+    setTimeout(() => {
+      document.getElementById('loading-overlay').classList.remove('active');
+      document.getElementById('lobby-overlay').classList.remove('hidden');
+    }, 3000);
+  }
+}
+
+  setupCharacterBuilder();
+</script>
+</body>
+</html>

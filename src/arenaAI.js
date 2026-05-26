@@ -3,6 +3,12 @@
  *
  * States: idle → engage → approach → attack → retreat → dead
  * Each AI unit picks targets, manages cooldowns, and uses abilities.
+ *
+ * Physics integration:
+ *   - AIDetector (trigger sphere) for target acquisition
+ *   - AIBehaviorFSM (per-class cooldown) for attack gating
+ *   - Physics body movement instead of direct mesh.position mutation
+ *   - Facing controlled via FSM canFacing tag (annihilatetrainer pattern)
  */
 
 import * as THREE from 'three';
@@ -19,6 +25,9 @@ const AI_STATES = {
 const ENGAGE_RANGE = 25;
 const MELEE_RANGE = 2.5;
 const RANGED_RANGE = 18;
+// Ranged kite: back off if enemy is closer than this (creates an optimal
+// firing zone between RANGED_KITE_MIN and RANGED_RANGE).
+const RANGED_KITE_MIN = 8;
 const RETREAT_HP_THRESHOLD = 0.25;
 const ATTACK_COOLDOWN = 1.5; // base seconds between attacks
 const ABILITY_CHECK_INTERVAL = 2.0;
@@ -30,13 +39,21 @@ export class ArenaAI {
     this.units = [];
   }
 
-  /** Register an AI unit: { entity, mesh, controller, team, weaponDef } */
-  register(unit) {
+  /**
+   * Register an AI unit.
+   * @param {object} unit — { entity, mesh, controller, team, weaponDef }
+   * @param {object} [physics] — { detector: AIDetector, behaviorFSM, physicsBody }
+   */
+  register(unit, physics) {
     unit.aiState = AI_STATES.IDLE;
     unit.aiTarget = null;
     unit.aiAttackTimer = 0;
     unit.aiAbilityTimer = 0;
     unit.aiCooldowns = {}; // abilityKey → remaining seconds
+    // Physics-based systems (optional — falls back to distance checks if absent)
+    unit.aiDetector = physics?.detector || null;
+    unit.aiBehaviorFSM = physics?.behaviorFSM || null;
+    unit.physicsBody = physics?.physicsBody || null;
     this.units.push(unit);
   }
 
@@ -45,8 +62,19 @@ export class ArenaAI {
     return allUnits.filter(u => u.team === teamId && !u.entity.hasTag('dead'));
   }
 
-  /** Find nearest enemy unit */
+  /**
+   * Find nearest enemy unit.
+   * If the unit has a physics AIDetector with an active target, use that
+   * (trigger-based acquisition). Otherwise fall back to distance scanning.
+   */
   findNearestEnemy(unit, allUnits) {
+    // Physics detector target (annihilatetrainer Ai.js pattern)
+    if (unit.aiDetector) {
+      const detected = unit.aiDetector.getTarget();
+      if (detected?.unit) return detected.unit;
+    }
+
+    // Fallback: distance scan
     const enemyTeam = unit.team === 'A' ? 'B' : 'A';
     const enemies = this.getTeamAlive(allUnits, enemyTeam);
     if (enemies.length === 0) return null;
@@ -127,20 +155,39 @@ export class ArenaAI {
         }
 
         const dist = unit.mesh.position.distanceTo(unit.aiTarget.mesh.position);
-        const weaponRange = unit.weaponDef?.range > 5 ? RANGED_RANGE : MELEE_RANGE;
+        const isRanged = (unit.weaponDef?.range ?? 0) > 5;
+        const weaponRange = isRanged ? RANGED_RANGE : MELEE_RANGE;
 
-        if (dist <= weaponRange) {
+        // Enter ATTACK once in optimal band:
+        //   melee  → dist <= MELEE_RANGE
+        //   ranged → dist in [RANGED_KITE_MIN, RANGED_RANGE]
+        if (isRanged) {
+          if (dist <= RANGED_RANGE && dist >= RANGED_KITE_MIN) {
+            unit.aiState = AI_STATES.ATTACK;
+            return;
+          }
+        } else if (dist <= weaponRange) {
           unit.aiState = AI_STATES.ATTACK;
           return;
         }
 
-        // Move toward target
-        const dir = new THREE.Vector3()
-          .subVectors(unit.aiTarget.mesh.position, unit.mesh.position)
-          .normalize();
-        unit.mesh.position.addScaledVector(dir, MOVE_SPEED * delta);
+        // Annihilatetrainer Ai.js movement pattern:
+        // Compute direction toward target, normalize, scale by speed × dt
+        const toTarget = new THREE.Vector3()
+          .subVectors(unit.aiTarget.mesh.position, unit.mesh.position);
+        const moveDir = toTarget.clone().normalize();
+        if (isRanged && dist < RANGED_KITE_MIN) moveDir.multiplyScalar(-1);
 
-        // Face target
+        // Move via physics body if available, else direct mesh mutation
+        if (unit.physicsBody) {
+          unit.physicsBody.position.x += moveDir.x * MOVE_SPEED * delta;
+          unit.physicsBody.position.z += moveDir.z * MOVE_SPEED * delta;
+        } else {
+          unit.mesh.position.addScaledVector(moveDir, MOVE_SPEED * delta);
+        }
+        this._clampToArena(unit.mesh);
+
+        // Face target (annihilatetrainer canFacing pattern)
         unit.mesh.lookAt(
           unit.aiTarget.mesh.position.x,
           unit.mesh.position.y,
@@ -165,22 +212,38 @@ export class ArenaAI {
         }
 
         const dist = unit.mesh.position.distanceTo(unit.aiTarget.mesh.position);
-        const weaponRange = unit.weaponDef?.range > 5 ? RANGED_RANGE : MELEE_RANGE;
+        const isRanged = (unit.weaponDef?.range ?? 0) > 5;
+        const weaponRange = isRanged ? RANGED_RANGE : MELEE_RANGE;
 
-        // If target moved out of range, re-approach
+        // If target moved out of range, re-approach (melee) or close the gap (ranged)
         if (dist > weaponRange * 1.3) {
           unit.aiState = AI_STATES.APPROACH;
           return;
         }
+        // If a ranged unit got melee'd, kite back into the optimal band
+        if (isRanged && dist < RANGED_KITE_MIN * 0.75) {
+          unit.aiState = AI_STATES.APPROACH;
+          return;
+        }
 
-        // Face target
+        // Melee sticks glued to target — close residual gap every frame so
+        // a moving enemy doesn't slip out of melee range.
+        if (!isRanged && dist > MELEE_RANGE * 0.8) {
+          const dir = new THREE.Vector3()
+            .subVectors(unit.aiTarget.mesh.position, unit.mesh.position)
+            .normalize();
+          unit.mesh.position.addScaledVector(dir, MOVE_SPEED * delta);
+          this._clampToArena(unit.mesh);
+        }
+
+        // Always face target before swinging (WoW snap-to-target)
         unit.mesh.lookAt(
           unit.aiTarget.mesh.position.x,
           unit.mesh.position.y,
           unit.aiTarget.mesh.position.z
         );
 
-        // Try to use an ability
+      // Try to use an ability
         if (unit.aiAbilityTimer <= 0 && unit.weaponDef?.abilities) {
           const used = this._tryUseAbility(unit);
           if (used) {
@@ -189,8 +252,10 @@ export class ArenaAI {
           }
         }
 
-        // Basic attack
-        if (unit.aiAttackTimer <= 0) {
+        // Basic attack — use per-class AIBehaviorFSM if available
+        if (unit.aiBehaviorFSM) {
+          unit.aiBehaviorFSM.attack();
+        } else if (unit.aiAttackTimer <= 0) {
           this._performAttack(unit);
           unit.aiAttackTimer = ATTACK_COOLDOWN / (unit.weaponDef?.attackSpeed || 1);
         } else {
@@ -217,6 +282,7 @@ export class ArenaAI {
           .subVectors(unit.mesh.position, unit.aiTarget.mesh.position)
           .normalize();
         unit.mesh.position.addScaledVector(awayDir, MOVE_SPEED * 0.8 * delta);
+        this._clampToArena(unit.mesh);
         unit.controller?.play('run');
 
         // Try defensive ability (block, heal, etc.)
@@ -230,10 +296,13 @@ export class ArenaAI {
   }
 
   _performAttack(unit) {
-    // Pick random attack animation
-    const attacks = ['attack1', 'attack2', 'attack3'];
-    const anim = attacks[Math.floor(Math.random() * attacks.length)];
-    unit.controller?.playOnce(anim, 1.2);
+    // Cycle through the weapon's declared swing anims (WeaponDefinitions),
+    // falling back to generic attack1-3 if the weapon didn't set them.
+    const attacks = unit.weaponDef?.attackAnims?.length
+      ? unit.weaponDef.attackAnims
+      : ['attack1', 'attack2', 'attack3'];
+    unit._swingIdx = ((unit._swingIdx ?? -1) + 1) % attacks.length;
+    unit.controller?.playOnce(attacks[unit._swingIdx], 1.2);
 
     // Deal damage to target
     if (unit.aiTarget) {
@@ -268,11 +337,11 @@ export class ArenaAI {
     const shuffled = entries.sort(() => Math.random() - 0.5);
 
     for (const [key, ability] of shuffled) {
-      if (key === 'P') continue; // Save ultimate
+      if (key === "P") continue; // Save ultimate
       if (unit.aiCooldowns[key] > 0) continue;
 
       // Check resource cost
-      const resources = unit.entity.getComponent('Resources');
+      const resources = unit.entity.getComponent("Resources");
       if (ability.costType && resources) {
         const pool = resources[ability.costType];
         if (pool && pool.current < (ability.cost || 0)) continue;
@@ -287,19 +356,27 @@ export class ArenaAI {
         if (pool) pool.current -= ability.cost || 0;
       }
 
-      // Play cast/attack animation
-      const castAnims = ['cast', 'attack1', 'spin', 'aoe'];
-      const anim = castAnims.find(a => unit.controller?.actions.has(a)) || 'attack1';
+      // Play the ability's declared skillAnim, then fall back to a
+      // sensible cast/slash anim that exists on this weapon.
+      const candidates = [
+        ability.skillAnim,
+        "cast",
+        "swing",
+        "aoe",
+        "attack1",
+      ].filter(Boolean);
+      const anim =
+        candidates.find((a) => unit.controller?.actions.has(a)) || "attack1";
       unit.controller?.playOnce(anim, 1);
 
       // Apply ability damage to target
       if (ability.damage && unit.aiTarget) {
-        const hp = unit.aiTarget.entity.getComponent('Health');
+        const hp = unit.aiTarget.entity.getComponent("Health");
         if (hp && !hp.invulnerable) {
           hp.current = Math.max(0, hp.current - ability.damage);
           if (hp.current <= 0) {
-            unit.aiTarget.entity.addTag('dead');
-            unit.aiTarget.controller?.play('death', { loop: false });
+            unit.aiTarget.entity.addTag("dead");
+            unit.aiTarget.controller?.play("death", { loop: false });
           }
         }
       }
@@ -307,6 +384,12 @@ export class ArenaAI {
       return true;
     }
     return false;
+  }
+
+  /** Keep AI units inside the arena ring */
+  _clampToArena(mesh) {
+    mesh.position.x = Math.max(-35, Math.min(35, mesh.position.x));
+    mesh.position.z = Math.max(-35, Math.min(35, mesh.position.z));
   }
 
   _tryDefensiveAbility(unit) {

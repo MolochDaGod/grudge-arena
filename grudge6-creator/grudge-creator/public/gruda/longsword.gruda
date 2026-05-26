@@ -1,0 +1,42 @@
+{
+  "schema": "gruda/1.0",
+  "id": "longsword",
+  "displayName": "Iron Longsword",
+  "kind": "weapon",
+  "asset": "longsword.glb",
+  "source": { "tool": "custom", "needsRetopology": false, "generationPrompt": null },
+  "geometry": {
+    "vertexCount": 412,
+    "triangleCount": 220,
+    "boundsMeters": { "min": [-0.04, 0, -0.02], "max": [0.04, 1.05, 0.02] },
+    "pivot": "origin",
+    "upAxis": "Y",
+    "units": "meters",
+    "tangentsBaked": false
+  },
+  "materials": {
+    "atlasCount": 1, "totalTextures": 1, "maxTextureSize": 512,
+    "ktx2": false, "specGloss": false, "transparent": false
+  },
+  "compression": { "draco": false, "meshopt": false, "ktx2": false, "sizeBytes": 24500 },
+  "attach": {
+    "socket": "weaponMain",
+    "fallbackSockets": ["weaponOff"],
+    "localOffset": [0, 0, 0],
+    "localRotationEulerDeg": [0, 0, 0]
+  },
+  "hitColliders": [
+    { "id": "blade", "shape": "capsule", "from": [0, 0.18, 0], "to": [0, 1.00, 0], "radius": 0.04, "multiplier": 1.0, "tags": ["edge"] },
+    { "id": "tip",   "shape": "sphere",  "centre": [0, 1.02, 0], "radius": 0.05, "multiplier": 1.4, "tags": ["thrust"] }
+  ],
+  "damage": {
+    "base": 32,
+    "type": "slash",
+    "stamina": 18,
+    "knockback": 1.4,
+    "windows": [
+      { "clip": "attack_light", "startSec": 0.32, "endSec": 0.51, "colliderIds": ["blade"] },
+      { "clip": "attack_heavy", "startSec": 0.55, "endSec": 0.82, "colliderIds": ["blade", "tip"] }
+    ]
+  }
+}
