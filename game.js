@@ -45,11 +45,11 @@ import {
 } from './src/engine/ProceduralArena.js';
 
 const VALID_RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
-const VALID_CLASSES = ["warlord", "arcanist", "ranger", "assassin"];
+const VALID_CLASSES = ["warrior", "mage", "ranger", "worge"];
 
 function sanitizeArenaConfig(cfg = {}) {
   const race = VALID_RACES.includes(cfg.race) ? cfg.race : "human";
-  const classId = VALID_CLASSES.includes(cfg.classId) ? cfg.classId : "warlord";
+  const classId = VALID_CLASSES.includes(cfg.classId) ? cfg.classId : "warrior";
   const heroId = DefaultHeroForRace[race] || "human";
   const hero = getHero(heroId);
   const weapon = hero?.weapons?.includes(cfg.weapon)
@@ -59,7 +59,7 @@ function sanitizeArenaConfig(cfg = {}) {
   return {
     ...cfg,
     race,
-    classId,
+    classId: VALID_CLASSES.includes(classId) ? classId : "warrior",
     weapon,
   };
 }
@@ -172,13 +172,13 @@ class GrudgeArena {
           displayName: this._getPlayerDisplayName(buildConfig),
           profile: playerProfile,
         },
-        { heroId: "elf", isPlayer: false, tier: 2 },
-        { heroId: "dwarf", isPlayer: false, tier: 2 },
+        { heroId: "elf", weapon: "bow", isPlayer: false, tier: 2 },       // Ranger
+        { heroId: "dwarf", weapon: "sabres", isPlayer: false, tier: 2 },   // Sword+Shield tank
       ];
       const TEAM_B = [
-        { heroId: "orc", isPlayer: false, tier: 2 },
-        { heroId: "barbarian", isPlayer: false, tier: 2 },
-        { heroId: "undead", isPlayer: false, tier: 3 },
+        { heroId: "orc", weapon: "greatsword", isPlayer: false, tier: 2 }, // Warrior
+        { heroId: "barbarian", weapon: "mace", isPlayer: false, tier: 2 }, // Worge bruiser
+        { heroId: "undead", weapon: "staff", isPlayer: false, tier: 3 },   // Mage
       ];
 
       setProgress(30, "Loading Team A models...");
@@ -422,7 +422,7 @@ class GrudgeArena {
   // ── Unit loading ──
 
   _getPlayerDisplayName(buildConfig) {
-    const classId = buildConfig?.classId || this.config.classId || "warlord";
+    const classId = buildConfig?.classId || this.config.classId || "warrior";
     const archetype = classId.charAt(0).toUpperCase() + classId.slice(1);
     const name = this.config.playerName || "Warlord";
     return `${name} · ${archetype}`;
@@ -460,7 +460,7 @@ class GrudgeArena {
       cdrMult: ringPerks.has("focus") ? 0.9 : 1,
       damageMult: ringPerks.has("valor") ? 1.08 : 1,
       combatPower: buildConfig?.combatPower || 0,
-      classId: buildConfig?.classId || this.config.classId || "warlord",
+      classId: buildConfig?.classId || this.config.classId || "warrior",
       ringTier,
     };
   }
@@ -681,15 +681,14 @@ class GrudgeArena {
     console.log('[arena] Physics bodies created for', this.allUnits.length, 'units');
   }
 
-  /** Map weapon definition to one of the 4 class archetypes. */
+  /** Map weapon definition to one of the 4 classes: warrior, ranger, mage, worge. */
   _inferClassFromWeapon(weaponDef) {
-    if (!weaponDef) return 'warlord';
-    const range = weaponDef.range ?? 0;
-    const speed = weaponDef.attackSpeed ?? 1;
-    if (range > 5) return 'ranger';
-    if (speed >= 1.8) return 'assassin';
-    if (weaponDef.primaryResource === 'mana') return 'arcanist';
-    return 'warlord';
+    if (!weaponDef) return 'warrior';
+    const name = weaponDef.name?.toLowerCase() || '';
+    if (name === 'mace') return 'worge';
+    if (weaponDef.primaryResource === 'mana') return 'mage';
+    if ((weaponDef.range ?? 0) > 5) return 'ranger';
+    return 'warrior';
   }
 
   _createFallbackPlayer() {
@@ -863,6 +862,7 @@ class GrudgeArena {
       beam: "cast",
       ground_zone: "swing",
       full_heal_invuln: "block",
+      bear_form: "powerUp",
     };
     return map[ability?.effect] || "attack1";
   }
@@ -1066,6 +1066,48 @@ class GrudgeArena {
         for (const p of [pos, np])
           this.particleSystem.emit({ position: p, color: new THREE.Color(0x8844ff),
             count: 18, velocity: new THREE.Vector3(0, 1, 0), spread: 1, lifetime: 0.6, size: 0.2 });
+        break;
+      }
+
+      // ── Werebear Form — scale up, tint brown, buff stats ────────────
+      case 'bear_form': {
+        const dur = ability.duration ?? 12;
+        const origScale = mesh.scale.clone();
+        // Scale up 1.5× for bear form
+        mesh.scale.multiplyScalar(1.5);
+        // Brown fur tint
+        const bearColor = new THREE.Color(0x5a3a1a);
+        const origColors = [];
+        mesh.traverse((child) => {
+          if (!child.isMesh || !child.material) return;
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          for (const mat of mats) {
+            if (!mat?.isMeshStandardMaterial) continue;
+            origColors.push({ mat, color: mat.color.clone(), map: mat.map });
+            mat.color.copy(bearColor);
+            mat.map = null;
+            mat.needsUpdate = true;
+          }
+        });
+        // Buff HP +50%
+        const hp = this.playerEntity?.getComponent('Health');
+        const hpBefore = hp?.max || 1000;
+        if (hp) { hp.max = Math.floor(hpBefore * 1.5); hp.current = hp.max; }
+        // Green rage particles
+        spawnGroundSlamVFX(this.scene, pos, { radius: 3, color: 0x44aa22, debrisCount: 30 });
+        this.particleSystem.emit({ position: pos.clone().add(new THREE.Vector3(0, 1, 0)),
+          color: new THREE.Color(0x44aa22), count: 40, velocity: new THREE.Vector3(0, 2, 0),
+          spread: 2, lifetime: 1.5, size: 0.25 });
+        // Revert after duration
+        this.gameTimers.add(dur, () => {
+          mesh.scale.copy(origScale);
+          for (const { mat, color, map } of origColors) {
+            mat.color.copy(color);
+            mat.map = map;
+            mat.needsUpdate = true;
+          }
+          if (hp) { hp.max = hpBefore; hp.current = Math.min(hp.current, hp.max); }
+        });
         break;
       }
 

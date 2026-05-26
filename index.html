@@ -119,30 +119,32 @@
 
       <div class="builder-section-title">Class</div>
       <div class="class-grid" id="class-grid">
-        <div class="class-card selected" data-class="warlord" onclick="selectClassCard(this)">
-          <div class="class-name">Warlord</div>
-          <div class="class-desc">Frontline bruiser</div>
+        <div class="class-card selected" data-class="warrior" onclick="selectClassCard(this)">
+          <div class="class-name">Warrior</div>
+          <div class="class-desc">Frontline tank + bruiser</div>
         </div>
-        <div class="class-card" data-class="arcanist" onclick="selectClassCard(this)">
-          <div class="class-name">Arcanist</div>
+        <div class="class-card" data-class="mage" onclick="selectClassCard(this)">
+          <div class="class-name">Mage</div>
           <div class="class-desc">Spell pressure + control</div>
         </div>
         <div class="class-card" data-class="ranger" onclick="selectClassCard(this)">
           <div class="class-name">Ranger</div>
           <div class="class-desc">Ranged burst + kiting</div>
         </div>
-        <div class="class-card" data-class="assassin" onclick="selectClassCard(this)">
-          <div class="class-name">Assassin</div>
-          <div class="class-desc">Stealth opener + execute</div>
+        <div class="class-card" data-class="worge" onclick="selectClassCard(this)">
+          <div class="class-name">Worge</div>
+          <div class="class-desc">Shapeshifter + bear form</div>
         </div>
       </div>
       
       <div class="builder-section-title">Weapon</div>
       <div class="weapon-grid" id="weapon-grid">
         <button class="weapon-pill active" data-weapon="greatsword" onclick="selectWeaponPill(this)">Greatsword</button>
-        <button class="weapon-pill" data-weapon="runeblade" onclick="selectWeaponPill(this)">Runeblade</button>
+        <button class="weapon-pill" data-weapon="sabres" onclick="selectWeaponPill(this)">Sword+Shield</button>
         <button class="weapon-pill" data-weapon="bow" onclick="selectWeaponPill(this)">Bow</button>
-        <button class="weapon-pill" data-weapon="sabres" onclick="selectWeaponPill(this)">Sabres</button>
+        <button class="weapon-pill" data-weapon="staff" onclick="selectWeaponPill(this)">Staff</button>
+        <button class="weapon-pill" data-weapon="mace" onclick="selectWeaponPill(this)">Mace</button>
+        <button class="weapon-pill" data-weapon="runeblade" onclick="selectWeaponPill(this)">Runeblade</button>
         <button class="weapon-pill" data-weapon="scythe" onclick="selectWeaponPill(this)">Scythe</button>
       </div>
       </div>
@@ -312,7 +314,7 @@
   const API_BASE = '/api';
   const WS_URL = 'https://ws.grudge-studio.com';
   let selectedRace = 'human';
-  let selectedClass = 'warlord';
+  let selectedClass = 'warrior';
   let selectedWeapon = 'greatsword';
   let grudgeUser = null;
 
@@ -320,20 +322,30 @@
   const ATTRIBUTE_KEYS = ['Strength', 'Intellect', 'Vitality', 'Dexterity', 'Endurance', 'Wisdom', 'Agility', 'Tactics'];
   const BUILD_STORAGE_KEY = 'grudge_arena_character_build_v1';
 
+  // Weapon availability is CLASS-based, not race-based.
+  // Any race can be any class. The 4 classes: Warrior, Ranger, Mage, Worge.
   const CLASS_WEAPON_DEFAULTS = {
-    warlord: 'greatsword',
-    arcanist: 'scythe',
-    ranger: 'bow',
-    assassin: 'sabres',
+    warrior: 'greatsword',
+    mage:    'staff',
+    ranger:  'bow',
+    worge:   'mace',
   };
 
+  const CLASS_WEAPON_ALLOWLIST = {
+    warrior: ['greatsword', 'sabres', 'runeblade', 'mace'],     // Shields, swords, 2h weapons
+    mage:    ['staff', 'scythe', 'runeblade'],                  // Staffs, tomes, wands, off-hand relics
+    ranger:  ['bow', 'sabres', 'greatsword', 'scythe'],         // Bows, crossbows, guns, daggers, spears
+    worge:   ['mace', 'staff', 'sabres', 'greatsword'],         // Staffs, spears, daggers, bows, hammers, maces
+  };
+
+  // Legacy compat — kept for normalizeBuildConfig but now routes through class
   const RACE_WEAPON_ALLOWLIST = {
-    human: ['greatsword', 'sabres', 'runeblade', 'bow', 'scythe'],
-    barbarian: ['greatsword', 'scythe', 'sabres', 'bow'],
-    elf: ['bow', 'sabres', 'runeblade', 'scythe'],
-    dwarf: ['greatsword', 'runeblade', 'sabres', 'scythe'],
-    orc: ['greatsword', 'scythe', 'sabres', 'bow'],
-    undead: ['scythe', 'runeblade', 'bow', 'greatsword'],
+    human:     CLASS_WEAPON_ALLOWLIST.warrior,
+    barbarian: CLASS_WEAPON_ALLOWLIST.worge,
+    elf:       CLASS_WEAPON_ALLOWLIST.ranger,
+    dwarf:     CLASS_WEAPON_ALLOWLIST.warrior,
+    orc:       CLASS_WEAPON_ALLOWLIST.warrior,
+    undead:    CLASS_WEAPON_ALLOWLIST.mage,
   };
 
   const RACE_DETAILS = {
@@ -376,8 +388,8 @@
   };
 
   const VALID_RACES = Object.keys(RACE_DETAILS);
-  const VALID_CLASSES = ['warlord', 'arcanist', 'ranger', 'assassin'];
-  const DEFAULT_CLASS = 'warlord';
+  const VALID_CLASSES = ['warrior', 'mage', 'ranger', 'worge'];
+  const DEFAULT_CLASS = 'warrior';
 
   const RING_TIERS = {
     iron: { power: 1, hp: 0, speed: 0 },
@@ -571,12 +583,12 @@
 
   function classTargetVector(classId) {
     const map = {
-      warlord: ['Strength', 'Vitality', 'Endurance'],
-      arcanist: ['Intellect', 'Wisdom', 'Tactics'],
-      ranger: ['Dexterity', 'Agility', 'Tactics'],
-      assassin: ['Dexterity', 'Agility', 'Strength'],
+      warrior: ['Strength', 'Vitality', 'Endurance'],
+      mage:    ['Intellect', 'Wisdom', 'Tactics'],
+      ranger:  ['Dexterity', 'Agility', 'Tactics'],
+      worge:   ['Strength', 'Vitality', 'Agility'],
     };
-    return map[classId] || map.warlord;
+    return map[classId] || map.warrior;
   }
 
   function calculateBuildPower() {
@@ -659,7 +671,7 @@
     const race = VALID_RACES.includes(build.race) ? build.race : selectedRace;
     const classId = VALID_CLASSES.includes(build.classId) ? build.classId : selectedClass;
 
-    const allowed = RACE_WEAPON_ALLOWLIST[race] || ['greatsword'];
+    const allowed = CLASS_WEAPON_ALLOWLIST[classId] || CLASS_WEAPON_ALLOWLIST.warrior;
     const preferred = CLASS_WEAPON_DEFAULTS[classId] || 'greatsword';
     const weapon = allowed.includes(build.weapon)
       ? build.weapon
@@ -732,12 +744,12 @@
     };
     if (type === 'tank') {
       Object.assign(preset, { Strength: 30, Intellect: 8, Vitality: 34, Dexterity: 12, Endurance: 32, Wisdom: 14, Agility: 8, Tactics: 22 });
-      selectedClass = 'warlord';
+      selectedClass = 'warrior';
       selectedWeapon = 'greatsword';
     } else if (type === 'burst') {
       Object.assign(preset, { Strength: 14, Intellect: 34, Vitality: 10, Dexterity: 20, Endurance: 8, Wisdom: 26, Agility: 14, Tactics: 34 });
-      selectedClass = 'arcanist';
-      selectedWeapon = 'scythe';
+      selectedClass = 'mage';
+      selectedWeapon = 'staff';
     } else if (type === 'control') {
       Object.assign(preset, { Strength: 10, Intellect: 24, Vitality: 14, Dexterity: 24, Endurance: 12, Wisdom: 28, Agility: 22, Tactics: 26 });
       selectedClass = 'ranger';
@@ -823,21 +835,20 @@
   }
 
   function refreshWeaponAvailability() {
-    const raceAllowed = new Set(RACE_WEAPON_ALLOWLIST[selectedRace] || []);
+    // Weapons are determined by CLASS, not race
+    const classAllowed = new Set(CLASS_WEAPON_ALLOWLIST[selectedClass] || CLASS_WEAPON_ALLOWLIST.warrior);
     const classPreferred = CLASS_WEAPON_DEFAULTS[selectedClass];
     const pills = document.querySelectorAll('.weapon-pill');
 
     pills.forEach((pill) => {
-      const allowed = raceAllowed.has(pill.dataset.weapon);
+      const allowed = classAllowed.has(pill.dataset.weapon);
       pill.classList.toggle('disabled', !allowed);
       pill.disabled = !allowed;
       if (!allowed) pill.classList.remove('active');
     });
 
-    if (!raceAllowed.has(selectedWeapon)) {
-      selectedWeapon = raceAllowed.has(classPreferred)
-        ? classPreferred
-        : (RACE_WEAPON_ALLOWLIST[selectedRace] || ['greatsword'])[0];
+    if (!classAllowed.has(selectedWeapon)) {
+      selectedWeapon = classPreferred || [...classAllowed][0] || 'greatsword';
     }
     syncBuilderSelectionUI();
   }

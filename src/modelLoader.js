@@ -42,6 +42,7 @@ export const WeaponToAnimPack = {
   runeblade: "sword_shield",
   staff: "magic",
   wand: "magic",
+  mace: "axe",
   rifle: "rifle",
   unarmed: "axe",
 };
@@ -75,6 +76,7 @@ export const WeaponToAnimClass = {
   runeblade: "swordShield",
   staff: "magic",
   wand: "magic",
+  mace: "greatsword",
   bow: "longbow",
   rifle: "rifle",
   unarmed: "greatsword",
@@ -727,35 +729,47 @@ async function loadCharacterManifest() {
   return _characterManifestPromise;
 }
 
+// Direct texture paths — fallback when manifest is unavailable or slow
+const RACE_TEXTURE_DIRECT = {
+  human:     charUrl('human/textures/Map__9.png'),
+  barbarian: charUrl('barbarian/textures/Map__9.png'),
+  elf:       charUrl('elf/textures/Map__9.png'),
+  dwarf:     charUrl('dwarf/textures/Map__12.png'),
+  orc:       charUrl('orc/textures/Map__11.png'),
+  undead:    charUrl('undead/textures/Map__11.png'),
+};
+
 async function loadRaceTextureMap(race) {
   if (_raceTextureCache.has(race)) return _raceTextureCache.get(race);
 
+  // Try manifest path first, then direct fallback path
   const manifest = await loadCharacterManifest();
-  const texPath = manifest?.races?.[race]?.textures?.[0]?.file;
-  if (!texPath) {
-    _raceTextureCache.set(race, null);
-    return null;
+  const manifestPath = manifest?.races?.[race]?.textures?.[0]?.file;
+  const directPath = RACE_TEXTURE_DIRECT[race];
+  const paths = [manifestPath, directPath].filter(Boolean);
+
+  for (const texPath of paths) {
+    const tex = await new Promise((resolve) => {
+      textureLoader.load(
+        texPath,
+        (loaded) => resolve(loaded),
+        undefined,
+        () => resolve(null),
+      );
+    });
+    if (tex) {
+      tex.flipY = false;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      _raceTextureCache.set(race, tex);
+      console.log(`[modelLoader] ${race}: texture atlas loaded from ${texPath}`);
+      return tex;
+    }
   }
 
-  const tex = await new Promise((resolve) => {
-    textureLoader.load(
-      texPath,
-      (loaded) => resolve(loaded),
-      undefined,
-      () => resolve(null),
-    );
-  });
-
-  if (!tex) {
-    _raceTextureCache.set(race, null);
-    return null;
-  }
-
-  tex.flipY = false;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.needsUpdate = true;
-  _raceTextureCache.set(race, tex);
-  return tex;
+  console.warn(`[modelLoader] ${race}: no texture atlas found`);
+  _raceTextureCache.set(race, null);
+  return null;
 }
 
 async function applyRaceTextureFix(scene, race) {
@@ -765,17 +779,21 @@ async function applyRaceTextureFix(scene, race) {
   let patched = 0;
   scene.traverse((child) => {
     if (!child.isMesh || !child.material) return;
+    if (!child.geometry?.attributes?.uv) return;
 
     const mats = Array.isArray(child.material)
       ? child.material
       : [child.material];
     for (const mat of mats) {
       if (!mat?.isMeshStandardMaterial) continue;
-      if (mat.map) continue;
-      if (!child.geometry?.attributes?.uv) continue;
 
+      // Force-apply the race atlas to ALL meshes with UVs.
+      // The Synty GLBs often embed a broken/blank texture reference;
+      // overriding it with the correct atlas is always correct.
       mat.map = atlas;
-      mat.color.set(0xffffff);
+      mat.color.set(0xffffff);  // Reset color so texture shows through
+      mat.metalness = Math.min(mat.metalness, 0.3);
+      mat.roughness = Math.max(mat.roughness, 0.5);
       mat.needsUpdate = true;
       patched++;
     }
@@ -783,7 +801,7 @@ async function applyRaceTextureFix(scene, race) {
 
   if (patched > 0) {
     console.log(
-      `[modelLoader] ${race}: patched ${patched} material slots with race atlas`,
+      `[modelLoader] ${race}: applied atlas texture to ${patched} material slots`,
     );
   }
   return patched;

@@ -14,7 +14,9 @@ export const WeaponTypes = {
   BOW: 'bow',
   SABRES: 'sabres',
   SCYTHE: 'scythe',
-  RUNEBLADE: 'runeblade'
+  RUNEBLADE: 'runeblade',
+  STAFF: 'staff',
+  MACE: 'mace',
 };
 
 export const WeaponDefinitions = {
@@ -82,5 +84,35 @@ export const WeaponDefinitions = {
       F: { name: 'Consecration', description: 'Create holy ground that damages enemies and heals allies.', cooldown: 8, cost: 40, costType: 'mana', damagePerTick: 20, healPerTick: 15, duration: 6, radius: 4, effect: 'ground_zone', skillAnim: 'swing' },
       P: { name: 'Divine Intervention', description: 'Ultimate: Become invulnerable and fully heal over 3 seconds.', cooldown: 120, cost: 0, costType: null, duration: 3, effect: 'full_heal_invuln', skillAnim: 'block' }
     }
-  }
+  },
+
+  // ── STAFF — Arcane spellcaster ─────────────────────────────────────────
+  [WeaponTypes.STAFF]: {
+    name: 'Staff', title: 'ARCANIST',
+    description: 'Arcane spellcaster with devastating elemental magic',
+    primaryResource: 'mana', baseAttackDamage: 25, attackSpeed: 1.0, range: 20,
+    attackAnims: ['attack1', 'attack2', 'attack3'],
+    abilities: {
+      Q: { name: 'Arcane Bolt', description: 'Launch a bolt of arcane energy.', cooldown: 2, cost: 20, costType: 'mana', damage: 55, range: 25, effect: 'fireball', skillAnim: 'cast' },
+      E: { name: 'Frost Nova', description: 'Freeze all nearby enemies for 2 seconds.', cooldown: 8, cost: 50, costType: 'mana', damage: 30, freezeDuration: 2, radius: 5, effect: 'frost_nova', skillAnim: 'aoe' },
+      R: { name: 'Meteor Strike', description: 'Call down a meteor at target location.', cooldown: 12, cost: 80, costType: 'mana', damage: 150, castTime: 1.5, radius: 6, effect: 'meteor', skillAnim: 'cast2H' },
+      F: { name: 'Blink', description: 'Instantly teleport forward.', cooldown: 4, cost: 20, costType: 'mana', distance: 8, effect: 'blink', offGCD: true, skillAnim: 'dodge' },
+      P: { name: 'Elemental Fury', description: 'Ultimate: Spells cast twice for 10 seconds.', cooldown: 60, cost: 100, costType: 'mana', duration: 10, effect: 'double_cast', skillAnim: 'aoe2' }
+    }
+  },
+
+  // ── MACE — Worge bruiser (bear form on ultimate) ──────────────────────
+  [WeaponTypes.MACE]: {
+    name: 'Mace', title: 'WORGE',
+    description: 'Savage shapeshifter — mace bruiser with werebear transformation',
+    primaryResource: 'rage', baseAttackDamage: 42, attackSpeed: 0.9, range: 2.5,
+    attackAnims: ['attack1', 'combo1', 'attack2', 'spin'],
+    abilities: {
+      Q: { name: 'Maul', description: 'Savage overhead smash with bonus damage.', cooldown: 3, cost: 15, costType: 'rage', damage: 70, effect: 'aoe_strike', aoeRadius: 2.5, skillAnim: 'combo1' },
+      E: { name: 'Feral Charge', description: 'Charge at the enemy and stun on impact.', cooldown: 8, cost: 0, costType: null, damage: 50, distance: 12, effect: 'dash', skillAnim: 'jumpAttack' },
+      R: { name: 'Primal Roar', description: 'AoE fear and damage around the worge.', cooldown: 10, cost: 30, costType: 'rage', damage: 60, radius: 5, effect: 'frost_nova', skillAnim: 'taunt' },
+      F: { name: 'Savage Rend', description: 'Bleeding melee strike that heals on hit.', cooldown: 2, cost: 20, costType: 'rage', damage: 55, healPercent: 0.25, effect: 'melee_lifesteal', skillAnim: 'attack3' },
+      P: { name: 'Werebear Form', description: 'Ultimate: Transform into a massive bear. +50% HP, +30% damage for 12 seconds.', cooldown: 60, cost: 50, costType: 'rage', duration: 12, effect: 'bear_form', skillAnim: 'powerUp' }
+    }
+  },
 };

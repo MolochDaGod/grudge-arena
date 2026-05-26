@@ -37,6 +37,7 @@ const WEAPON_EQUIP_MAP = {
   bow: { lSlot: "bow", lVariant: null, extras: ["quiver"] },
   staff: { lSlot: "staff", lVariant: "A" },
   wand: { lSlot: "staff", lVariant: "A" },
+  mace: { rSlot: "hammer", rVariant: "A" },
   rifle: { rSlot: "axe", rVariant: "A" }, // fallback
   unarmed: {},
 };

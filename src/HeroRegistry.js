@@ -41,6 +41,9 @@ const LOCAL_MODEL_BASE = "/models";
 export const HeroRegistry = {
   // ── CRUSADE ────────────────────────────────────────────────────────────────
 
+  // Any race can be any class — weapons come from CLASS, not race.
+  // Hero defaultWeapon is the class-appropriate weapon for their archetype.
+
   human: {
     id: "human",
     displayName: "Human",
@@ -48,14 +51,15 @@ export const HeroRegistry = {
     race: "human",
     faction: Factions.CRUSADE,
     archetype: Archetypes.WARRIOR,
+    classId: "warrior",
     modelPath: charUrl("human/WK_Characters.glb"),
     fallbackModel: `${LOCAL_MODEL_BASE}/human.glb`,
     equipmentBase: charUrl("human/equipment/"),
     pack: "d1_modular",
     equipPrefix: "WK_",
-    weapons: ["greatsword", "sabres", "runeblade", "bow", "scythe"],
-    defaultWeapon: "greatsword",
-    scale: 1.0, // GLB already normalised to 1.75 m by build script
+    weapons: ["greatsword", "sabres", "runeblade", "mace"],  // Warlord weapons
+    defaultWeapon: "sabres",  // Sword + Shield
+    scale: 1.0,
     heightOffset: 0,
     lore: "A veteran of a hundred crusades. His shield has never broken.",
   },
@@ -63,39 +67,42 @@ export const HeroRegistry = {
   barbarian: {
     id: "barbarian",
     displayName: "Barbarian",
-    title: "The Immortal",
+    title: "The Worge",
     race: "barbarian",
     faction: Factions.CRUSADE,
-    archetype: Archetypes.WARRIOR,
+    archetype: Archetypes.HYBRID,
+    classId: "worge",
     modelPath: charUrl("barbarian/BRB_Characters.glb"),
     fallbackModel: `${LOCAL_MODEL_BASE}/barbarian.glb`,
     equipmentBase: charUrl("barbarian/equipment/"),
     pack: "d1_modular",
     equipPrefix: "BRB_",
-    weapons: ["greatsword", "scythe", "sabres", "bow"],
-    defaultWeapon: "greatsword",
+    weapons: ["mace", "greatsword", "sabres", "staff", "scythe"],  // Worge can use mace + shift forms
+    defaultWeapon: "mace",
+    isWorge: true,
     scale: 1.0,
     heightOffset: 0,
-    lore: "Rage is his armor. Death is his offering.",
+    lore: "The beast within hungers. Feed it rage.",
   },
 
   elf: {
     id: "elf",
     displayName: "Elf",
-    title: "The Assassin",
+    title: "The Windrunner",
     race: "elf",
     faction: Factions.FABLED,
     archetype: Archetypes.RANGER,
+    classId: "ranger",
     modelPath: charUrl("elf/ELF_Characters.glb"),
     fallbackModel: `${LOCAL_MODEL_BASE}/elf.glb`,
     equipmentBase: charUrl("elf/equipment/"),
     pack: "d1_modular",
     equipPrefix: "ELF_",
-    weapons: ["bow", "sabres", "runeblade", "scythe"],
+    weapons: ["bow", "sabres", "greatsword", "scythe"],  // Ranger weapons
     defaultWeapon: "bow",
     scale: 1.0,
     heightOffset: 0,
-    lore: "Shadows are her home. Silence is her weapon.",
+    lore: "The arrow flies before you hear the string.",
   },
 
   // ── FABLED ─────────────────────────────────────────────────────────────────
@@ -107,15 +114,16 @@ export const HeroRegistry = {
     race: "dwarf",
     faction: Factions.FABLED,
     archetype: Archetypes.WARRIOR,
+    classId: "warrior",
     modelPath: charUrl("dwarf/DWF_Characters.glb"),
     fallbackModel: `${LOCAL_MODEL_BASE}/dwarf.glb`,
     equipmentBase: charUrl("dwarf/equipment/"),
     pack: "d1_modular",
     equipPrefix: "DWF_",
-    weapons: ["greatsword", "runeblade", "sabres", "scythe"],
-    defaultWeapon: "greatsword",
-    scale: 1.0, // Dwarves scaled to 1.75 m — use heightOffset to shorten visually
-    heightOffset: -0.15, // Render slightly lower than human eye-line
+    weapons: ["greatsword", "sabres", "runeblade", "mace"],  // Warlord weapons
+    defaultWeapon: "sabres",  // Sword + Shield tank
+    scale: 1.0,
+    heightOffset: -0.15,
     lore: "Built like stone. Hits like a mountain.",
   },
 
@@ -128,12 +136,13 @@ export const HeroRegistry = {
     race: "orc",
     faction: Factions.LEGION,
     archetype: Archetypes.WARRIOR,
+    classId: "warrior",
     modelPath: charUrl("orc/ORC_Characters.glb"),
     fallbackModel: `${LOCAL_MODEL_BASE}/orc.glb`,
     equipmentBase: charUrl("orc/equipment/"),
     pack: "d1_modular",
     equipPrefix: "ORC_",
-    weapons: ["greatsword", "scythe", "sabres", "bow"],
+    weapons: ["greatsword", "sabres", "mace", "runeblade"],  // Warlord weapons
     defaultWeapon: "greatsword",
     scale: 1.0,
     heightOffset: 0,
@@ -147,13 +156,14 @@ export const HeroRegistry = {
     race: "undead",
     faction: Factions.LEGION,
     archetype: Archetypes.MAGE,
+    classId: "mage",
     modelPath: charUrl("undead/UD_Characters.glb"),
     fallbackModel: `${LOCAL_MODEL_BASE}/undead.glb`,
     equipmentBase: charUrl("undead/equipment/"),
     pack: "d1_modular",
     equipPrefix: "UD_",
-    weapons: ["scythe", "runeblade", "bow", "greatsword"],
-    defaultWeapon: "scythe",
+    weapons: ["staff", "scythe", "runeblade"],  // Arcanist weapons
+    defaultWeapon: "staff",
     scale: 1.0,
     heightOffset: 0,
     lore: "Death is merely the beginning of service.",
