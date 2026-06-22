@@ -80,7 +80,7 @@
       "source": "/cdn/:path*",
       "destination": "https://assets.grudge-studio.com/arena/:path*"
     },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/|cdn/|assets/|models/|favicon|grudge-logo|robots\\.txt|manifest|.*\\..*).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
