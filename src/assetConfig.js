@@ -61,6 +61,21 @@ export function modelUrl(path) {
   return assetUrl(`models/${path}`);
 }
 
+/**
+ * Grudge6 assets live outside /arena/ on R2 — use /api/assets proxy in prod.
+ * @param {string} path - e.g. 'models/grudge6/races/WK_Characters.fbx'
+ */
+export function grudge6AssetUrl(path) {
+  const p = path.startsWith('/') ? path.slice(1) : path;
+  return IS_DEV ? `/${p}` : `/api/assets/${p}`;
+}
+
+/** Shorthand for models/animationsweapons/... on R2 */
+export function grudge6AnimUrl(packAndFile) {
+  const p = packAndFile.startsWith('/') ? packAndFile.slice(1) : packAndFile;
+  return grudge6AssetUrl(`models/animationsweapons/${p}`);
+}
+
 /** Shorthand for public/assets/maps/... */
 export function mapUrl(path) {
   return assetUrl(`assets/maps/${path}`);

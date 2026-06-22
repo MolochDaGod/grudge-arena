@@ -12,9 +12,12 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { getRaceConfig, getRaceFactionColors, resolveWeapon, TierConfig } from './engine/RaceConfig.js';
 import { EquipmentManager, isD1ModularScene } from "./EquipmentManager.js";
-import { assetUrl, charUrl, animUrl, audioUrl, modelUrl } from "./assetConfig.js";
+import { assetUrl, charUrl, animUrl, audioUrl, modelUrl, grudge6AssetUrl, grudge6AnimUrl } from "./assetConfig.js";
+import { grudge6RaceModelPath, RACE_TEXTURE_ATLAS } from './Grudge6Paths.js';
+import { preloadGrudge6Anims } from './Grudge6AnimLoader.js';
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
 
@@ -686,8 +689,10 @@ function remapClipBoneNames(clip) {
 // ── Caches ────────────────────────────────────────────────────────────────
 
 const gltfCache = new Map();
+const fbxCache = new Map();
 const clipCache = new Map();
 const gltfLoader = new GLTFLoader();
+const fbxLoader = new FBXLoader();
 const textureLoader = new THREE.TextureLoader();
 
 let _characterManifestPromise = null;
@@ -708,11 +713,11 @@ const HUMAN_BASEMESH_ANIM_SOURCE = charUrl(
 );
 
 function raceModelPaths(race) {
-  // Primary: charUrl() → R2 in prod, /assets/characters/... in dev.
-  // Fallback: /models/${race}.glb served from /public/models/ on Vercel + dev.
-  // (Removed the legacy /api/assets/models/characters/... rewrite — it 404s.)
-  const local = RACE_CHARACTER_PATHS[race];
-  return [local, modelUrl(`${race}.glb`)].filter(Boolean);
+  const paths = [];
+  const g6 = grudge6RaceModelPath(race);
+  if (g6) paths.push(grudge6AssetUrl(g6));
+  paths.push(RACE_CHARACTER_PATHS[race], modelUrl(`${race}.glb`));
+  return paths.filter(Boolean);
 }
 
 async function loadCharacterManifest() {
@@ -729,14 +734,14 @@ async function loadCharacterManifest() {
   return _characterManifestPromise;
 }
 
-// Direct texture paths — fallback when manifest is unavailable or slow
+// Direct texture paths — grudge6 atlas via /api/assets, arena GLB via /cdn
 const RACE_TEXTURE_DIRECT = {
-  human:     charUrl('human/textures/Map__9.png'),
-  barbarian: charUrl('barbarian/textures/Map__9.png'),
-  elf:       charUrl('elf/textures/Map__9.png'),
-  dwarf:     charUrl('dwarf/textures/Map__12.png'),
-  orc:       charUrl('orc/textures/Map__11.png'),
-  undead:    charUrl('undead/textures/Map__11.png'),
+  human:     [grudge6AssetUrl(RACE_TEXTURE_ATLAS.human), charUrl('human/textures/Map__9.png')],
+  barbarian: [grudge6AssetUrl(RACE_TEXTURE_ATLAS.barbarian), charUrl('barbarian/textures/Map__9.png')],
+  elf:       [grudge6AssetUrl(RACE_TEXTURE_ATLAS.elf), charUrl('elf/textures/Map__9.png')],
+  dwarf:     [grudge6AssetUrl(RACE_TEXTURE_ATLAS.dwarf), charUrl('dwarf/textures/Map__12.png')],
+  orc:       [grudge6AssetUrl(RACE_TEXTURE_ATLAS.orc), charUrl('orc/textures/Map__11.png')],
+  undead:    [grudge6AssetUrl(RACE_TEXTURE_ATLAS.undead), charUrl('undead/textures/Map__11.png')],
 };
 
 async function loadRaceTextureMap(race) {
@@ -745,8 +750,8 @@ async function loadRaceTextureMap(race) {
   // Try manifest path first, then direct fallback path
   const manifest = await loadCharacterManifest();
   const manifestPath = manifest?.races?.[race]?.textures?.[0]?.file;
-  const directPath = RACE_TEXTURE_DIRECT[race];
-  const paths = [manifestPath, directPath].filter(Boolean);
+  const directPaths = RACE_TEXTURE_DIRECT[race] || [];
+  const paths = [manifestPath, ...directPaths].filter(Boolean);
 
   for (const texPath of paths) {
     const tex = await new Promise((resolve) => {
@@ -937,10 +942,24 @@ async function registerCompatibleBasemeshAnimations(controller, mixer, root) {
   return { imported, skipped };
 }
 
-async function loadGLTFWithFallback(paths) {
+async function loadFBX(path) {
+  let cached = fbxCache.get(path);
+  if (!cached) {
+    cached = await new Promise((resolve, reject) => {
+      fbxLoader.load(path.replace(/ /g, '%20'), resolve, undefined, reject);
+    });
+    fbxCache.set(path, cached);
+  }
+  return { scene: cached, animations: cached.animations || [], path, format: 'fbx' };
+}
+
+async function loadModelWithFallback(paths) {
   let lastError = null;
   for (const path of paths) {
     try {
+      if (/\.fbx$/i.test(path)) {
+        return await loadFBX(path);
+      }
       let gltf = gltfCache.get(path);
       if (!gltf) {
         gltf = await new Promise((resolve, reject) => {
@@ -948,15 +967,24 @@ async function loadGLTFWithFallback(paths) {
         });
         gltfCache.set(path, gltf);
       }
-      return { gltf, path };
+      return { ...gltf, path, format: 'glb' };
     } catch (err) {
       lastError = err;
     }
   }
   throw (
     lastError ||
-    new Error(`Failed to load GLTF from paths: ${paths.join(", ")}`)
+    new Error(`Failed to load model from paths: ${paths.join(", ")}`)
   );
+}
+
+/** @deprecated use loadModelWithFallback */
+async function loadGLTFWithFallback(paths) {
+  const result = await loadModelWithFallback(paths);
+  if (result.format === 'fbx') {
+    return { gltf: { scene: result.scene, animations: result.animations }, path: result.path };
+  }
+  return { gltf: result, path: result.path };
 }
 
 // ── Load race GLB model ─────────────────────────────────────────────────────
@@ -1035,10 +1063,12 @@ function normalizeCharacterScale(scene, targetH = 1.75) {
 }
 
 export async function loadRaceModel(race) {
-  const { gltf, path } = await loadGLTFWithFallback(raceModelPaths(race));
+  const loaded = await loadModelWithFallback(raceModelPaths(race));
+  const isGrudge6Fbx = loaded.format === 'fbx';
+  const sourceScene = loaded.scene;
+  const sourceAnims = loaded.animations || [];
 
-  // Properly clone with skeleton rebinding
-  const scene = cloneGLTFScene(gltf.scene);
+  const scene = cloneGLTFScene(sourceScene);
 
   // Enable shadows, fix materials
   scene.traverse((child) => {
@@ -1075,13 +1105,12 @@ export async function loadRaceModel(race) {
     walking: ["walk"],
     idle: [], // Idle comes from weapon anim pack
   };
-  for (const clip of gltf.animations) {
+  for (const clip of sourceAnims) {
     const clonedClip = clip.clone();
-    remapClipBoneNames(clonedClip);
+    if (!isGrudge6Fbx) remapClipBoneNames(clonedClip);
     const key = clonedClip.name.toLowerCase();
     const action = mixer.clipAction(clonedClip, scene);
     actions.set(key, action);
-    // Register aliases so 'run' and 'idle' resolve to embedded anims
     const aliases = EMBEDDED_ALIASES[key] || [];
     for (const alias of aliases) {
       if (!actions.has(alias)) actions.set(alias, action);
@@ -1089,9 +1118,9 @@ export async function loadRaceModel(race) {
   }
 
   console.log(
-    `[modelLoader] Loaded ${race} — scale: ${scene.scale.x.toFixed(4)}, embeddedAnims: [${[...actions.keys()].join(", ")}]`,
+    `[modelLoader] Loaded ${race} (${isGrudge6Fbx ? 'grudge6-fbx' : 'glb'}) from ${loaded.path} — scale: ${scene.scale.x.toFixed(4)}, embeddedAnims: [${[...actions.keys()].join(", ")}]`,
   );
-  return { scene, mixer, actions, clips: gltf.animations };
+  return { scene, mixer, actions, clips: sourceAnims, isGrudge6Fbx, modelPath: loaded.path };
 }
 
 // ── Load a single FBX animation clip ────────────────────────────────────────
@@ -1744,7 +1773,7 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   // Weapon packs are loaded FIRST priority — they use Mixamo FBX->GLB with
   // remapClipBoneNames() which is proven to map correctly to Bip001 bones.
   // Animation library is supplementary (adds variety states).
-  const { scene, mixer, actions: embeddedActions } = await loadRaceModel(race);
+  const { scene, mixer, actions: embeddedActions, isGrudge6Fbx } = await loadRaceModel(race);
 
   const controller = new AnimationController(mixer, scene);
   controller.registerActions(embeddedActions);
@@ -1752,11 +1781,21 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   const animClass = WeaponToAnimClass[resolvedWeapon] || "greatsword";
   const prefix = `${animClass}__`;
 
-  // ─ Step 1: Load weapon pack GLBs (primary — proven Mixamo→Bip001 remapping) ─
-  const weaponPackActions = await preloadWeaponAnims(resolvedWeapon, mixer, scene);
+  // ─ Step 1: Weapon animations — grudge6 FBX packs or GLB Mixamo packs ─
+  let weaponPackActions;
+  if (isGrudge6Fbx) {
+    weaponPackActions = await preloadGrudge6Anims(
+      resolvedWeapon,
+      mixer,
+      scene,
+      (packFile) => grudge6AnimUrl(packFile),
+    );
+  } else {
+    weaponPackActions = await preloadWeaponAnims(resolvedWeapon, mixer, scene);
+  }
   controller.registerActions(weaponPackActions);
   const wpIdleStats = getTrackBindingStats(controller.actions.get('idle'));
-  console.log(`[modelLoader] ${race} weapon-pack: ${weaponPackActions.size} clips, idle bound=${wpIdleStats.bound}/${wpIdleStats.total}`);
+  console.log(`[modelLoader] ${race} weapon-pack (${isGrudge6Fbx ? 'grudge6-fbx' : 'glb'}): ${weaponPackActions.size} clips, idle bound=${wpIdleStats.bound}/${wpIdleStats.total}`);
 
   // ─ Step 2: Supplement with animation library (adds extra named states) ─
   const animClips = await loadAnimationLibrary();
@@ -1834,6 +1873,7 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
     tier,
     race,
     equipment,
+    isGrudge6Fbx,
   };
 }
 

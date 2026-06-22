@@ -30,21 +30,21 @@ const PI2 = Math.PI * 2;
 // ── WoW-style camera tuning ─────────────────────────────────
 const CFG = {
   INITIAL_YAW:       0,
-  INITIAL_PITCH:     0.32,
-  INITIAL_DISTANCE:  6.5,     // WoW default — character fills ~30% of screen
+  INITIAL_PITCH:     0.38,    // Aligned with character creator orbit
+  INITIAL_DISTANCE:  5.5,     // Creator-style third-person framing
 
-  ZOOM_MIN:          2.5,     // Close but not inside the character
+  ZOOM_MIN:          2.5,
   ZOOM_MAX:          14,
   ZOOM_SENSITIVITY:  0.08,
 
-  PITCH_MIN:        -0.5,
-  PITCH_MAX:         1.4,
+  PITCH_MIN:        -0.45,
+  PITCH_MAX:         1.35,
 
   ORBIT_SENSITIVITY_X: 0.002,
   ORBIT_SENSITIVITY_Y: 0.002,
 
-  PIVOT_HEIGHT:      1.45,    // Just above character shoulder
-  SHOULDER_OFFSET:   0.25,    // Slight right offset (WoW uses ~0.2)
+  PIVOT_HEIGHT:      1.0,     // Creator targets y≈1 on humanoid
+  SHOULDER_OFFSET:   0.2,
 
   FOLLOW_SPEED:      7,       // General smoothing
 
