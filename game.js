@@ -58,7 +58,6 @@ import {
   tickCombatFeedback,
   pulseCrosshairSpread,
 } from './src/engine/CombatFeedback.js';
-import { playSFX, WEAPON_SFX } from './src/modelLoader.js';
 import { syncAbilityBarFlash } from './src/dangerRoom/dangerRoomHud.js';
 
 const VALID_RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
@@ -130,6 +129,8 @@ class GrudgeArena {
     this._bowDrawTimer = 0;
     this._sabreSlashIndex = 0;
     this._casting = false;
+    this._playSFX = null;
+    this._weaponSfx = null;
 
     // ── AoE / spline systems ────────────────────────────────────
     this.aoeIndicator   = null;   // AoEIndicator instance (pre-cast targeting circle)
@@ -182,6 +183,8 @@ class GrudgeArena {
 
       this.match = new matchMod.ArenaMatch();
       this.arenaAI = new aiMod.ArenaAI();
+      this._playSFX = modelMod.playSFX;
+      this._weaponSfx = modelMod.WEAPON_SFX;
 
       const race = this.config.race || "human";
       const buildConfig = this.config.buildConfig || {};
@@ -338,13 +341,15 @@ class GrudgeArena {
             lifetime: 0.4,
             size: 0.2,
           });
-          playSFX(WEAPON_SFX.ui?.dash, 0.35);
+          this._playSFX?.(this._weaponSfx?.ui?.dash, 0.35);
         };
 
         // Wire animation finished → FSM 'finish' event for combo chains
-        this.playerUnit.mixer.addEventListener("finished", () => {
-          this.playerController.send({ type: "finish" });
-        });
+        if (this.playerUnit.mixer) {
+          this.playerUnit.mixer.addEventListener("finished", () => {
+            this.playerController?.send({ type: "finish" });
+          });
+        }
       }
 
       if (this.dangerMode) {
@@ -370,7 +375,11 @@ class GrudgeArena {
     } catch (err) {
       console.error("[arena] Failed to load arena systems:", err);
       this._showError(err);
-      this._createFallbackPlayer();
+      try {
+        this._createFallbackPlayer();
+      } catch (fallbackErr) {
+        console.error("[arena] Fallback player failed:", fallbackErr);
+      }
     }
 
     this._animate();
@@ -813,10 +822,9 @@ class GrudgeArena {
     const overlay = document.getElementById("error-overlay");
     const msg = document.getElementById("error-message");
     if (overlay) overlay.classList.add("active");
-    if (msg)
-      msg.textContent =
-        err?.message ||
-        "An unknown error occurred while loading the arena engine.";
+    const detail = err?.message || String(err) || "unknown error";
+    if (msg) msg.textContent = `Engine load failed: ${detail}`;
+    console.error("[arena] Error detail:", err?.stack || err);
     // Auto-dismiss after 5s if fallback loaded
     setTimeout(() => {
       if (overlay) overlay.classList.remove("active");
@@ -840,15 +848,15 @@ class GrudgeArena {
   }
 
   _playAttackSfx(weaponType) {
-    const pool = WEAPON_SFX[weaponType]?.attack;
-    if (pool) playSFX(pool, weaponType === "bow" ? 0.32 : 0.4);
+    const pool = this._weaponSfx?.[weaponType]?.attack;
+    if (pool && this._playSFX) this._playSFX(pool, weaponType === "bow" ? 0.32 : 0.4);
   }
 
   _playSkillSfx(weaponType, slotKey) {
-    const skills = WEAPON_SFX[weaponType]?.skill;
-    if (!skills?.length) return;
+    const skills = this._weaponSfx?.[weaponType]?.skill;
+    if (!skills?.length || !this._playSFX) return;
     const idx = skillSfxIndex(slotKey);
-    playSFX(skills[idx] ?? skills[0], 0.42);
+    this._playSFX(skills[idx] ?? skills[0], 0.42);
   }
 
   _emitWeaponSlash(pos, fwd, feel) {
@@ -1319,8 +1327,8 @@ class GrudgeArena {
         if (ctrl) {
           ctrl.playOnce(feel.drawAnim ?? "attack1", animSpeed * 0.55);
         }
-        const bowSfx = WEAPON_SFX.bow?.attack;
-        if (bowSfx?.[0]) playSFX(bowSfx[0], 0.28);
+        const bowSfx = this._weaponSfx?.bow?.attack;
+        if (bowSfx?.[0]) this._playSFX?.(bowSfx[0], 0.28);
         return;
       }
       return;
@@ -1727,8 +1735,8 @@ class GrudgeArena {
             : fwd;
           const ranged = feel.ranged ?? {};
           this.playerUnit.controller?.playOnce("attack2", feel.attackAnimSpeed ?? 1.05);
-          const bowSfx = WEAPON_SFX.bow?.attack;
-          if (bowSfx?.[1]) playSFX(bowSfx[1], 0.38);
+          const bowSfx = this._weaponSfx?.bow?.attack;
+          if (bowSfx?.[1]) this._playSFX?.(bowSfx[1], 0.38);
           else this._playAttackSfx(weaponType);
           this._createProjectile({
             position: pos

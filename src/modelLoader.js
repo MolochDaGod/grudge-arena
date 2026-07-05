@@ -725,9 +725,10 @@ const HUMAN_BASEMESH_ANIM_SOURCE = charUrl(
 
 function raceModelPaths(race) {
   const paths = [];
+  // GLB first — grudge6 FBX often 404s on prod CDN and delays load by seconds.
+  paths.push(RACE_CHARACTER_PATHS[race], modelUrl(`${race}.glb`), `/models/${race}.glb`);
   const g6 = grudge6RaceModelPath(race);
   if (g6) paths.push(grudge6AssetUrl(g6));
-  paths.push(RACE_CHARACTER_PATHS[race], modelUrl(`${race}.glb`));
   return paths.filter(Boolean);
 }
 
@@ -745,15 +746,27 @@ async function loadCharacterManifest() {
   return _characterManifestPromise;
 }
 
-// Direct texture paths — grudge6 atlas via /api/assets, arena GLB via /cdn
+// Direct texture paths — prefer /cdn (arena bake), then grudge6 /api/assets mirror
 const RACE_TEXTURE_DIRECT = {
-  human:     [grudge6AssetUrl(RACE_TEXTURE_ATLAS.human), charUrl('human/textures/Map__9.png')],
-  barbarian: [grudge6AssetUrl(RACE_TEXTURE_ATLAS.barbarian), charUrl('barbarian/textures/Map__9.png')],
-  elf:       [grudge6AssetUrl(RACE_TEXTURE_ATLAS.elf), charUrl('elf/textures/Map__9.png')],
-  dwarf:     [grudge6AssetUrl(RACE_TEXTURE_ATLAS.dwarf), charUrl('dwarf/textures/Map__12.png')],
-  orc:       [grudge6AssetUrl(RACE_TEXTURE_ATLAS.orc), charUrl('orc/textures/Map__11.png')],
-  undead:    [grudge6AssetUrl(RACE_TEXTURE_ATLAS.undead), charUrl('undead/textures/Map__11.png')],
+  human:     [charUrl('human/textures/Map__9.png'), grudge6AssetUrl(RACE_TEXTURE_ATLAS.human)],
+  barbarian: [charUrl('barbarian/textures/Map__9.png'), grudge6AssetUrl(RACE_TEXTURE_ATLAS.barbarian)],
+  elf:       [charUrl('elf/textures/Map__9.png'), grudge6AssetUrl(RACE_TEXTURE_ATLAS.elf)],
+  dwarf:     [charUrl('dwarf/textures/Map__12.png'), grudge6AssetUrl(RACE_TEXTURE_ATLAS.dwarf)],
+  orc:       [charUrl('orc/textures/Map__11.png'), grudge6AssetUrl(RACE_TEXTURE_ATLAS.orc)],
+  undead:    [charUrl('undead/textures/Map__11.png'), grudge6AssetUrl(RACE_TEXTURE_ATLAS.undead)],
 };
+
+/** Synty D1 GLBs ship MeshBasicMaterial (KHR_materials_unlit) — must patch these too. */
+function forEachTintableMaterial(scene, fn) {
+  scene.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    for (const mat of mats) {
+      if (!mat?.color) continue;
+      fn(mat, child);
+    }
+  });
+}
 
 async function loadRaceTextureMap(race) {
   if (_raceTextureCache.has(race)) return _raceTextureCache.get(race);
@@ -793,26 +806,17 @@ async function applyRaceTextureFix(scene, race) {
   if (!atlas) return 0;
 
   let patched = 0;
-  scene.traverse((child) => {
-    if (!child.isMesh || !child.material) return;
+  forEachTintableMaterial(scene, (mat, child) => {
     if (!child.geometry?.attributes?.uv) return;
 
-    const mats = Array.isArray(child.material)
-      ? child.material
-      : [child.material];
-    for (const mat of mats) {
-      if (!mat?.isMeshStandardMaterial) continue;
-
-      // Force-apply the race atlas to ALL meshes with UVs.
-      // The Synty GLBs often embed a broken/blank texture reference;
-      // overriding it with the correct atlas is always correct.
-      mat.map = atlas;
-      mat.color.set(0xffffff);  // Reset color so texture shows through
-      mat.metalness = Math.min(mat.metalness, 0.3);
-      mat.roughness = Math.max(mat.roughness, 0.5);
-      mat.needsUpdate = true;
-      patched++;
-    }
+    // Force-apply the race atlas to ALL meshes with UVs (incl. MeshBasicMaterial).
+    // Synty GLBs embed broken texture refs that render as flat yellow-green.
+    mat.map = atlas;
+    mat.color.set(0xffffff);
+    if (mat.metalness !== undefined) mat.metalness = Math.min(mat.metalness, 0.3);
+    if (mat.roughness !== undefined) mat.roughness = Math.max(mat.roughness, 0.5);
+    mat.needsUpdate = true;
+    patched++;
   });
 
   if (patched > 0) {
@@ -847,26 +851,18 @@ function applyFactionBodyColor(scene, race) {
   const accentColor = new THREE.Color(raceConf.gearTint);
 
   let patched = 0;
-  scene.traverse((child) => {
-    if (!child.isMesh || !child.material) return;
-    const mats = Array.isArray(child.material)
-      ? child.material
-      : [child.material];
+  forEachTintableMaterial(scene, (mat, child) => {
+    if (mat.map) return;
 
-    for (const mat of mats) {
-      if (!mat?.isMeshStandardMaterial) continue;
-      if (mat.map) continue; // Texture applied — leave it alone
+    const lower = (child.name || "").toLowerCase();
+    const isMetal =
+      (mat.metalness !== undefined && mat.metalness > 0.5) ||
+      /weapon|shield|metal|buckl|sword|axe|hammer|bow|staff/.test(lower);
 
-      // Separate metallic parts (weapons, buckles) from body
-      if (mat.metalness > 0.5) {
-        mat.color.copy(accentColor);
-      } else {
-        mat.color.copy(bodyColor);
-      }
-      mat.roughness = Math.min(mat.roughness + 0.1, 0.95);
-      mat.needsUpdate = true;
-      patched++;
-    }
+    mat.color.copy(isMetal ? accentColor : bodyColor);
+    if (mat.roughness !== undefined) mat.roughness = Math.min(mat.roughness + 0.1, 0.95);
+    mat.needsUpdate = true;
+    patched++;
   });
 
   if (patched > 0) {
@@ -1699,15 +1695,25 @@ let _animLibraryCache = null;
 async function loadAnimationLibrary() {
   if (_animLibraryCache) return _animLibraryCache;
 
+  const libPaths = [
+    modelUrl("animation-library.glb"),
+    "/models/animation-library.glb",
+  ];
+
   try {
-    const gltf = await new Promise((resolve, reject) => {
-      gltfLoader.load(
-        modelUrl("animation-library.glb"),
-        resolve,
-        undefined,
-        reject,
-      );
-    });
+    let gltf = null;
+    let lastErr = null;
+    for (const libPath of libPaths) {
+      try {
+        gltf = await new Promise((resolve, reject) => {
+          gltfLoader.load(libPath, resolve, undefined, reject);
+        });
+        if (gltf) break;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    if (!gltf) throw lastErr || new Error("animation-library.glb not found");
 
     // Index animations by name
     const clips = new Map();
