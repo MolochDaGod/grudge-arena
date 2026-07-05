@@ -88,6 +88,9 @@ export class ArenaController {
     this.onDash    = null;   // () => void
     this.onTarget  = null;   // () => void — Tab: cycle next enemy target (WoW-style)
 
+    /** Optional override for danger room / custom arenas (defaults to ProceduralArena radius). */
+    this.clampRadius = null;
+
     this._setupListeners();
   }
 
@@ -428,8 +431,9 @@ export class ArenaController {
   // ── Helpers ────────────────────────────────────────────────────
 
   _clampPosition() {
-    this.mesh.position.x = Math.max(-ARENA_RADIUS, Math.min(ARENA_RADIUS, this.mesh.position.x));
-    this.mesh.position.z = Math.max(-ARENA_RADIUS, Math.min(ARENA_RADIUS, this.mesh.position.z));
+    const r = this.clampRadius ?? ARENA_RADIUS;
+    this.mesh.position.x = Math.max(-r, Math.min(r, this.mesh.position.x));
+    this.mesh.position.z = Math.max(-r, Math.min(r, this.mesh.position.z));
   }
 
   /** Send an FSM event from outside (e.g. game.js combat system) */

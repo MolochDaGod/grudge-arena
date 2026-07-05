@@ -1210,3 +1210,139 @@ body { background: var(--void); color: var(--text); font-family: var(--font-ui);
   background: var(--border-dim);
   margin: 4px 0;
 }
+
+/* ── Danger Room HUD (dangerroom.puter.site outline) ── */
+.danger-room-btn {
+  background: linear-gradient(135deg, rgba(79, 195, 255, 0.12), rgba(111, 224, 255, 0.06));
+  border-color: rgba(79, 195, 255, 0.35) !important;
+  color: #aee0ff !important;
+}
+.danger-room-btn:hover:not(:disabled) {
+  border-color: #6fe0ff !important;
+  background: rgba(79, 195, 255, 0.2) !important;
+}
+
+body.danger-room-active #arena-canvas,
+body.danger-room-active canvas {
+  cursor: crosshair;
+}
+
+.dr-hud-root {
+  --dr-accent: #6fe0ff;
+  --dr-panel: rgba(6, 14, 28, 0.82);
+  --dr-border: rgba(79, 195, 255, 0.35);
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 55;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+}
+
+.dr-mode-badge {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  background: var(--dr-panel);
+  border: 1px solid var(--dr-border);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--dr-accent);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dr-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+}
+
+.dr-ch-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--dr-accent);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 6px var(--dr-accent);
+}
+
+.dr-ch-line {
+  position: absolute;
+  background: var(--dr-accent);
+  box-shadow: 0 0 4px var(--dr-accent);
+}
+
+.dr-ch-top, .dr-ch-bottom { width: 2px; height: 7px; left: 50%; }
+.dr-ch-left, .dr-ch-right { height: 2px; width: 7px; top: 50%; }
+.dr-ch-top { bottom: 50%; transform: translateX(-50%) translateY(-8px); }
+.dr-ch-bottom { top: 50%; transform: translateX(-50%) translateY(8px); }
+.dr-ch-left { right: 50%; transform: translateY(-50%) translateX(-8px); }
+.dr-ch-right { left: 50%; transform: translateY(-50%) translateX(8px); }
+
+.dr-mm-panel {
+  position: absolute;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 12px;
+  background: var(--dr-panel);
+  border: 1px solid var(--dr-border);
+  border-radius: 6px;
+  font-size: 10px;
+  color: rgba(174, 224, 255, 0.85);
+}
+
+.dr-mm-value {
+  color: var(--dr-accent);
+  font-weight: 700;
+}
+
+.dr-controls-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  font-size: 10px;
+  color: rgba(174, 224, 255, 0.55);
+  line-height: 1.6;
+}
+
+.dr-controls-hint kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 0 2px;
+  background: rgba(79, 195, 255, 0.1);
+  border: 1px solid rgba(79, 195, 255, 0.25);
+  border-radius: 3px;
+  color: var(--dr-accent);
+  font-size: 9px;
+}
+
+.dr-exit-btn {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  pointer-events: auto;
+  padding: 6px 12px;
+  font-size: 10px;
+  font-family: inherit;
+  color: #ffb3b3;
+  background: rgba(40, 10, 10, 0.7);
+  border: 1px solid rgba(255, 100, 100, 0.35);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dr-exit-btn:hover {
+  background: rgba(80, 20, 20, 0.85);
+}

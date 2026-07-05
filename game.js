@@ -43,6 +43,14 @@ import {
   getArenaSpawnFacing,
   ARENA_CLAMP_RADIUS,
 } from './src/engine/ProceduralArena.js';
+import {
+  bootstrapDangerRoom,
+  teardownDangerRoom,
+  getDangerTrainingTeams,
+  getDangerSpawnPosition,
+  getDangerSpawnFacing,
+  tickDangerRoomHud,
+} from './src/dangerRoom/DangerRoomMode.js';
 
 const VALID_RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
 const VALID_CLASSES = ["warrior", "mage", "ranger", "worge"];
@@ -113,6 +121,12 @@ class GrudgeArena {
     this.aoeIndicator   = null;   // AoEIndicator instance (pre-cast targeting circle)
     this._activeMovers  = [];     // TrajectoryMover[] updated each frame
     this._terrainMeshes = [];     // ground meshes registered for indicator terrain snap
+
+    /** Danger Room training mode (from dangerroom.puter.site controller outline). */
+    this.dangerMode = config.mode === 'danger';
+    this._dangerEnv = null;
+    this._dangerUnsub = null;
+    this._dangerClampRadius = ARENA_CLAMP_RADIUS;
   }
 
   async init(config) {
@@ -162,24 +176,35 @@ class GrudgeArena {
         this.config.weapon || "greatsword",
       );
       const playerProfile = this._derivePlayerProfile(buildConfig);
-      const TEAM_A = [
-        {
-          heroId: DefaultHeroForRace[race] || "human",
+
+      let TEAM_A;
+      let TEAM_B;
+      if (this.dangerMode) {
+        ({ TEAM_A, TEAM_B } = getDangerTrainingTeams(
           race,
-          weapon: playerWeapon,
-          isPlayer: true,
-          tier: 3,
-          displayName: this._getPlayerDisplayName(buildConfig),
-          profile: playerProfile,
-        },
-        { heroId: "elf", weapon: "bow", isPlayer: false, tier: 2 },       // Ranger
-        { heroId: "dwarf", weapon: "sabres", isPlayer: false, tier: 2 },   // Sword+Shield tank
-      ];
-      const TEAM_B = [
-        { heroId: "orc", weapon: "greatsword", isPlayer: false, tier: 2 }, // Warrior
-        { heroId: "barbarian", weapon: "mace", isPlayer: false, tier: 2 }, // Worge bruiser
-        { heroId: "undead", weapon: "staff", isPlayer: false, tier: 3 },   // Mage
-      ];
+          playerWeapon,
+          { ...buildConfig, displayName: this._getPlayerDisplayName(buildConfig) },
+        ));
+      } else {
+        TEAM_A = [
+          {
+            heroId: DefaultHeroForRace[race] || "human",
+            race,
+            weapon: playerWeapon,
+            isPlayer: true,
+            tier: 3,
+            displayName: this._getPlayerDisplayName(buildConfig),
+            profile: playerProfile,
+          },
+          { heroId: "elf", weapon: "bow", isPlayer: false, tier: 2 },
+          { heroId: "dwarf", weapon: "sabres", isPlayer: false, tier: 2 },
+        ];
+        TEAM_B = [
+          { heroId: "orc", weapon: "greatsword", isPlayer: false, tier: 2 },
+          { heroId: "barbarian", weapon: "mace", isPlayer: false, tier: 2 },
+          { heroId: "undead", weapon: "staff", isPlayer: false, tier: 3 },
+        ];
+      }
 
       setProgress(30, "Loading Team A models...");
       const teamAUnits = await Promise.all(
@@ -222,15 +247,16 @@ class GrudgeArena {
       // Create physics bodies + hitboxes for all units, detectors for AI
       this._initPhysicsBodies();
 
-      for (const u of this.allUnits) {
-        if (!u.isPlayer) {
-          // Build physics AI context for this unit
-          const physicsCtx = {
-            physicsBody: u.physicsBody || null,
-            detector: u.aiDetector || null,
-            behaviorFSM: u.aiBehaviorFSM || null,
-          };
-          this.arenaAI.register(u, physicsCtx);
+      if (!this.dangerMode) {
+        for (const u of this.allUnits) {
+          if (!u.isPlayer) {
+            const physicsCtx = {
+              physicsBody: u.physicsBody || null,
+              detector: u.aiDetector || null,
+              behaviorFSM: u.aiBehaviorFSM || null,
+            };
+            this.arenaAI.register(u, physicsCtx);
+          }
         }
       }
       this.match.registerTeams(teamAUnits, teamBUnits);
@@ -254,6 +280,9 @@ class GrudgeArena {
           this.playerUnit.controller,
           this.orbitCamera,
         );
+        if (this.dangerMode && this._dangerClampRadius) {
+          this.playerController.clampRadius = this._dangerClampRadius;
+        }
         // Wire combat callbacks. RMB toggles auto-attack (WoW-style) —
         // _performAttack is driven by _updateAutoAttack each frame.
         this.playerController.onAttack = (_type) => this._toggleAutoAttack();
@@ -301,12 +330,26 @@ class GrudgeArena {
         });
       }
 
+      if (this.dangerMode) {
+        bootstrapDangerRoom(this);
+        if (this.playerController && this._dangerClampRadius) {
+          this.playerController.clampRadius = this._dangerClampRadius;
+        }
+        for (const mesh of this._dangerEnv?.terrainMeshes || []) {
+          this.collisionSystem.addCollider(mesh, "environment");
+        }
+      }
+
       const gameUI = document.getElementById("gameUI");
       if (gameUI) gameUI.style.display = "block";
       setProgress(100, "Ready!");
-      this.match.start();
+      if (this.dangerMode) {
+        console.log("[arena] Danger Room training loaded — race:", race);
+      } else {
+        this.match.start();
+        console.log("[arena] 3v3 Arena loaded — race:", race);
+      }
       this.updateWeaponUI();
-      console.log("[arena] 3v3 Arena loaded — race:", race);
     } catch (err) {
       console.error("[arena] Failed to load arena systems:", err);
       this._showError(err);
@@ -391,14 +434,21 @@ class GrudgeArena {
   // ── Arena construction ──
 
   async _createArena() {
+    if (this.dangerMode) {
+      // Danger Room environment is built after units load (bootstrapDangerRoom).
+      this._terrainMeshes = [];
+      this._obstacleMeshes = [];
+      this.aoeIndicator = new AoEIndicator(this.scene, this._terrainMeshes);
+      console.log('[arena] Danger Room mode — chamber builds after character load');
+      return;
+    }
+
     // Build the procedural PvP arena (no external assets required).
-    // terrainMeshes = floor (for AoE snap), obstacleMeshes = walls/pillars/boulders (for camera)
     const { terrainMeshes, obstacleMeshes } = buildArena(this.scene);
     for (const mesh of terrainMeshes) {
       this.collisionSystem.addCollider(mesh, 'environment');
       this._terrainMeshes.push(mesh);
     }
-    // Store obstacle meshes for souls-like camera collision
     this._obstacleMeshes = obstacleMeshes || [];
     console.log(`[arena] Procedural PvP arena built — ${obstacleMeshes.length} camera collision meshes`);
 
@@ -415,7 +465,6 @@ class GrudgeArena {
       group.position.set(Math.cos(angle) * 35, 0, Math.sin(angle) * 35);
       this.scene.add(group);
     }
-    // AoEIndicator — terrain meshes registered above.
     this.aoeIndicator = new AoEIndicator(this.scene, this._terrainMeshes);
   }
 
@@ -466,8 +515,12 @@ class GrudgeArena {
   }
 
   async _loadUnit(comp, teamId, slot, teamSize, modelMod) {
-    const spawnPos = ArenaMatchStatic.getSpawnPosition(teamId, slot, teamSize);
-    const facing = ArenaMatchStatic.getSpawnFacing(teamId);
+    const spawnPos = this.dangerMode
+      ? getDangerSpawnPosition(teamId, slot, teamSize)
+      : ArenaMatchStatic.getSpawnPosition(teamId, slot, teamSize);
+    const facing = this.dangerMode
+      ? getDangerSpawnFacing(teamId)
+      : ArenaMatchStatic.getSpawnFacing(teamId);
     // Grudge UUID so unit identity is cross-app compatible (mob logs, match replay, etc.)
     const uuid = generateGrudgeUuid(
       comp.isPlayer ? "character" : "mob",
@@ -1486,8 +1539,8 @@ class GrudgeArena {
     if (this._disposed) return;
     requestAnimationFrame(() => this._animate());
     const delta = Math.min(this.clock.getDelta(), 0.1);
-    if (this.match) this.match.update(delta);
-    const active = this.match?.isCombatActive() ?? true;
+    if (this.match && !this.dangerMode) this.match.update(delta);
+    const active = this.dangerMode ? true : (this.match?.isCombatActive() ?? true);
     if (active) {
       if (this.playerController) this.playerController.update(delta);
       this._updateCooldowns(delta);
@@ -1527,7 +1580,8 @@ class GrudgeArena {
     }
 
     this.gameTimers.update(delta, active);
-    if (this.arenaAI) this.arenaAI.update(delta, this.allUnits, active);
+    if (this.arenaAI && !this.dangerMode) this.arenaAI.update(delta, this.allUnits, active);
+    if (this.dangerMode) tickDangerRoomHud(this, delta);
     this._updateShaders(delta);
     for (const u of this.allUnits) {
       if (u.controller) u.controller.update(delta);

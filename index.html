@@ -187,6 +187,7 @@
       </div>
 
       <button class="enter-btn" id="enter-btn" onclick="enterArena()">⚔ ENTER THE ARENA</button>
+      <button class="queue-btn danger-room-btn" id="danger-room-btn" onclick="enterDangerRoom()">⚡ Danger Room Training</button>
       <button class="queue-btn" onclick="joinQueue()">🔍 Find PvP Match</button>
       <div class="builder-readiness" id="builder-readiness">Allocate all 160 points to unlock Enter Arena.</div>
       <a class="back-link" href="https://grudge-studio.com">← Back to The Engine</a>
@@ -857,11 +858,13 @@
   function updateReadinessState() {
     const ready = getPointsSpent() === ATTRIBUTE_TOTAL;
     const enterBtn = document.getElementById('enter-btn');
-    const queueBtn = document.querySelector('.queue-btn');
+    const dangerBtn = document.getElementById('danger-room-btn');
+    const queueBtns = document.querySelectorAll('.queue-btn:not(.danger-room-btn)');
     const readyEl = document.getElementById('builder-readiness');
 
     if (enterBtn) enterBtn.disabled = !ready;
-    if (queueBtn) queueBtn.disabled = !ready;
+    if (dangerBtn) dangerBtn.disabled = !ready;
+    queueBtns.forEach((btn) => { btn.disabled = !ready; });
     if (readyEl) {
       readyEl.classList.toggle('ready', ready);
       readyEl.textContent = ready
@@ -1272,6 +1275,25 @@
     saveBuildToStorage();
   };
 
+  // ── Danger Room (solo training — dangerroom.puter.site controller outline) ──
+  window.enterDangerRoom = function () {
+    sanitizeSelectionState();
+    const build = normalizeBuildConfig(getCurrentBuildConfig());
+    selectedRace = build.race;
+    selectedClass = build.classId;
+    selectedWeapon = build.weapon;
+    attributePoints = { ...build.attributes };
+
+    if (getPointsSpent() !== ATTRIBUTE_TOTAL) {
+      setAuthStatus(`Spend all ${ATTRIBUTE_TOTAL} points before entering Danger Room`);
+      return;
+    }
+    saveBuildToStorage();
+    document.getElementById('lobby-overlay').classList.add('hidden');
+    document.getElementById('loading-overlay').classList.add('active');
+    loadArenaGame(build.race, null, build, 'danger');
+  };
+
   // ── Enter Arena ──────────────────────────────
   window.enterArena = function () {
     sanitizeSelectionState();
@@ -1288,7 +1310,7 @@
     saveBuildToStorage();
     document.getElementById('lobby-overlay').classList.add('hidden');
     document.getElementById('loading-overlay').classList.add('active');
-    loadArenaGame(build.race, null, build);
+    loadArenaGame(build.race, null, build, 'arena');
   };
 
   // ── PvP Queue ────────────────────────────────────────
@@ -1325,7 +1347,7 @@
         setTimeout(() => {
           document.getElementById('lobby-overlay').classList.add('hidden');
           document.getElementById('game-root').classList.add('active');
-          loadArenaGame(build.race, data, build);
+          loadArenaGame(build.race, data, build, 'arena');
         }, 1500);
       });
 
@@ -1349,7 +1371,7 @@
     if (label && text) label.textContent = text;
   }
 
-  async function loadArenaGame(race, matchData, buildConfig) {
+  async function loadArenaGame(race, matchData, buildConfig, mode = 'arena') {
     const normalizedBuild = normalizeBuildConfig(buildConfig);
     const normalizedRace = VALID_RACES.includes(race) ? race : normalizedBuild.race;
     const root = document.getElementById('game-root');
@@ -1364,6 +1386,7 @@
 
       const arena = new GrudgeArena({
         container: root,
+        mode: mode === 'danger' ? 'danger' : 'arena',
         race: normalizedRace,
         weapon: normalizedBuild.weapon,
         classId: normalizedBuild.classId,
