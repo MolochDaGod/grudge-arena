@@ -591,37 +591,31 @@ const MIXAMO_PREFIXES = [
  * After stripping the "mixamorig:" prefix we get e.g. "Hips", "Spine", "LeftArm".
  * These need to map to the Bip001 convention used by all 6 race GLBs.
  */
+/** D1 race GLBs use Bip001_* underscores (GLTFLoader strips spaces/colons from tracks). */
 const BONE_ALIASES = {
-  // Root / spine
-  Hips: "Bip001 Pelvis",
-  Spine: "Bip001 Spine",
-  Spine1: "Bip001 Spine", // Mixamo only has Spine/Spine1/Spine2; Bip001 has Spine/Spine1
-  Spine2: "Bip001 Spine1",
-  // Head / neck
-  Neck: "Bip001 Neck",
-  Head: "Bip001 Head",
-  HeadTop_End: "Bip001 Head",
-  // Left arm
-  LeftShoulder: "Bip001 L Clavicle",
-  LeftArm: "Bip001 L UpperArm",
-  LeftForeArm: "Bip001 L Forearm",
-  LeftHand: "Bip001 L Hand",
-  // Right arm
-  RightShoulder: "Bip001 R Clavicle",
-  RightArm: "Bip001 R UpperArm",
-  RightForeArm: "Bip001 R Forearm",
-  RightHand: "Bip001 R Hand",
-  // Left leg
-  LeftUpLeg: "Bip001 L Thigh",
-  LeftLeg: "Bip001 L Calf",
-  LeftFoot: "Bip001 L Foot",
-  LeftToeBase: "Bip001 L Toe0",
-  // Right leg
-  RightUpLeg: "Bip001 R Thigh",
-  RightLeg: "Bip001 R Calf",
-  RightFoot: "Bip001 R Foot",
-  RightToeBase: "Bip001 R Toe0",
-  // Eyes (ignore — no matching bone)
+  Hips: "Bip001_Pelvis",
+  Spine: "Bip001_Spine",
+  Spine1: "Bip001_Spine",
+  Spine2: "Bip001_Spine1",
+  Neck: "Bip001_Neck",
+  Head: "Bip001_Head",
+  HeadTop_End: "Bip001_Head",
+  LeftShoulder: "Bip001_L_Clavicle",
+  LeftArm: "Bip001_L_UpperArm",
+  LeftForeArm: "Bip001_L_Forearm",
+  LeftHand: "Bip001_L_Hand",
+  RightShoulder: "Bip001_R_Clavicle",
+  RightArm: "Bip001_R_UpperArm",
+  RightForeArm: "Bip001_R_Forearm",
+  RightHand: "Bip001_R_Hand",
+  LeftUpLeg: "Bip001_L_Thigh",
+  LeftLeg: "Bip001_L_Calf",
+  LeftFoot: "Bip001_L_Foot",
+  LeftToeBase: "Bip001_L_Toe0",
+  RightUpLeg: "Bip001_R_Thigh",
+  RightLeg: "Bip001_R_Calf",
+  RightFoot: "Bip001_R_Foot",
+  RightToeBase: "Bip001_R_Toe0",
   Reye: null,
   Leye: null,
 };
@@ -631,27 +625,28 @@ const BONE_ALIASES = {
  * Tracks targeting anything else get stripped.
  */
 const VALID_BONES = new Set([
-  "Bip001 Pelvis",
-  "Bip001 Spine",
-  "Bip001 Spine1",
-  "Bip001 Neck",
-  "Bip001 Head",
-  "Bip001 L Clavicle",
-  "Bip001 L UpperArm",
-  "Bip001 L Forearm",
-  "Bip001 L Hand",
-  "Bip001 R Clavicle",
-  "Bip001 R UpperArm",
-  "Bip001 R Forearm",
-  "Bip001 R Hand",
-  "Bip001 L Thigh",
-  "Bip001 L Calf",
-  "Bip001 L Foot",
-  "Bip001 L Toe0",
-  "Bip001 R Thigh",
-  "Bip001 R Calf",
-  "Bip001 R Foot",
-  "Bip001 R Toe0",
+  "Bip001",
+  "Bip001_Pelvis",
+  "Bip001_Spine",
+  "Bip001_Spine1",
+  "Bip001_Neck",
+  "Bip001_Head",
+  "Bip001_L_Clavicle",
+  "Bip001_L_UpperArm",
+  "Bip001_L_Forearm",
+  "Bip001_L_Hand",
+  "Bip001_R_Clavicle",
+  "Bip001_R_UpperArm",
+  "Bip001_R_Forearm",
+  "Bip001_R_Hand",
+  "Bip001_L_Thigh",
+  "Bip001_L_Calf",
+  "Bip001_L_Foot",
+  "Bip001_L_Toe0",
+  "Bip001_R_Thigh",
+  "Bip001_R_Calf",
+  "Bip001_R_Foot",
+  "Bip001_R_Toe0",
   "Armature",
 ]);
 
@@ -659,6 +654,8 @@ function stripMixamoPrefix(name) {
   for (const prefix of MIXAMO_PREFIXES) {
     if (name.startsWith(prefix)) return name.slice(prefix.length);
   }
+  // GLTFLoader sanitizes "mixamorig:Hips" → track node name "mixamorigHips"
+  if (name.startsWith("mixamorig")) return name.slice("mixamorig".length);
   return name;
 }
 
@@ -1605,15 +1602,23 @@ function createWeaponMesh(weaponType) {
  * @param {THREE.Group} weaponMesh - The weapon mesh group from createWeaponMesh()
  * @param {string} boneName - Target bone name (default: 'RightHand')
  */
+const BONE_NAME_ALIASES = {
+  RightHand: "Bip001_R_Hand",
+  LeftHand: "Bip001_L_Hand",
+  "Bip001 R Hand": "Bip001_R_Hand",
+  "Bip001 L Hand": "Bip001_L_Hand",
+};
+
 export function attachWeaponToBone(
   characterScene,
   weaponMesh,
-  boneName = "Bip001 R Hand",
+  boneName = "Bip001_R_Hand",
 ) {
+  const resolved = BONE_NAME_ALIASES[boneName] || boneName;
   let handBone = null;
 
   characterScene.traverse((node) => {
-    if (node.isBone && node.name === boneName) {
+    if (node.isBone && (node.name === resolved || node.name === boneName)) {
       handBone = node;
     }
   });
