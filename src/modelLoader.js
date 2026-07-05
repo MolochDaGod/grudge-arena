@@ -532,6 +532,17 @@ export const WEAPON_SFX = {
     attack: [audioUrl("sfx/scythe/entropic_bolts.mp3")],
     skill: [audioUrl("sfx/scythe/mantra.mp3")],
   },
+  mace: {
+    attack: [
+      audioUrl("sfx/sword/swing_1.mp3"),
+      audioUrl("sfx/sword/swing_2.mp3"),
+    ],
+    skill: [
+      audioUrl("sfx/sword/colossus_strike.mp3"),
+      audioUrl("sfx/sword/charge.mp3"),
+      audioUrl("sfx/sword/windshear.mp3"),
+    ],
+  },
   // UI sounds
   ui: {
     select: audioUrl("sfx/ui/selection.mp3"),

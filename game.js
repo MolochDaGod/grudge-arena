@@ -51,6 +51,15 @@ import {
   getDangerSpawnFacing,
   tickDangerRoomHud,
 } from './src/dangerRoom/DangerRoomMode.js';
+import { getWeaponFeel, skillSfxIndex } from './src/engine/WeaponFeel.js';
+import {
+  registerHit,
+  flashAbilityUsed,
+  tickCombatFeedback,
+  pulseCrosshairSpread,
+} from './src/engine/CombatFeedback.js';
+import { playSFX, WEAPON_SFX } from './src/modelLoader.js';
+import { syncAbilityBarFlash } from './src/dangerRoom/dangerRoomHud.js';
 
 const VALID_RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
 const VALID_CLASSES = ["warrior", "mage", "ranger", "worge"];
@@ -116,6 +125,11 @@ class GrudgeArena {
     this._gcdDuration = 1.5;
     this._autoAttackTimer = 0;
     this._autoAttackOn = false;
+    this._attackSwingIdx = 0;
+    this._bowDrawing = false;
+    this._bowDrawTimer = 0;
+    this._sabreSlashIndex = 0;
+    this._casting = false;
 
     // ── AoE / spline systems ────────────────────────────────────
     this.aoeIndicator   = null;   // AoEIndicator instance (pre-cast targeting circle)
@@ -311,17 +325,20 @@ class GrudgeArena {
 
         this.playerController.onDash = () => {
           const fwd = this.playerController.getForward();
+          const dashFeel = getWeaponFeel(this._getWeaponTypeKey?.() ?? "greatsword");
+          const dashColor = dashFeel?.accent ? new THREE.Color(dashFeel.accent) : new THREE.Color(0x3366ff);
           this.particleSystem?.emit({
             position: this.playerUnit.mesh.position
               .clone()
               .add(new THREE.Vector3(0, 0.5, 0)),
-            color: new THREE.Color(0x3366ff),
-            count: 20,
+            color: dashColor,
+            count: dashFeel?.title === "ASSASSIN" ? 28 : 20,
             velocity: fwd.clone().multiplyScalar(-4),
             spread: 1.5,
             lifetime: 0.4,
             size: 0.2,
           });
+          playSFX(WEAPON_SFX.ui?.dash, 0.35);
         };
 
         // Wire animation finished → FSM 'finish' event for combo chains
@@ -816,6 +833,38 @@ class GrudgeArena {
     ];
   }
 
+  _getWeaponTypeKey() {
+    const ws = this.playerEntity?.getComponent("WeaponState");
+    if (!ws) return "greatsword";
+    return ws.activeSlot === "primary" ? ws.primary : ws.secondary;
+  }
+
+  _playAttackSfx(weaponType) {
+    const pool = WEAPON_SFX[weaponType]?.attack;
+    if (pool) playSFX(pool, weaponType === "bow" ? 0.32 : 0.4);
+  }
+
+  _playSkillSfx(weaponType, slotKey) {
+    const skills = WEAPON_SFX[weaponType]?.skill;
+    if (!skills?.length) return;
+    const idx = skillSfxIndex(slotKey);
+    playSFX(skills[idx] ?? skills[0], 0.42);
+  }
+
+  _emitWeaponSlash(pos, fwd, feel) {
+    const melee = feel?.melee;
+    const color = melee?.particleColor ?? 0xffffff;
+    this.particleSystem?.emit({
+      position: pos,
+      color: new THREE.Color(color),
+      count: melee?.particleCount ?? 10,
+      velocity: fwd.clone(),
+      spread: melee?.particleSpread ?? 0.5,
+      lifetime: feel?.title === "WORGE" ? 0.32 : 0.22,
+      size: melee?.particleSize ?? 0.1,
+    });
+  }
+
   /**
    * Snap the player mesh to face a target (WoW-arena auto-face behaviour).
    * Also syncs ArenaController's targetYaw so its rotation-smoothing doesn't
@@ -875,9 +924,27 @@ class GrudgeArena {
     as.cooldowns[key] = ability.cooldown;
     if (ability.offGCD !== true) this._gcdTimer = this._gcdDuration;
 
+    const weaponType = this._getWeaponTypeKey();
+    const feel = getWeaponFeel(weaponType);
+    const animSpeed = feel.skillAnimSpeed ?? 1.0;
     const ctrl = this.playerUnit.controller;
-    if (ctrl) ctrl.playOnce(this._getSkillAnim(ability), 1.0);
-    this._executeAbility(ability);
+
+    flashAbilityUsed(key);
+    this._playSkillSfx(weaponType, key);
+
+    const castTime = ability.castTime ?? 0;
+    const selfCastEffects = new Set(["meteor"]);
+    if (castTime > 0 && !selfCastEffects.has(ability.effect)) {
+      this._casting = true;
+      if (ctrl) ctrl.playOnce(this._getSkillAnim(ability), animSpeed * 0.82);
+      this.gameTimers.add(castTime, () => {
+        this._casting = false;
+        this._executeAbility(ability);
+      });
+    } else {
+      if (ctrl) ctrl.playOnce(this._getSkillAnim(ability), animSpeed);
+      this._executeAbility(ability);
+    }
     this._updateUI();
   }
 
@@ -1197,6 +1264,7 @@ class GrudgeArena {
       const finalDmg = Math.round(damage * variance * (isCrit ? 1.6 : 1));
       hp.current = Math.max(0, hp.current - finalDmg);
       hp.lastDamageTime = performance.now();
+      registerHit();
       u.controller?.playOnce('hit', 1.2);
       // Floating damage number above the hit unit
       const numPos = u.mesh.position.clone().add(new THREE.Vector3(0, 2.2, 0));
@@ -1229,6 +1297,10 @@ class GrudgeArena {
     const ctrl = this.playerUnit.controller;
     if (!mesh || !weapon) return;
 
+    const weaponType = this._getWeaponTypeKey();
+    const feel = getWeaponFeel(weaponType);
+    const animSpeed = feel.attackAnimSpeed ?? 1.2;
+
     const target = this.targeting?.currentTarget;
     const validTarget =
       target &&
@@ -1239,31 +1311,54 @@ class GrudgeArena {
 
     const pos = mesh.position.clone();
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(mesh.quaternion);
-    // Cycle through weapon-specific swing anims (set on WeaponDefinitions)
-    // so each weapon class uses its own combo flavor. Fall back to the
-    // three generic attacks if the weapon didn't declare an attackAnims list.
+
+    if (weapon.range > 5 && feel.drawBeforeShot) {
+      if (!this._bowDrawing) {
+        this._bowDrawing = true;
+        this._bowDrawTimer = (feel.drawLeadMs ?? 220) / 1000;
+        if (ctrl) {
+          ctrl.playOnce(feel.drawAnim ?? "attack1", animSpeed * 0.55);
+        }
+        const bowSfx = WEAPON_SFX.bow?.attack;
+        if (bowSfx?.[0]) playSFX(bowSfx[0], 0.28);
+        return;
+      }
+      return;
+    }
+
     const attacks = weapon.attackAnims?.length
       ? weapon.attackAnims
       : ["attack1", "attack2", "attack3"];
-    this._attackSwingIdx = ((this._attackSwingIdx ?? -1) + 1) % attacks.length;
-    if (ctrl) ctrl.playOnce(attacks[this._attackSwingIdx], 1.2);
+    this._attackSwingIdx = (this._attackSwingIdx + 1) % attacks.length;
+    if (ctrl) ctrl.playOnce(attacks[this._attackSwingIdx], animSpeed);
+    this._playAttackSfx(weaponType);
 
     if (weapon.range > 5) {
       const dir = validTarget
         ? new THREE.Vector3().subVectors(target.mesh.position, pos).normalize()
         : fwd;
+      const ranged = feel.ranged ?? {};
       this._createProjectile({
         position: pos
           .clone()
           .add(dir.clone().multiplyScalar(0.5))
           .add(new THREE.Vector3(0, 1, 0)),
         direction: dir,
-        speed: 30,
+        speed: ranged.projectileSpeed ?? 30,
         damage: weapon.baseAttackDamage,
-        color: weapon.name === "Bow" ? 0x8b4513 : 0x3366ff,
+        color: ranged.projectileColor ?? (weaponType === "bow" ? 0x8b4513 : 0x3366ff),
+        shader: ranged.shader ?? null,
         lifetime: 2,
       });
+      pulseCrosshairSpread(weaponType === "bow" ? 8 : 5);
     } else {
+      let slashFwd = fwd;
+      if (feel.dualSlash) {
+        this._sabreSlashIndex = (this._sabreSlashIndex + 1) % 2;
+        const yaw = this._sabreSlashIndex === 0 ? 0.35 : -0.35;
+        slashFwd = fwd.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+      }
+
       if (validTarget) {
         const dist = mesh.position.distanceTo(target.mesh.position);
         if (dist <= weapon.range + 1) {
@@ -1272,6 +1367,7 @@ class GrudgeArena {
             const dmg = weapon.baseAttackDamage * (0.8 + Math.random() * 0.4);
             hp.current = Math.max(0, hp.current - dmg);
             hp.lastDamageTime = performance.now();
+            registerHit();
             if (target.controller) target.controller.playOnce("hit", 1.5);
             if (hp.current <= 0) {
               target.entity.addTag("dead");
@@ -1282,17 +1378,9 @@ class GrudgeArena {
       }
       const slashPos = pos
         .clone()
-        .add(fwd.clone().multiplyScalar(weapon.range / 2))
+        .add(slashFwd.clone().multiplyScalar(weapon.range / 2))
         .add(new THREE.Vector3(0, 1, 0));
-      this.particleSystem?.emit({
-        position: slashPos,
-        color: new THREE.Color(0xffffff),
-        count: 10,
-        velocity: fwd.clone(),
-        spread: 0.5,
-        lifetime: 0.2,
-        size: 0.1,
-      });
+      this._emitWeaponSlash(slashPos, slashFwd, feel);
       const res = this.playerEntity?.getComponent("Resources");
       if (res) res.rage.current = Math.min(res.rage.max, res.rage.current + 10);
     }
@@ -1304,6 +1392,7 @@ class GrudgeArena {
    */
   _updateAutoAttack(delta) {
     this._autoAttackTimer = Math.max(0, this._autoAttackTimer - delta);
+    if (this._bowDrawing) return;
     if (!this._autoAttackOn) return;
     if (!this.playerUnit || this.playerEntity?.hasTag("dead")) return;
     const target = this.targeting?.currentTarget;
@@ -1412,7 +1501,32 @@ class GrudgeArena {
         p.mesh.position.clone(),
         new THREE.Color(0xff4400),
       );
-      if (p.lifetime <= 0 || p.mesh.position.distanceTo(p.startPos) > 50) {
+
+      let hit = false;
+      for (const u of this.allUnits) {
+        if (!this.playerUnit || u.team === this.playerUnit.team) continue;
+        if (u.entity?.hasTag("dead")) continue;
+        const dist = p.mesh.position.distanceTo(u.mesh.position);
+        if (dist > 1.4) continue;
+        const hp = u.entity.getComponent("Health");
+        if (!hp || hp.invulnerable) continue;
+        const dmg = p.damage * (0.85 + Math.random() * 0.3);
+        hp.current = Math.max(0, hp.current - dmg);
+        hp.lastDamageTime = performance.now();
+        registerHit();
+        pulseCrosshairSpread(4);
+        u.controller?.playOnce("hit", 1.3);
+        const numPos = u.mesh.position.clone().add(new THREE.Vector3(0, 2.2, 0));
+        this.spriteSystem?.createDamageNumber(Math.round(dmg), numPos, false);
+        if (hp.current <= 0) {
+          u.entity.addTag("dead");
+          u.controller?.play("death", { loop: false });
+        }
+        hit = true;
+        break;
+      }
+
+      if (hit || p.lifetime <= 0 || p.mesh.position.distanceTo(p.startPos) > 50) {
         if (p.onHit) p.onHit(null, p.mesh.position.clone());
         this.scene.remove(p.mesh);
         // Dispose GPU resources
@@ -1463,6 +1577,13 @@ class GrudgeArena {
     const weapon = this.getCurrentWeapon();
     const bar = document.getElementById("abilityBar");
     if (!weapon || !bar) return;
+
+    const weaponType = this._getWeaponTypeKey();
+    const feel = getWeaponFeel(weaponType);
+    if (feel.accent) {
+      bar.style.setProperty("--weapon-accent", feel.accent);
+      document.documentElement.style.setProperty("--arena-weapon-accent", feel.accent);
+    }
 
     // Real ability icons from ObjectStore abilities pack, served via R2 CDN.
     // Keys = WeaponDefinitions ability.effect strings.
@@ -1581,7 +1702,50 @@ class GrudgeArena {
 
     this.gameTimers.update(delta, active);
     if (this.arenaAI && !this.dangerMode) this.arenaAI.update(delta, this.allUnits, active);
+    tickCombatFeedback(delta);
+    syncAbilityBarFlash();
     if (this.dangerMode) tickDangerRoomHud(this, delta);
+
+    if (this._bowDrawing) {
+      this._bowDrawTimer -= delta;
+      if (this._bowDrawTimer <= 0) {
+        this._bowDrawing = false;
+        const weapon = this.getCurrentWeapon();
+        const weaponType = this._getWeaponTypeKey();
+        const feel = getWeaponFeel(weaponType);
+        const mesh = this.playerUnit?.mesh;
+        if (mesh && weapon) {
+          const target = this.targeting?.currentTarget;
+          const validTarget =
+            target &&
+            target.team !== this.playerUnit.team &&
+            !target.entity?.hasTag("dead");
+          const pos = mesh.position.clone();
+          const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(mesh.quaternion);
+          const dir = validTarget
+            ? new THREE.Vector3().subVectors(target.mesh.position, pos).normalize()
+            : fwd;
+          const ranged = feel.ranged ?? {};
+          this.playerUnit.controller?.playOnce("attack2", feel.attackAnimSpeed ?? 1.05);
+          const bowSfx = WEAPON_SFX.bow?.attack;
+          if (bowSfx?.[1]) playSFX(bowSfx[1], 0.38);
+          else this._playAttackSfx(weaponType);
+          this._createProjectile({
+            position: pos
+              .clone()
+              .add(dir.clone().multiplyScalar(0.5))
+              .add(new THREE.Vector3(0, 1, 0)),
+            direction: dir,
+            speed: ranged.projectileSpeed ?? 32,
+            damage: weapon.baseAttackDamage,
+            color: ranged.projectileColor ?? 0xc4a35a,
+            lifetime: 2,
+          });
+          pulseCrosshairSpread(10);
+          this._autoAttackTimer = 1 / (weapon.attackSpeed || 1);
+        }
+      }
+    }
     this._updateShaders(delta);
     for (const u of this.allUnits) {
       if (u.controller) u.controller.update(delta);

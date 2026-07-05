@@ -1,6 +1,5 @@
 /**
- * Danger Room HUD overlay — crosshair, preset badge, control hints.
- * Mirrors dangerroom.puter.site / grudge-builder DangerRoomHud chrome.
+ * Danger Room + arena combat HUD — crosshair, motion MM readout, combo, hit marker.
  */
 
 import {
@@ -9,18 +8,26 @@ import {
   cycleRoomPreset,
 } from "./dangerRoomStore.js";
 import { ROOM_PRESETS } from "./roomPresets.js";
+import {
+  getComboStage,
+  getHitMarkerId,
+  getCrosshairSpread,
+  getLastAbilityKey,
+  isAbilityFlashing,
+} from "../engine/CombatFeedback.js";
 
 let mounted = false;
 let rootEl = null;
 let unsub = null;
+let lastPresetId = null;
 
-function render(state) {
-  if (!rootEl) return;
-  const preset = ROOM_PRESETS[state.presetId];
-  rootEl.innerHTML = `
-    <div class="dr-mode-badge">⚡ Danger Room · ${preset?.name || "Training"}</div>
-    <div class="dr-crosshair" aria-hidden="true">
+function buildShell(presetName) {
+  return `
+    <div class="dr-mode-badge">⚡ Danger Room · ${presetName}</div>
+    <div class="dr-crosshair" id="dr-crosshair" aria-hidden="true">
+      <span class="dr-ch-range" id="dr-ch-range"></span>
       <span class="dr-ch-dot"></span>
+      <span class="dr-ch-hit" id="dr-ch-hit" hidden></span>
       <span class="dr-ch-line dr-ch-top"></span>
       <span class="dr-ch-line dr-ch-bottom"></span>
       <span class="dr-ch-line dr-ch-left"></span>
@@ -31,18 +38,24 @@ function render(state) {
       <span class="dr-mm-value" id="dr-motion-label">IDLE</span>
       <span>·</span>
       <span id="dr-weapon-label">Weapon</span>
+      <span class="dr-combo-badge" id="dr-combo-badge" hidden>Hit <span id="dr-combo-n">1</span></span>
     </div>
     <div class="dr-controls-hint">
       <div><kbd>W/S</kbd> Move <kbd>A/D</kbd> Turn <kbd>Q/E</kbd> Strafe</div>
-      <div><kbd>RMB</kbd> Attack <kbd>LMB</kbd> Camera <kbd>Scroll</kbd> Zoom</div>
-      <div><kbd>1-4</kbd> Skills <kbd>Ctrl</kbd> Roll <kbd>V</kbd> Block <kbd>Tab</kbd> Target</div>
-      <div><kbd>[</kbd><kbd>]</kbd> Room preset · <kbd>Esc</kbd> Exit training</div>
+      <div><kbd>RMB</kbd> Attack <kbd>1-4</kbd> Skills <kbd>Ctrl</kbd> Roll <kbd>V</kbd> Block</div>
+      <div><kbd>[</kbd><kbd>]</kbd> Room preset · <kbd>Tab</kbd> Target</div>
     </div>
     <button type="button" class="dr-exit-btn" id="dr-exit-btn">Exit Danger Room</button>
   `;
+}
 
-  const exitBtn = rootEl.querySelector("#dr-exit-btn");
-  exitBtn?.addEventListener("click", () => {
+function ensureShell(presetName) {
+  if (!rootEl) return;
+  const presetId = getDangerRoomState().presetId;
+  if (lastPresetId === presetId && rootEl.querySelector("#dr-crosshair")) return;
+  lastPresetId = presetId;
+  rootEl.innerHTML = buildShell(presetName);
+  rootEl.querySelector("#dr-exit-btn")?.addEventListener("click", () => {
     window.location.reload();
   });
 }
@@ -55,7 +68,6 @@ export function mountDangerRoomHud() {
   const gameUI = document.getElementById("gameUI");
   if (gameUI) gameUI.classList.add("danger-room-hud");
 
-  // Hide PvP-only chrome
   for (const id of ["match-timer", "team-a-frames", "team-b-frames", "countdown-overlay"]) {
     const el = document.getElementById(id);
     if (el) el.style.display = "none";
@@ -68,8 +80,13 @@ export function mountDangerRoomHud() {
   rootEl.className = "dr-hud-root";
   document.body.appendChild(rootEl);
 
-  render(getDangerRoomState());
-  unsub = subscribeDangerRoom(() => render(getDangerRoomState()));
+  const preset = ROOM_PRESETS[getDangerRoomState().presetId];
+  ensureShell(preset?.name || "Training");
+
+  unsub = subscribeDangerRoom(() => {
+    const p = ROOM_PRESETS[getDangerRoomState().presetId];
+    ensureShell(p?.name || "Training");
+  });
 
   window.addEventListener("keydown", onPresetKey);
 }
@@ -82,6 +99,7 @@ export function unmountDangerRoomHud() {
   unsub = null;
   rootEl?.remove();
   rootEl = null;
+  lastPresetId = null;
   document.body.classList.remove("danger-room-active");
   document.getElementById("gameUI")?.classList.remove("danger-room-hud");
 }
@@ -96,13 +114,68 @@ function onPresetKey(e) {
   }
 }
 
-/** Update motion readout (called from game loop). */
+/** Per-frame HUD refresh (motion, combo, hit marker, crosshair spread). */
+export function updateDangerHud(opts = {}) {
+  if (!rootEl) return;
+  const motion = document.getElementById("dr-motion-label");
+  const weapon = document.getElementById("dr-weapon-label");
+  const crosshair = document.getElementById("dr-crosshair");
+  const hit = document.getElementById("dr-ch-hit");
+  const comboBadge = document.getElementById("dr-combo-badge");
+  const comboN = document.getElementById("dr-combo-n");
+  const rangeRing = document.getElementById("dr-ch-range");
+
+  if (opts.motion && motion) motion.textContent = opts.motion;
+  if (opts.weapon && weapon) weapon.textContent = opts.weapon;
+  if (opts.accent && rootEl) {
+    rootEl.style.setProperty("--dr-accent", opts.accent);
+  }
+
+  const spread = opts.spread ?? getCrosshairSpread();
+  if (crosshair) crosshair.style.setProperty("--ch-gap", `${spread}px`);
+
+  const combo = opts.combo ?? getComboStage();
+  if (comboBadge && comboN) {
+    if (combo > 1) {
+      comboBadge.hidden = false;
+      comboN.textContent = String(combo);
+    } else {
+      comboBadge.hidden = true;
+    }
+  }
+
+  const hitId = opts.hitMarker ?? getHitMarkerId();
+  if (hit) {
+    if (hitId && hit.dataset.token !== String(hitId)) {
+      hit.dataset.token = String(hitId);
+      hit.hidden = false;
+      hit.classList.remove("dr-ch-hit-pop");
+      void hit.offsetWidth;
+      hit.classList.add("dr-ch-hit-pop");
+      setTimeout(() => { hit.hidden = true; }, 320);
+    }
+  }
+
+  if (rangeRing && opts.rangeState) {
+    rangeRing.className = `dr-ch-range dr-ch-range-${opts.rangeState}`;
+  }
+}
+
 export function setDangerMotionLabel(label) {
-  const el = document.getElementById("dr-motion-label");
-  if (el) el.textContent = label;
+  updateDangerHud({ motion: label });
 }
 
 export function setDangerWeaponLabel(label) {
-  const el = document.getElementById("dr-weapon-label");
-  if (el) el.textContent = label;
+  updateDangerHud({ weapon: label });
+}
+
+/** Sync ability bar flash from combat feedback (arena + danger room). */
+export function syncAbilityBarFlash() {
+  const key = getLastAbilityKey();
+  if (!key || !isAbilityFlashing()) return;
+  const bar = document.getElementById("abilityBar");
+  if (!bar) return;
+  bar.querySelectorAll(".ability-slot").forEach((slot) => {
+    slot.classList.toggle("ability-used", slot.dataset.key === key);
+  });
 }

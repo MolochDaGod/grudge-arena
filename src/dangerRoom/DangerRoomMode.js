@@ -14,9 +14,16 @@ import {
 import {
   mountDangerRoomHud,
   unmountDangerRoomHud,
-  setDangerMotionLabel,
   setDangerWeaponLabel,
+  updateDangerHud,
+  syncAbilityBarFlash,
 } from "./dangerRoomHud.js";
+import { getWeaponFeel, resolveMotionLabel } from "../engine/WeaponFeel.js";
+import {
+  getComboStage,
+  getCrosshairSpread,
+  getHitMarkerId,
+} from "../engine/CombatFeedback.js";
 
 /** Training dummies — enemy team targets that don't chase the player. */
 export function getDangerTrainingTeams(playerRace, playerWeapon, buildConfig) {
@@ -89,15 +96,51 @@ export function teardownDangerRoom(arena) {
 }
 
 /** Per-frame danger room HUD updates. */
-export function tickDangerRoomHud(arena, delta) {
+export function tickDangerRoomHud(arena) {
   if (!arena.playerController) return;
-  const speed = arena.playerController.currentSpeed || 0;
-  const sprint = arena.playerController.holdKey?.ShiftLeft || arena.playerController.holdKey?.ShiftRight;
-  let label = "IDLE";
-  if (speed > 0.5) label = sprint ? "SPRINT" : speed > 4 ? "RUN" : "WALK";
-  const snap = arena.playerController._fsmService?.getSnapshot?.();
-  if (snap?.matches?.("attack")) label = "ATTACK";
-  if (snap?.matches?.("dash")) label = "ROLL";
-  if (snap?.matches?.("block")) label = "BLOCK";
-  setDangerMotionLabel(label);
+  const ctrl = arena.playerController;
+  const speed = ctrl.currentSpeed || 0;
+  const sprint = ctrl.holdKey?.ShiftLeft || ctrl.holdKey?.ShiftRight;
+  const snap = ctrl._fsmService?.getSnapshot?.();
+  const snapVal = snap?.value;
+  const stateStr = typeof snapVal === "string" ? snapVal : JSON.stringify(snapVal ?? "");
+
+  const ws = arena.playerEntity?.getComponent("WeaponState");
+  const weaponType = ws
+    ? (ws.activeSlot === "primary" ? ws.primary : ws.secondary)
+    : "greatsword";
+  const feel = getWeaponFeel(weaponType);
+  const weapon = arena.getCurrentWeapon?.();
+
+  const motion = resolveMotionLabel(feel, {
+    casting: arena._casting,
+    dashing: stateStr.includes("dash"),
+    blocking: stateStr.includes("block"),
+    attacking: stateStr.includes("attack") || stateStr.includes("skill"),
+    sprinting: sprint && speed > 0.5,
+    moving: speed > 0.5,
+  });
+
+  let rangeState = "none";
+  if (weapon?.range > 5) {
+    const target = arena.targeting?.currentTarget;
+    if (target && !target.entity?.hasTag("dead")) {
+      const dist = arena.playerUnit.mesh.position.distanceTo(target.mesh.position);
+      const r = weapon.range;
+      if (dist < r * 0.45) rangeState = "close";
+      else if (dist <= r * 0.95) rangeState = "optimal";
+      else rangeState = "far";
+    }
+  }
+
+  updateDangerHud({
+    motion,
+    weapon: weapon ? `${weapon.name} · ${feel.title}` : feel.title,
+    accent: feel.accent,
+    combo: getComboStage(),
+    spread: getCrosshairSpread(),
+    hitMarker: getHitMarkerId(),
+    rangeState,
+  });
+  syncAbilityBarFlash();
 }
