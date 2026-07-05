@@ -784,8 +784,12 @@ async function loadRaceTextureMap(race) {
       );
     });
     if (tex) {
-      tex.flipY = false;
+      // Synty D1 UVs were authored for flipY=true atlases (see character-kit).
+      tex.flipY = true;
       tex.colorSpace = THREE.SRGBColorSpace;
+      tex.magFilter = THREE.LinearFilter;
+      tex.minFilter = THREE.LinearFilter;
+      tex.generateMipmaps = false;
       tex.needsUpdate = true;
       _raceTextureCache.set(race, tex);
       console.log(`[modelLoader] ${race}: texture atlas loaded from ${texPath}`);
@@ -849,7 +853,8 @@ function applyFactionBodyColor(scene, race) {
 
   let patched = 0;
   forEachTintableMaterial(scene, (mat, child) => {
-    if (mat.map) return;
+    if (hasValidTextureMap(mat)) return;
+    if (mat.map) mat.map = null;
 
     const lower = (child.name || "").toLowerCase();
     const isMetal =
@@ -1045,25 +1050,54 @@ function cloneGLTFScene(source) {
   return clone;
 }
 
+/** Body/armor skinned meshes only — D1 GLBs bake every weapon variant in at once. */
+function isBodyMeasureMesh(node) {
+  if (!node?.isSkinnedMesh) return false;
+  const n = (node.name || "").toLowerCase();
+  return !/weapon_|_shield_|xtra_|quiver|pick_|wood_/.test(n);
+}
+
+function measureCharacterHeight(scene) {
+  scene.traverse((node) => {
+    if (node.isSkinnedMesh) node.normalizeSkinWeights();
+  });
+  const bodyBox = new THREE.Box3();
+  let bodyMeshes = 0;
+  scene.traverse((node) => {
+    if (!isBodyMeasureMesh(node)) return;
+    bodyBox.expandByObject(node);
+    bodyMeshes++;
+  });
+  if (bodyMeshes > 0) return bodyBox.getSize(new THREE.Vector3()).y;
+  const fallback = new THREE.Box3().setFromObject(scene);
+  return fallback.getSize(new THREE.Vector3()).y;
+}
+
 /**
  * Normalise a character scene to TARGET_H metres tall using its T-pose
  * bounding box (Y axis only, ignoring arm-span width).
  * Also grounds the scene so its bottom sits at Y=0.
  */
 function normalizeCharacterScale(scene, targetH = 1.75) {
-  scene.traverse((node) => {
-    if (node.isSkinnedMesh) node.normalizeSkinWeights();
-  });
-  const box = new THREE.Box3().setFromObject(scene);
-  const height = box.getSize(new THREE.Vector3()).y;
+  const height = measureCharacterHeight(scene);
   if (height < 0.001) {
-    console.warn('[modelLoader] normalizeCharacterScale: could not compute bounding box');
+    console.warn("[modelLoader] normalizeCharacterScale: could not compute bounding box");
     return;
   }
-  scene.scale.setScalar(targetH / height);
-  // Re-ground after rescale
-  const box2 = new THREE.Box3().setFromObject(scene);
-  scene.position.y = -box2.min.y;
+  const scale = targetH / height;
+  scene.scale.setScalar(scale);
+  console.log(
+    `[modelLoader] normalizeCharacterScale: height=${height.toFixed(3)}m → scale=${scale.toFixed(4)}`,
+  );
+  const grounded = new THREE.Box3().setFromObject(scene);
+  scene.position.y = -grounded.min.y;
+}
+
+function hasValidTextureMap(mat) {
+  const img = mat?.map?.image;
+  if (!img) return false;
+  if (img.width > 0 && img.height > 0) return true;
+  return !!(img.data && img.data.length > 0);
 }
 
 export async function loadRaceModel(race) {
