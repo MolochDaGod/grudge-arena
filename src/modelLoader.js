@@ -1325,7 +1325,11 @@ export class AnimationController {
       if (!action) return false;
     }
 
-    if (this.currentState === stateName && this.currentAction?.isRunning()) {
+    if (
+      this.currentState === stateName &&
+      this.currentAction?.isRunning() &&
+      this.actions.get(stateName) === this.currentAction
+    ) {
       return true;
     }
 
@@ -1720,10 +1724,17 @@ async function loadAnimationLibrary() {
     }
     if (!gltf) throw lastErr || new Error("animation-library.glb not found");
 
-    // Index animations by name
+    // Index animations by name — remap Mixamo → Bip001_* for D1 race GLBs
     const clips = new Map();
     for (const clip of gltf.animations) {
-      clips.set(clip.name, clip);
+      const cloned = clip.clone();
+      remapClipBoneNames(cloned);
+      cloned.tracks = cloned.tracks.filter((track) => {
+        const dotIdx = track.name.indexOf(".");
+        if (dotIdx === -1) return true;
+        return VALID_BONES.has(track.name.substring(0, dotIdx));
+      });
+      if (cloned.tracks.length > 0) clips.set(cloned.name, cloned);
     }
 
     console.log(
@@ -1875,15 +1886,18 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
 
   // Weapon pack is now the primary loader so idle should be bound.
   // Still verify and log binding stats.
+  controller.stop();
   controller.play("idle");
+  mixer.update(0);
   const idleStats = getTrackBindingStats(controller.currentAction);
   if (!controller.currentAction || idleStats.bound === 0) {
-    // Last-resort: force-reload weapon pack directly onto mixer
-    console.warn(`[modelLoader] ${race}: idle still unbound after weapon pack load. Forcing reload…`);
+    console.warn(`[modelLoader] ${race}: idle unbound — retrying weapon pack…`);
     const retry = await preloadWeaponAnims(resolvedWeapon, mixer, scene);
     controller.registerActions(retry);
     applyCommonClipAliases(controller.actions);
+    controller.stop();
     controller.play("idle");
+    mixer.update(0);
   }
 
   return {
@@ -2000,13 +2014,17 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
   const controller = new AnimationController(mixer, scene);
   controller.registerActions(embeddedActions);
 
+  // Weapon pack first (proven Bip001_* binding), library supplements extras only.
+  const packActions = await preloadWeaponAnims(weaponType, mixer, scene);
+  controller.registerActions(packActions);
+
   const animClips = await loadAnimationLibrary();
   let bareRegistered = 0;
   for (const [name, clip] of animClips) {
     const clonedClip = clip.clone();
     clonedClip.name = name;
     const action = mixer.clipAction(clonedClip, scene);
-    controller.actions.set(name, action);
+    if (!controller.actions.has(name)) controller.actions.set(name, action);
     if (name.startsWith(prefix)) {
       const bare = name.slice(prefix.length);
       if (!controller.actions.has(bare)) {
@@ -2047,23 +2065,25 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
     }
   }
 
-  // Same weapon-pack fallback as createAnimatedUnit — ensures no T-pose.
+  controller.stop();
   controller.play("idle");
-
+  mixer.update(0);
   const heroIdleStats = getTrackBindingStats(controller.currentAction);
   if (!controller.currentAction || heroIdleStats.bound === 0) {
     console.warn(
-      `[modelLoader] Hero ${hero.id}: idle from animation library has 0 bound tracks (T-pose). Loading weapon pack directly…`,
+      `[modelLoader] Hero ${hero.id}: idle unbound after weapon pack — retrying…`,
     );
-    const packActions = await preloadWeaponAnims(weaponType, mixer, scene);
-    controller.registerActions(packActions);
+    const retry = await preloadWeaponAnims(weaponType, mixer, scene);
+    controller.registerActions(retry);
     applyCommonClipAliases(controller.actions);
+    controller.stop();
     controller.play("idle");
-    const packStats = getTrackBindingStats(controller.currentAction);
-    console.log(
-      `[modelLoader] Hero ${hero.id}: weapon-pack fallback: ${controller.actions.size} anims, idle bound=${packStats.bound}/${packStats.total} tracks`,
-    );
+    mixer.update(0);
   }
+  const packStats = getTrackBindingStats(controller.currentAction);
+  console.log(
+    `[modelLoader] Hero ${hero.id}: idle bound=${packStats.bound}/${packStats.total} tracks`,
+  );
 
   console.log(
     `[modelLoader] Hero ${hero.displayName} (${hero.id}) ready: ${controller.actions.size} anims (${bareRegistered} bare-aliased from '${animClass}'), weapon: ${weaponType}, tier: ${tierCfg.name}`,
