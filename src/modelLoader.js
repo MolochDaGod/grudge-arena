@@ -1168,7 +1168,6 @@ function measureCharacterHeight(scene) {
  * Also grounds the scene so its bottom sits at Y=0.
  */
 function normalizeCharacterScale(scene, targetH = 1.75) {
-  resetSkeletonBindPose(scene);
   const height = measureCharacterHeight(scene);
   if (height < 0.001) {
     console.warn("[modelLoader] normalizeCharacterScale: could not compute bounding box");
