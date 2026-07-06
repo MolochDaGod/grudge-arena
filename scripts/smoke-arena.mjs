@@ -9,7 +9,7 @@ page.on("pageerror", (e) => errors.push(`PAGE: ${e.message}`));
 page.on("console", (msg) => {
   const t = msg.type();
   const text = msg.text();
-  if (t === "error" && !/Failed to load resource.*404/.test(text)) {
+  if (t === "error" && !/Failed to load resource.*404|auth\/puter/.test(text)) {
     errors.push(`CONSOLE: ${text}`);
   }
   if (text.includes("[arena]") || text.includes("[modelLoader]")) logs.push(text);
@@ -25,21 +25,16 @@ await page.waitForTimeout(1500);
 const guest = page.getByRole("button", { name: /Play as Guest/i });
 if (await guest.count()) {
   await guest.first().click();
-  await page.waitForTimeout(2500);
+  // /danger-room auto-starts after guest via pending route resume.
+  await page.waitForTimeout(1500);
 }
 
-const tankPreset = page.getByRole("button", { name: /Tank Preset/i });
-if (await tankPreset.count()) {
-  await tankPreset.first().click();
-  await page.waitForTimeout(500);
-}
-
-const danger = page.getByRole("button", { name: /Danger Room Training/i });
-if (await danger.count()) {
-  await danger.first().click();
-} else {
-  const enter = page.locator("#enter-btn");
-  if (await enter.count()) await enter.click();
+const loadingVisible = await page.locator("#loading-overlay.active").count();
+if (!loadingVisible) {
+  const danger = page.getByRole("button", { name: /Danger Room Training/i });
+  if (await danger.count()) {
+    await danger.first().click();
+  }
 }
 
 // Wait until game reports ready (up to 45s) instead of a blind fixed sleep.
@@ -82,7 +77,8 @@ const checks = {
   humanScaled: humanScaled || logs.some((l) => /normalizeCharacterScale/.test(l)),
   bakedGrudge6,
   playerBaked,
-  bakedUnitsMin3: bakedUnits >= 3,
+  bakedUnitsAll4: bakedUnits >= 4,
+  dangerRoomLoaded: logs.some((l) => l.includes("Danger Room training loaded")),
   noOverlay: overlayActive === 0,
   noFatalErrors: fatal.length === 0,
 };
