@@ -207,7 +207,7 @@ const ANIM_FILE_MAP = {
     // Locomotion
     idle: "standing idle.glb",
     idle2: "standing idle looking ver. 1.glb",
-    idle3: "standing idle looking ver. 2.glb",
+    idle3: "standing idle 03 examine.glb",
     run: "standing run forward.glb",
     runBack: "standing run back.glb",
     walk: "standing walk forward.glb",
@@ -339,7 +339,7 @@ const ANIM_FILE_MAP = {
     // Locomotion
     idle: "standing idle.glb",
     idle2: "standing idle 02.glb",
-    idle3: "Standing Idle 03.glb",
+    idle3: "standing idle 03 examine.glb",
     run: "Standing Run Forward.glb",
     runBack: "Standing Run Back.glb",
     runLeft: "Standing Run Left.glb",

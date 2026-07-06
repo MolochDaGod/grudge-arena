@@ -72,6 +72,25 @@ import {
   focusHardLockCameraAssistRate,
   getFocusSoftLockHudState,
 } from "../engine/FocusSoftLock.js";
+import { animUrl } from "../assetConfig.js";
+import { loadAnimClip } from "../modelLoader.js";
+
+/** Island neutrals use Standing Idle 03 Examine overlay on the baked pipeline. */
+export async function applyNeutralExamineIdle(units) {
+  const clip = await loadAnimClip(animUrl("longbow/standing idle 03 examine.glb"));
+  if (!clip) return;
+  clip.name = "idleExamine";
+  for (const u of units || []) {
+    if (u.team !== "N" || !u.controller) continue;
+    const examine = clip.clone();
+    u.controller.clips?.set?.("idleExamine", examine);
+    u.controller.actions?.set?.(
+      "idleExamine",
+      u.mixer.clipAction(examine, u.mesh),
+    );
+    u.controller.play("idleExamine", { loop: true, fadeDuration: 0.35 });
+  }
+}
 
 /** Training dummies — enemy team targets that don't chase the player. */
 export function getDangerNeutralTeams() {
@@ -189,6 +208,14 @@ export function bootstrapDangerRoom(arena) {
       arena._dangerEnv.clampRadius = island.clampRadius;
       arena._terrainMeshes = island.terrainMeshes;
       arena._dangerClampRadius = island.clampRadius;
+      if (island.obstacleMeshes?.length) {
+        arena._dangerEnv.obstacleMeshes = [
+          ...arena._dangerEnv.obstacleMeshes,
+          ...island.obstacleMeshes,
+        ];
+        arena._obstacleMeshes = arena._dangerEnv.obstacleMeshes;
+        arena.orbitCamera?.setCollisionMeshes?.(arena._obstacleMeshes);
+      }
       arena._groundSampler?.setTerrainMeshes?.(island.terrainMeshes);
       for (const u of arena.allUnits || []) {
         arena._groundSampler?.snapMesh?.(u.mesh);

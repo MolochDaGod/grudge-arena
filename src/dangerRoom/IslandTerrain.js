@@ -4,6 +4,7 @@
 
 import * as THREE from "three";
 import { loadTerrainPBR, makeTerrainMaterial } from "./TerrainTextureLoader.js";
+import { buildIslandWorldDecor } from "./IslandWorldDecor.js";
 
 const ISLAND_SIZE = 96;
 const SEGMENTS = 128;
@@ -48,7 +49,7 @@ export function islandHeight(x, z) {
   return plateau * edge - 0.12;
 }
 
-function islandEdgeFactor(x, z) {
+export function islandEdgeFactor(x, z) {
   const half = ISLAND_SIZE / 2;
   const dist = Math.sqrt((x / half) ** 2 + (z / half) ** 2);
   return Math.max(0, Math.min(1, (dist - 0.55) / 0.38));
@@ -155,9 +156,18 @@ export async function buildIslandTerrain(root) {
   water.name = "island-water";
   root.add(water);
 
+  let obstacleMeshes = [];
+  try {
+    const decor = await buildIslandWorldDecor(root);
+    obstacleMeshes = decor.obstacleMeshes || [];
+  } catch (err) {
+    console.warn("[island] world decor:", err.message);
+  }
+
   return {
     terrainMesh,
     terrainMeshes: [terrainMesh, beachMesh],
+    obstacleMeshes,
     clampRadius: ISLAND_SIZE * 0.42,
   };
 }

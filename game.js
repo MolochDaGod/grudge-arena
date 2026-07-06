@@ -47,6 +47,7 @@ import {
 import {
   bootstrapDangerRoom,
   teardownDangerRoom,
+  applyNeutralExamineIdle,
   getDangerTrainingTeams,
   getDangerNeutralTeams,
   getDangerSpawnPosition,
@@ -411,7 +412,11 @@ class GrudgeArena {
       }
 
       if (this.dangerMode) {
+        if (isCombatSandboxMode()) {
+          await applyNeutralExamineIdle(this.allUnits);
+        }
         for (const u of this.allUnits) {
+          if (u.team === "N" && isCombatSandboxMode()) continue;
           if (u.controller?.director?.primeLocomotion) {
             u.controller.director.primeLocomotion();
           } else if (u.controller?.play) {
