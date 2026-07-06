@@ -620,7 +620,9 @@ class GrudgeArena {
       raceConfig,
       resolvedWeapon,
     } = unitResult;
+    const groundedY = mesh.position.y;
     mesh.position.copy(spawnPos);
+    mesh.position.y = groundedY;
     mesh.rotation.y = facing;
     this.scene.add(mesh);
 

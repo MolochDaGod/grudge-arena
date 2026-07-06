@@ -591,7 +591,7 @@ const MIXAMO_PREFIXES = [
  * After stripping the "mixamorig:" prefix we get e.g. "Hips", "Spine", "LeftArm".
  * These need to map to the Bip001 convention used by all 6 race GLBs.
  */
-/** D1 race GLBs use Bip001_* underscores (GLTFLoader strips spaces/colons from tracks). */
+/** CDN D1 GLBs use Bip001_* underscores (GLTFLoader sanitizes bone node names). */
 const BONE_ALIASES = {
   Hips: "Bip001_Pelvis",
   Spine: "Bip001_Spine",
@@ -691,6 +691,20 @@ function remapClipBoneNames(clip) {
   }
   // Remove tracks that were flagged for deletion (null-mapped bones)
   clip.tracks = clip.tracks.filter((t) => !t.name.startsWith("__REMOVE__"));
+  return toRotationOnlyClip(clip);
+}
+
+/**
+ * Strip position/scale tracks — rotation-only clips retarget across races
+ * without double-scaling root motion (see grudge-asset-pipeline / character-kit).
+ */
+function toRotationOnlyClip(clip) {
+  clip.tracks = clip.tracks.filter((track) => {
+    const dot = track.name.indexOf(".");
+    if (dot === -1) return true;
+    const prop = track.name.substring(dot + 1);
+    return prop === "quaternion" || prop === "rotation";
+  });
   return clip;
 }
 
@@ -702,6 +716,56 @@ const clipCache = new Map();
 const gltfLoader = new GLTFLoader();
 const fbxLoader = new FBXLoader();
 const textureLoader = new THREE.TextureLoader();
+textureLoader.setCrossOrigin("anonymous");
+
+/** Canvas-decode atlas PNG/WebP → DataTexture (matches character-viewer textureLoader.ts). */
+function dataTextureFromImage(img, width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(img, 0, 0, width, height);
+  const { data } = ctx.getImageData(0, 0, width, height);
+  const tex = new THREE.DataTexture(
+    new Uint8Array(data.buffer.slice(0)),
+    width,
+    height,
+    THREE.RGBAFormat,
+  );
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = true;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function loadAtlasTexture(url) {
+  return new Promise((resolve) => {
+    if (/\.tga$/i.test(url)) {
+      textureLoader.load(url, resolve, undefined, () => resolve(null));
+      return;
+    }
+    const imgLoader = new THREE.ImageLoader();
+    imgLoader.setCrossOrigin("anonymous");
+    imgLoader.load(
+      url,
+      (img) => {
+        try {
+          resolve(
+            dataTextureFromImage(img, img.naturalWidth, img.naturalHeight),
+          );
+        } catch {
+          resolve(null);
+        }
+      },
+      undefined,
+      () => resolve(null),
+    );
+  });
+}
 
 let _characterManifestPromise = null;
 let _humanBasemeshAnimPromise = null;
@@ -775,22 +839,8 @@ async function loadRaceTextureMap(race) {
   const paths = [manifestPath, ...directPaths].filter(Boolean);
 
   for (const texPath of paths) {
-    const tex = await new Promise((resolve) => {
-      textureLoader.load(
-        texPath,
-        (loaded) => resolve(loaded),
-        undefined,
-        () => resolve(null),
-      );
-    });
+    const tex = await loadAtlasTexture(texPath);
     if (tex) {
-      // Synty D1 UVs were authored for flipY=true atlases (see character-kit).
-      tex.flipY = true;
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.magFilter = THREE.LinearFilter;
-      tex.minFilter = THREE.LinearFilter;
-      tex.generateMipmaps = false;
-      tex.needsUpdate = true;
       _raceTextureCache.set(race, tex);
       console.log(`[modelLoader] ${race}: texture atlas loaded from ${texPath}`);
       return tex;
@@ -800,6 +850,18 @@ async function loadRaceTextureMap(race) {
   console.warn(`[modelLoader] ${race}: no texture atlas found`);
   _raceTextureCache.set(race, null);
   return null;
+}
+
+function patchMaterialAtlas(mat, atlas) {
+  mat.map = atlas;
+  mat.color.set(0xffffff);
+  // Unlit Synty mats must bypass ACES tone-mapping or the atlas reads black/washed.
+  if (mat.isMeshBasicMaterial) {
+    mat.toneMapped = false;
+  }
+  if (mat.metalness !== undefined) mat.metalness = Math.min(mat.metalness, 0.3);
+  if (mat.roughness !== undefined) mat.roughness = Math.max(mat.roughness, 0.5);
+  mat.needsUpdate = true;
 }
 
 async function applyRaceTextureFix(scene, race) {
@@ -812,11 +874,7 @@ async function applyRaceTextureFix(scene, race) {
 
     // Force-apply the race atlas to ALL meshes with UVs (incl. MeshBasicMaterial).
     // Synty GLBs embed broken texture refs that render as flat yellow-green.
-    mat.map = atlas;
-    mat.color.set(0xffffff);
-    if (mat.metalness !== undefined) mat.metalness = Math.min(mat.metalness, 0.3);
-    if (mat.roughness !== undefined) mat.roughness = Math.max(mat.roughness, 0.5);
-    mat.needsUpdate = true;
+    patchMaterialAtlas(mat, atlas);
     patched++;
   });
 
@@ -1057,6 +1115,22 @@ function isBodyMeasureMesh(node) {
   return !/weapon_|_shield_|xtra_|quiver|pick_|wood_/.test(n);
 }
 
+function measureBoneHeight(scene) {
+  let pelvis = null;
+  let head = null;
+  scene.traverse((node) => {
+    if (!node.isBone) return;
+    if (node.name === "Bip001_Pelvis" || node.name === "Bip001 Pelvis") pelvis = node;
+    if (node.name === "Bip001_Head" || node.name === "Bip001 Head") head = node;
+  });
+  if (!pelvis || !head) return 0;
+  const p = new THREE.Vector3();
+  const h = new THREE.Vector3();
+  pelvis.getWorldPosition(p);
+  head.getWorldPosition(h);
+  return Math.abs(h.y - p.y) + 0.25;
+}
+
 function measureCharacterHeight(scene) {
   scene.traverse((node) => {
     if (node.isSkinnedMesh) node.normalizeSkinWeights();
@@ -1068,6 +1142,12 @@ function measureCharacterHeight(scene) {
     bodyBox.expandByObject(node);
     bodyMeshes++;
   });
+  if (bodyMeshes > 0) {
+    const bboxH = bodyBox.getSize(new THREE.Vector3()).y;
+    if (bboxH >= 1.0) return bboxH;
+  }
+  const boneH = measureBoneHeight(scene);
+  if (boneH >= 1.0) return boneH;
   if (bodyMeshes > 0) return bodyBox.getSize(new THREE.Vector3()).y;
   const fallback = new THREE.Box3().setFromObject(scene);
   return fallback.getSize(new THREE.Vector3()).y;
@@ -1893,6 +1973,7 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   if (isD1ModularScene(scene)) {
     equipment = new EquipmentManager(scene);
     equipment.applyLoadout(resolvedWeapon);
+    await applyRaceTextureFix(scene, race);
   } else {
     // Legacy fallback path for non-D1 meshes
     const weapon = createWeaponMesh(resolvedWeapon);
@@ -1902,7 +1983,7 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
       factionColors.emissive,
       tierCfg,
     );
-    attachWeaponToBone(scene, weapon, "Bip001 R Hand");
+    attachWeaponToBone(scene, weapon, "Bip001_R_Hand");
 
     const shieldWeapons = ["sabres", "runeblade"];
     if (shieldWeapons.includes(resolvedWeapon)) {
@@ -1914,7 +1995,7 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
         tierCfg,
       );
       shield.rotation.set(-Math.PI / 2, 0, Math.PI);
-      attachWeaponToBone(scene, shield, "Bip001 L Hand");
+      attachWeaponToBone(scene, shield, "Bip001_L_Hand");
     }
   }
 
@@ -2075,6 +2156,7 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
   if (isD1ModularScene(scene)) {
     equipment = new EquipmentManager(scene);
     equipment.applyLoadout(weaponType);
+    await applyRaceTextureFix(scene, hero.race);
   } else {
     const weapon = createWeaponMesh(weaponType);
     tintWeaponMesh(
@@ -2083,7 +2165,7 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
       factionColors.emissive,
       tierCfg,
     );
-    attachWeaponToBone(scene, weapon, "RightHand");
+    attachWeaponToBone(scene, weapon, "Bip001_R_Hand");
 
     const shieldWeapons = ["sabres", "runeblade"];
     if (shieldWeapons.includes(weaponType)) {
@@ -2095,7 +2177,7 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
         tierCfg,
       );
       shield.rotation.set(-Math.PI / 2, 0, Math.PI);
-      attachWeaponToBone(scene, shield, "LeftHand");
+      attachWeaponToBone(scene, shield, "Bip001_L_Hand");
     }
   }
 
