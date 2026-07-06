@@ -629,6 +629,47 @@ body { background: var(--void); color: var(--text); font-family: var(--font-ui);
 .weapon-slot { width: 48px; height: 48px; border: 2px solid var(--border-dim); border-radius: 8px; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-dim); cursor: pointer; transition: 0.15s; }
 .weapon-slot.active { border-color: var(--ember); color: var(--gold-light); background: rgba(219,99,49,0.1); }
 #abilityBar { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
+
+.gcd-indicator {
+  position: absolute;
+  bottom: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+.gcd-indicator::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: var(--gcd-pct, 0%);
+  background: linear-gradient(90deg, rgba(140, 220, 255, 0.5), rgba(111, 224, 255, 0.95));
+  border-radius: 2px;
+  transition: width 80ms linear;
+}
+.gcd-indicator.gcd-active { opacity: 1; }
+
+.ability-slot.ability-queued {
+  box-shadow: 0 0 0 2px rgba(255, 220, 120, 0.85), 0 0 12px rgba(255, 200, 80, 0.35);
+  animation: ability-queue-pulse 0.9s ease-in-out infinite;
+}
+@keyframes ability-queue-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.25); }
+}
+
+body.danger-room-active #target-frame.dr-target-frame {
+  display: block;
+  top: 48px;
+  border-color: rgba(111, 224, 255, 0.35);
+  background: rgba(6, 14, 28, 0.88);
+  z-index: 54;
+}
 .ability-slot { width: 52px; height: 52px; border: 2px solid var(--border-dim); border-radius: 8px; background: rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: 0.15s; }
 .ability-slot:hover { border-color: var(--gold); }
 
@@ -1433,6 +1474,34 @@ body.danger-room-active canvas {
   letter-spacing: 0.04em;
 }
 
+.dr-softlock-zone {
+  position: fixed;
+  border: 1px dashed rgba(140, 220, 255, 0.35);
+  border-radius: 4px;
+  background: rgba(79, 195, 255, 0.04);
+  pointer-events: none;
+  z-index: 55;
+  transition: left 80ms linear, top 80ms linear, width 80ms linear, height 80ms linear;
+}
+.dr-softlock-zone.dr-softlock-hard {
+  border-color: rgba(140, 220, 255, 0.65);
+  background: rgba(79, 195, 255, 0.08);
+  box-shadow: inset 0 0 24px rgba(79, 195, 255, 0.12);
+}
+
+.dr-target-pip {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 100, 100, 0.9);
+  background: rgba(255, 60, 60, 0.35);
+  pointer-events: none;
+  z-index: 55;
+  box-shadow: 0 0 10px rgba(255, 80, 80, 0.5);
+}
+
 .dr-ch-dot {
   position: absolute;
   left: 50%;
@@ -1640,4 +1709,206 @@ body.danger-room-active canvas {
 
 .dr-gear-apply:hover {
   filter: brightness(1.08);
+}
+
+/* ── Danger Room dock (M) + weapon radial (hold F) ── */
+.dr-dock-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 58;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 72px 16px 16px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 160ms ease, visibility 160ms;
+}
+
+.dr-dock-root.dr-dock-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.dr-dock-panel {
+  width: min(320px, 92vw);
+  background: rgba(6, 14, 28, 0.92);
+  border: 1px solid rgba(79, 195, 255, 0.35);
+  border-radius: 10px;
+  overflow: hidden;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  color: #cfe9ff;
+}
+
+.dr-dock-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(79, 195, 255, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dr-dock-close {
+  background: none;
+  border: none;
+  color: #8ecfff;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.dr-dock-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+}
+
+.dr-dock-tab {
+  flex: 1;
+  padding: 6px;
+  border: 1px solid rgba(79, 195, 255, 0.2);
+  background: transparent;
+  color: #8ecfff;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.dr-dock-tab.active {
+  background: rgba(79, 195, 255, 0.15);
+  border-color: rgba(79, 195, 255, 0.45);
+}
+
+.dr-dock-body {
+  padding: 10px 12px 14px;
+}
+
+.dr-dock-blurb {
+  margin: 0 0 10px;
+  opacity: 0.75;
+  line-height: 1.4;
+}
+
+.dr-dock-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.dr-dock-preset {
+  text-align: left;
+  padding: 8px;
+  border: 1px solid rgba(79, 195, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(8, 18, 32, 0.6);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.dr-dock-preset.active {
+  border-color: rgba(111, 224, 255, 0.55);
+  background: rgba(79, 195, 255, 0.1);
+}
+
+.dr-dock-preset span {
+  display: block;
+  margin-top: 4px;
+  opacity: 0.7;
+  font-size: 10px;
+}
+
+.dr-dock-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.dr-dock-weapons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dr-dock-weapon {
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(79, 195, 255, 0.25);
+  background: rgba(10, 22, 38, 0.8);
+  color: #cfe9ff;
+  cursor: pointer;
+  font: inherit;
+  text-transform: capitalize;
+}
+
+.dr-radial-root {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.dr-radial-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.dr-radial-center {
+  position: relative;
+  z-index: 1;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: rgba(6, 14, 28, 0.9);
+  border: 2px solid rgba(111, 224, 255, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  color: #cfe9ff;
+}
+
+.dr-radial-title {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dr-radial-sub {
+  opacity: 0.65;
+  margin-top: 4px;
+}
+
+.dr-radial-item {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: -18px 0 0 -36px;
+  width: 72px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(111, 224, 255, 0.4);
+  background: rgba(8, 18, 36, 0.92);
+  color: #e8f4ff;
+  font: 10px ui-monospace, Consolas, monospace;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+
+.dr-radial-item:hover {
+  background: rgba(79, 195, 255, 0.2);
 }

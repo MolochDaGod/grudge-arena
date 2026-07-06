@@ -228,7 +228,8 @@ async function loadCharacter() {
     if (m) {
       log(
         `scale: target=${m.targetHeight.toFixed(2)}m measured=${m.measuredHeight.toFixed(2)}m ` +
-          `world=${m.worldScale.toFixed(4)} (${m.source}) · y=${m.groundedY.toFixed(3)}`,
+          `bones=${(m.boneHeight ?? 0).toFixed(2)} bbox=${(m.bboxHeight ?? 0).toFixed(2)} ` +
+          `world=${m.worldScale.toFixed(4)} (${m.source}/${m.measureMethod ?? "?"}) · y=${m.groundedY.toFixed(3)}`,
       );
     } else {
       log(`scale: ${mesh.scale.x.toFixed(4)} · y=${mesh.position.y.toFixed(3)}`);

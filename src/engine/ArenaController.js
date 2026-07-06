@@ -421,12 +421,36 @@ export class ArenaController {
     if (this.useBakedLoco && this.animCtrl) {
       const movable = fsmValue === 'idle' || fsmValue === 'run';
       if (!movable) {
-        this.animCtrl.setGaitTarget?.(false, false);
+        this.animCtrl.setDirLocomotion?.(0, 0, 0, false, !!this.holdKey._RMB);
         return false;
       }
       const moving = hasInput || this.currentSpeed > 0.05;
       const speed01 = maxSpeed > 0 ? Math.min(1, this.currentSpeed / maxSpeed) : 0;
-      if (this.animCtrl.setGaitFromSpeed) {
+      const rmbHeld = !!this.holdKey._RMB;
+      if (this.animCtrl.setDirLocomotion) {
+        const yaw = this.mesh.rotation.y;
+        const sin = Math.sin(yaw);
+        const cos = Math.cos(yaw);
+        let lx = 0;
+        let lz = 0;
+        if (hasInput) {
+          const len = Math.sqrt(ix * ix + iz * iz) || 1;
+          const camYaw = this.camera.getYaw();
+          const c = Math.cos(camYaw);
+          const s = Math.sin(camYaw);
+          const wx = (ix / len) * c - (iz / len) * s;
+          const wz = (ix / len) * s + (iz / len) * c;
+          lx = wx * cos - wz * sin;
+          lz = wx * sin + wz * cos;
+        }
+        this.animCtrl.setDirLocomotion(
+          lx,
+          lz,
+          moving ? speed01 : 0,
+          isSprint && moving,
+          rmbHeld,
+        );
+      } else if (this.animCtrl.setGaitFromSpeed) {
         this.animCtrl.setGaitFromSpeed(moving ? speed01 : 0, isSprint && moving);
       } else {
         this.animCtrl.setGaitTarget?.(moving, isSprint && moving);

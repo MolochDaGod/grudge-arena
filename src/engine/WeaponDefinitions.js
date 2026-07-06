@@ -12,6 +12,7 @@
 export const WeaponTypes = {
   GREATSWORD: 'greatsword',
   BOW: 'bow',
+  RIFLE: 'rifle',
   SABRES: 'sabres',
   SCYTHE: 'scythe',
   RUNEBLADE: 'runeblade',
@@ -27,11 +28,24 @@ export const WeaponDefinitions = {
     attackAnims: ['attack1', 'attack2', 'attack3', 'combo1'],
     abilities: {
       Q: { name: 'Fullguard', description: 'Block all damage for 3 seconds. Generates rage on block.', cooldown: 7, cost: 0, costType: null, duration: 3, effect: 'shield', skillAnim: 'block' },
-      E: { name: 'Charge', description: 'Dash forward dealing damage to enemies in path.', cooldown: 8, cost: 0, costType: null, damage: 60, distance: 10, effect: 'dash', skillAnim: 'jumpAttack' },
+      E: { name: 'Charge', description: 'Dash forward dealing damage to enemies in path.', cooldown: 8, cost: 0, costType: null, damage: 60, distance: 10, effect: 'dash', offGCD: true, skillAnim: 'jumpAttack' },
       R: { name: 'Colossus Smash', description: 'Lightning strike from above dealing massive damage.', cooldown: 5, cost: 25, costType: 'rage', damage: 120, aoeRadius: 4, effect: 'aoe_strike', skillAnim: 'swing' },
       F: { name: 'Divine Wind', description: 'Throw your sword, dealing damage and pulling enemies.', cooldown: 1.5, cost: 10, costType: 'rage', damage: 40, range: 15, effect: 'projectile_pull', skillAnim: 'combo2' },
       P: { name: 'Berserker Rage', description: 'Ultimate: Enter rage mode, doubling damage for 8 seconds.', cooldown: 60, cost: 100, costType: 'rage', duration: 8, effect: 'buff_damage', skillAnim: 'taunt' }
     }
+  },
+  [WeaponTypes.RIFLE]: {
+    name: 'Rifle', title: 'MARKSMAN',
+    description: 'Hitscan marksman — ADS, reload, and rifle locomotion',
+    primaryResource: 'energy', baseAttackDamage: 32, attackSpeed: 1.4, range: 35,
+    attackAnims: ['fire', 'attack1'],
+    abilities: {
+      Q: { name: 'Burst', description: 'Three-round burst.', cooldown: 4, cost: 20, costType: 'energy', damage: 45, effect: 'projectile', skillAnim: 'attack1' },
+      E: { name: 'Snap Aim', description: 'Tighten spread briefly.', cooldown: 6, cost: 15, costType: 'energy', duration: 2, effect: 'buff_damage', skillAnim: 'blockIdle' },
+      R: { name: 'Reload', description: 'Tactical reload.', cooldown: 1, cost: 0, costType: null, effect: 'reload', skillAnim: 'cast' },
+      F: { name: 'Bash', description: 'Rifle melee strike.', cooldown: 3, cost: 0, costType: null, damage: 30, effect: 'melee', skillAnim: 'attack2' },
+      P: { name: 'Overwatch', description: 'Ultimate: +50% range and damage for 8s.', cooldown: 50, cost: 0, costType: null, duration: 8, effect: 'buff_damage', skillAnim: 'powerUp' },
+    },
   },
   [WeaponTypes.BOW]: {
     name: 'Bow', title: 'VIPER',
@@ -52,7 +66,7 @@ export const WeaponDefinitions = {
     primaryResource: 'energy', baseAttackDamage: 25, attackSpeed: 2.0, range: 1.5,
     attackAnims: ['attack1', 'attack2', 'slash1', 'slash2'],
     abilities: {
-      Q: { name: 'Shadow Step', description: 'Teleport behind target enemy.', cooldown: 6, cost: 40, costType: 'energy', range: 15, effect: 'teleport_behind', skillAnim: 'dodge' },
+      Q: { name: 'Shadow Step', description: 'Teleport behind target enemy.', cooldown: 6, cost: 40, costType: 'energy', range: 15, effect: 'teleport_behind', offGCD: true, skillAnim: 'dodge' },
       E: { name: 'Blade Dance', description: 'Spin attack hitting all nearby enemies.', cooldown: 3, cost: 30, costType: 'energy', damage: 40, radius: 3, effect: 'aoe_melee', skillAnim: 'slash3' },
       R: { name: 'Eviscerate', description: 'Critical strike dealing bonus damage to low HP targets.', cooldown: 1, cost: 50, costType: 'energy', damage: 80, executeThreshold: 0.3, executeMultiplier: 2, effect: 'execute', skillAnim: 'attack4' },
       F: { name: 'Vanish', description: 'Become invisible for 3 seconds. Next attack crits.', cooldown: 12, cost: 60, costType: 'energy', duration: 3, effect: 'stealth', skillAnim: 'crouch' },
@@ -68,7 +82,7 @@ export const WeaponDefinitions = {
       Q: { name: 'Fireball', description: 'Launch a fireball that explodes on impact.', cooldown: 3, cost: 30, costType: 'mana', damage: 70, splashRadius: 3, effect: 'fireball', skillAnim: 'cast' },
       E: { name: 'Frost Nova', description: 'Freeze all nearby enemies for 2 seconds.', cooldown: 8, cost: 50, costType: 'mana', damage: 30, freezeDuration: 2, radius: 5, effect: 'frost_nova', skillAnim: 'aoe' },
       R: { name: 'Meteor Strike', description: 'Call down a meteor at target location.', cooldown: 12, cost: 80, costType: 'mana', damage: 150, castTime: 1.5, radius: 6, effect: 'meteor', skillAnim: 'cast2H' },
-      F: { name: 'Blink', description: 'Instantly teleport a short distance.', cooldown: 4, cost: 20, costType: 'mana', distance: 8, effect: 'blink', skillAnim: 'dodge' },
+      F: { name: 'Blink', description: 'Instantly teleport a short distance.', cooldown: 4, cost: 20, costType: 'mana', distance: 8, effect: 'blink', offGCD: true, skillAnim: 'dodge' },
       P: { name: 'Elemental Fury', description: 'Ultimate: Spells cast twice for 10 seconds.', cooldown: 60, cost: 100, costType: 'mana', duration: 10, effect: 'double_cast', skillAnim: 'aoe2' }
     }
   },

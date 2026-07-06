@@ -276,5 +276,12 @@ export function getSoftLockHudState() {
     hardLock: softLock.hardLock,
     aiming: softLock.hardLock,
     magnet: softLock.magnetStrength,
+    zoneX: softLock.zoneX,
+    zoneY: softLock.zoneY,
+    zoneW: softLock.zoneW,
+    zoneH: softLock.zoneH,
+    targetX: softLock.targetScreenX,
+    targetY: softLock.targetScreenY,
+    accuracy: softLock.accuracy,
   };
 }

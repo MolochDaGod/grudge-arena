@@ -1,14 +1,21 @@
 /**
- * AnimationController-compatible wrapper around AnimationDirector + baked clips.
- * Used by danger room for Grudge6 Bip001 characters.
+ * AnimationController-compatible wrapper — DirLocoBlend gait + AnimationDirector overlay.
+ * Danger room Grudge6 Bip001 pipeline (dangerroom.puter.site baked motion).
  */
 
 import { AnimationDirector } from './AnimationDirector.js';
+import {
+  DirLocoBlend,
+  computeGaitTarget,
+} from './engine/DirLocoBlend.js';
+import { classifyDir, gaitTargetWhileAiming } from './engine/tpsMath.js';
+import { resolveBakedLocoClipKey } from './bakedAnimLoader.js';
 
 const LOCO_STATES = new Set(['idle', 'walk', 'run', 'sprint', 'running', 'walking']);
 
 const LOOP_STATES = new Set([
   'idle', 'walk', 'run', 'sprint', 'running', 'walking',
+  'walkBack', 'runBack', 'strafeLeft', 'strafeRight',
   'blockIdle', 'aimIdle', 'fallLoop', 'jumpLoop',
 ]);
 
@@ -26,6 +33,8 @@ const PLAY_FALLBACKS = {
   powerUp: ['taunt', 'cast'],
   dashAttack: ['combo1', 'attack1'],
   airAttack: ['attack1', 'jump'],
+  fire: ['attack1', 'attack'],
+  reload: ['aimIdle', 'idle'],
   running: ['run'],
   walking: ['walk'],
 };
@@ -46,6 +55,10 @@ export class BakedAnimationController {
     this.currentState = 'idle';
     this.currentAction = null;
     this._onFinish = null;
+    this._weaponType = 'greatsword';
+    this._aiming = false;
+
+    director.externalLoco = true;
 
     this.actions = new Map();
     for (const [name, clip] of clips) {
@@ -54,28 +67,63 @@ export class BakedAnimationController {
       if (name === 'running') this.actions.set('run', action);
       if (name === 'walking') this.actions.set('walk', action);
     }
+
+    this._locoBlend = new DirLocoBlend((key) => this.actions.get(key) || null);
+    this._locoBlend.setSingle('idle', 0);
   }
 
   registerActions() {}
 
+  setWeaponType(weaponType) {
+    this._weaponType = weaponType || 'greatsword';
+  }
+
   setGaitTarget(moving, sprinting) {
-    this.director.setGaitTarget(moving, sprinting);
+    this.setDirLocomotion(0, moving ? -1 : 0, moving ? 0.7 : 0, sprinting, false);
+  }
+
+  setGaitFromSpeed(speed01, sprinting) {
+    const moving = speed01 >= 0.05;
+    this.setDirLocomotion(0, moving ? -1 : 0, speed01, sprinting, this._aiming);
   }
 
   /**
-   * Speed-aware locomotion — maps movement speed to gait bands (GRUDGE /world pattern).
-   * @param {number} speed01 0..1 normalized current speed
-   * @param {boolean} sprinting shift held
+   * 8-direction locomotion in character-local frame (lx strafe+, lz forward+).
    */
-  setGaitFromSpeed(speed01, sprinting) {
-    const s = Math.min(1, Math.max(0, speed01));
-    if (s < 0.05) {
-      this.director.setGaitScalar(0);
-    } else if (sprinting) {
-      this.director.setGaitScalar(1);
+  setDirLocomotion(lx, lz, speed01, sprinting, aiming, fade = 0.12) {
+    this._aiming = !!aiming;
+    const moving = Math.abs(lx) > 0.01 || Math.abs(lz) > 0.01 || speed01 > 0.05;
+    const dir8 = classifyDir(lx, lz);
+    const wt = this._weaponType;
+
+    if (!moving) {
+      const idleKey = resolveBakedLocoClipKey('idle', dir8, wt);
+      this._locoBlend.setSingle(idleKey, fade);
+      this._locoBlend.update(0);
+      return;
+    }
+
+    this._locoBlend.setBlend(
+      dir8,
+      (band, d) => resolveBakedLocoClipKey(band, d, wt),
+      fade,
+    );
+    const gait = gaitTargetWhileAiming(
+      computeGaitTarget(speed01, sprinting, moving),
+      aiming,
+      wt,
+    );
+    this._locoBlend.setGaitTarget(gait);
+    this._locoBlend.setAiming(aiming);
+    if (moving) {
+      const s = Math.min(1, Math.max(0, speed01));
+      this._locoBlend.setBandTimeScales({
+        walk: 0.72 + s * 0.45,
+        run: 0.88 + s * 0.42,
+        sprint: 1.05 + s * 0.2,
+      });
     } else {
-      // walk@0.34 → run@0.7 across locomotion range
-      this.director.setGaitScalar(0.34 + s * 0.36);
+      this._locoBlend.setBandTimeScales({ idle: 1, walk: 1, run: 1, sprint: 1 });
     }
   }
 
@@ -109,16 +157,19 @@ export class BakedAnimationController {
     const fade = opts.fadeDuration ?? 0.12;
     this._onFinish = opts.onFinish ?? null;
 
+    const shotOpts = {
+      fade,
+      timeScale: opts.speed ?? 1,
+      onEnd: () => {
+        if (this._onFinish) this._onFinish();
+      },
+    };
     if (isLoop) {
       this.director.playLoop(resolved.clip, fade);
+    } else if (this.director.busy) {
+      this.director.requestOneShot(resolved.clip, shotOpts);
     } else {
-      this.director.playOneShot(resolved.clip, {
-        fade,
-        timeScale: opts.speed ?? 1,
-        onEnd: () => {
-          if (this._onFinish) this._onFinish();
-        },
-      });
+      this.director.playOneShot(resolved.clip, shotOpts);
     }
 
     this.currentState = stateName;
@@ -131,12 +182,15 @@ export class BakedAnimationController {
   }
 
   update(dt) {
+    const locoScale = 1 - (this.director.overlayInf || 0);
+    this._locoBlend.setLocoScale?.(locoScale);
+    this._locoBlend.update(dt);
     this.director.update(dt);
   }
 
   stop() {
     this.director.clearOverlay(0.1);
-    this.director.primeLocomotion();
+    this._locoBlend.setSingle('idle', 0.1);
     this.currentAction = null;
     this.currentState = 'idle';
   }
@@ -148,8 +202,10 @@ export class BakedAnimationController {
   }
 }
 
-export function createBakedController(mixer, root, locoClips, allClips) {
+export function createBakedController(mixer, root, locoClips, allClips, weaponType = 'greatsword') {
   const director = new AnimationDirector(mixer, locoClips);
-  director.primeLocomotion();
-  return new BakedAnimationController(mixer, root, director, allClips);
+  director.externalLoco = true;
+  const ctrl = new BakedAnimationController(mixer, root, director, allClips);
+  ctrl.setWeaponType(weaponType);
+  return ctrl;
 }

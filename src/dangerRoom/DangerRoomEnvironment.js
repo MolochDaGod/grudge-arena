@@ -4,6 +4,7 @@
 
 import * as THREE from "three";
 import { ROOM_PRESETS } from "./roomPresets.js";
+import { loadColosseumMap } from "./ColosseumMap.js";
 
 const HALF = 16;
 const HEIGHT = 18;
@@ -32,6 +33,7 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
   const preset = ROOM_PRESETS[presetId] || ROOM_PRESETS.holo;
   const root = new THREE.Group();
   root.name = "danger-room";
+  const isColosseum = presetId === "colosseum";
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(HALF * 2, HALF * 2),
@@ -99,8 +101,9 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
     obstacleMeshes.push(pillar);
   }
 
-  // DJ alcove + neon frame (dangerroom.puter.site)
+  // DJ alcove + neon frame (hidden for colosseum — puter.site parity)
   const djGroup = new THREE.Group();
+  djGroup.visible = !isColosseum;
   djGroup.position.set(0, 0, HALF);
   const djFloor = new THREE.Mesh(
     new THREE.BoxGeometry(8, 0.3, DJ_DEPTH + 0.4),
@@ -182,13 +185,33 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
   scene.background = new THREE.Color(preset.background);
   scene.fog = new THREE.Fog(preset.fogColor, preset.fogNear, preset.fogFar);
 
-  return {
+  const env = {
     root,
     preset,
+    presetId,
     terrainMeshes: [floor],
     obstacleMeshes,
     clampRadius: preset.clampRadius,
+    colosseumRoot: null,
+    showDjBooth: !isColosseum,
   };
+
+  if (isColosseum) {
+    loadColosseumMap(scene)
+      .then((map) => {
+        env.colosseumRoot = map.root;
+        env.terrainMeshes = map.terrainMeshes.length ? map.terrainMeshes : [floor];
+        env.obstacleMeshes = [...obstacleMeshes, ...map.obstacleMeshes];
+        backWall.visible = false;
+        leftWall.visible = false;
+        rightWall.visible = false;
+        ceiling.visible = false;
+        floor.visible = false;
+      })
+      .catch((err) => console.warn("[danger] colosseum map:", err.message));
+  }
+
+  return env;
 }
 
 /** Swap atmosphere when user cycles presets mid-session. */

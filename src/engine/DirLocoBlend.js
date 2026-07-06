@@ -54,6 +54,26 @@ export class DirLocoBlend {
     this.singleKey = null;
     this.singleAction = null;
     this.mode = "single";
+    this.locoScale = 1;
+    this.bandTimeScale = { idle: 1, walk: 1, run: 1, sprint: 1 };
+  }
+
+  setLocoScale(scale) {
+    this.locoScale = Math.min(1, Math.max(0, scale));
+  }
+
+  /** Nudge walk/run/sprint playback speed to reduce foot sliding vs physics speed. */
+  setBandTimeScales(scales = {}) {
+    for (const { band } of BANDS) {
+      const ts = scales[band];
+      if (typeof ts !== "number" || !Number.isFinite(ts)) continue;
+      this.bandTimeScale[band] = Math.min(1.6, Math.max(0.55, ts));
+      const action = this.bandActions[band];
+      if (action) action.timeScale = this.bandTimeScale[band];
+    }
+    if (this.singleAction && this.mode === "single") {
+      this.singleAction.timeScale = this.bandTimeScale.idle;
+    }
   }
 
   setSingle(key, fade = 0.18) {
@@ -92,6 +112,7 @@ export class DirLocoBlend {
       const prev = this.bandActions[band];
       action.enabled = true;
       action.setEffectiveWeight(0);
+      action.timeScale = this.bandTimeScale[band] ?? 1;
       action.play();
       if (prev && prev !== action) prev.fadeOut(fade);
       this.bandActions[band] = action;
@@ -126,7 +147,7 @@ export class DirLocoBlend {
     }
     for (const { band } of BANDS) {
       const action = this.bandActions[band];
-      if (action) action.setEffectiveWeight(w[band]);
+      if (action) action.setEffectiveWeight(w[band] * this.locoScale);
     }
   }
 

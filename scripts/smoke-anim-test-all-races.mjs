@@ -31,12 +31,22 @@ for (const race of RACES) {
   const clipsMatch = log.match(/baked clips: (\d+)/);
   const clips = clipsMatch ? Number(clipsMatch[1]) : 0;
   const fail = log.includes("FAIL:");
+  const scaleMatch = log.match(
+    /scale: target=([\d.]+)m measured=([\d.]+)m.*\/(bones|body-bbox)\)/,
+  );
+  const targetH = scaleMatch ? Number(scaleMatch[1]) : 0;
+  const measuredH = scaleMatch ? Number(scaleMatch[2]) : 0;
+  const scaleOk =
+    scaleMatch?.[3] === "bones" &&
+    targetH > 0 &&
+    Math.abs(measuredH - targetH) / targetH <= 0.18;
 
   results.push({
     race,
-    ok: !fail && textured > 20 && textured === total && clips >= 10,
+    ok: !fail && textured > 20 && textured === total && clips >= 10 && scaleOk,
     textured: `${textured}/${total}`,
     clips,
+    scale: scaleMatch ? `${measuredH.toFixed(2)}/${targetH.toFixed(2)}m` : "—",
     fail: fail ? log.split("FAIL:")[1]?.trim().split("\n")[0] : null,
   });
 }
@@ -45,7 +55,7 @@ await browser.close();
 
 for (const r of results) {
   console.log(
-    `${r.ok ? "✓" : "✗"} ${r.race.padEnd(10)} materials=${r.textured} clips=${r.clips}${r.fail ? ` FAIL: ${r.fail}` : ""}`,
+    `${r.ok ? "✓" : "✗"} ${r.race.padEnd(10)} materials=${r.textured} clips=${r.clips} scale=${r.scale}${r.fail ? ` FAIL: ${r.fail}` : ""}`,
   );
 }
 

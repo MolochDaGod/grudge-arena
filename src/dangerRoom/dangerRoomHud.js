@@ -25,6 +25,8 @@ function buildShell(presetName) {
   return `
     <div class="dr-mode-badge">⚡ Danger Room · ${presetName}</div>
     <div class="dr-aim-layer" aria-hidden="true">
+      <div class="dr-softlock-zone" id="dr-softlock-zone" hidden></div>
+      <div class="dr-target-pip" id="dr-target-pip" hidden></div>
       <div class="dr-crosshair dr-crosshair-cursor" id="dr-crosshair">
         <span class="dr-ch-magnet-ring" id="dr-ch-magnet"></span>
         <span class="dr-ch-range" id="dr-ch-range"></span>
@@ -45,8 +47,9 @@ function buildShell(presetName) {
     </div>
     <div class="dr-controls-hint">
       <div><kbd>W/S</kbd> Move <kbd>A/D</kbd> Turn <kbd>Q/E</kbd> Strafe</div>
-      <div><kbd>RMB</kbd> Attack <kbd>1-4</kbd> Skills <kbd>Ctrl</kbd> Roll <kbd>V</kbd> Block</div>
-      <div><kbd>G</kbd> Gear · <kbd>[</kbd><kbd>]</kbd> Room · <kbd>Tab</kbd> Target</div>
+      <div><kbd>Tab</kbd> Target <kbd>RMB</kbd> Aim/Attack <kbd>LMB</kbd> Fire <kbd>1-4</kbd> Skills</div>
+      <div><kbd>G</kbd> Gear · <kbd>M</kbd> Menu · <kbd>Hold F</kbd> Weapons · <kbd>Tab</kbd> Target</div>
+      <div><kbd>[</kbd><kbd>]</kbd> Room preset · <kbd>R</kbd> Reload (bow/rifle)</div>
     </div>
     <button type="button" class="dr-exit-btn" id="dr-exit-btn">Exit Danger Room</button>
   `;
@@ -75,6 +78,8 @@ export function mountDangerRoomHud() {
     const el = document.getElementById(id);
     if (el) el.style.display = "none";
   }
+  const targetFrame = document.getElementById("target-frame");
+  if (targetFrame) targetFrame.classList.add("dr-target-frame");
   const hints = document.querySelector(".fkey-hints");
   if (hints) hints.style.display = "none";
 
@@ -128,6 +133,8 @@ export function updateDangerHud(opts = {}) {
   const comboBadge = document.getElementById("dr-combo-badge");
   const comboN = document.getElementById("dr-combo-n");
   const rangeRing = document.getElementById("dr-ch-range");
+  const softZone = document.getElementById("dr-softlock-zone");
+  const targetPip = document.getElementById("dr-target-pip");
 
   if (opts.motion && motion) motion.textContent = opts.motion;
   if (opts.weapon && weapon) weapon.textContent = opts.weapon;
@@ -186,6 +193,26 @@ export function updateDangerHud(opts = {}) {
 
   if (rangeRing && opts.rangeState) {
     rangeRing.className = `dr-ch-range dr-ch-range-${opts.rangeState}`;
+  }
+
+  const sl = opts.softLock;
+  if (softZone && sl?.active && sl.zoneW > 0) {
+    softZone.hidden = false;
+    softZone.style.left = `${sl.zoneX}px`;
+    softZone.style.top = `${sl.zoneY}px`;
+    softZone.style.width = `${sl.zoneW}px`;
+    softZone.style.height = `${sl.zoneH}px`;
+    softZone.classList.toggle("dr-softlock-hard", !!sl.hardLock);
+  } else if (softZone) {
+    softZone.hidden = true;
+  }
+
+  if (targetPip && sl?.active && sl.targetX != null) {
+    targetPip.hidden = false;
+    targetPip.style.left = `${sl.targetX}px`;
+    targetPip.style.top = `${sl.targetY}px`;
+  } else if (targetPip) {
+    targetPip.hidden = true;
   }
 }
 

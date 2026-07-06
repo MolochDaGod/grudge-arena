@@ -33,6 +33,43 @@ const ATTACK_COOLDOWN = 1.5; // base seconds between attacks
 const ABILITY_CHECK_INTERVAL = 2.0;
 const MOVE_SPEED = 4;
 
+/** World XZ → character-local locomotion for baked DirLocoBlend pipeline. */
+function driveUnitLocomotion(unit, worldDir, speedScalar, sprinting = false) {
+  const ctrl = unit?.controller;
+  if (!ctrl) return;
+
+  const maxSpeed =
+    unit.entity?.getComponent?.("Movement")?.maxSpeed ||
+    unit.weaponDef?.moveSpeed ||
+    5;
+  const speed01 = Math.min(1, Math.max(0, speedScalar / maxSpeed));
+
+  if (speed01 < 0.05 || !worldDir || worldDir.lengthSq() < 1e-6) {
+    if (ctrl.setDirLocomotion) {
+      ctrl.setDirLocomotion(0, 0, 0, false, false);
+    } else if (ctrl.setGaitFromSpeed) {
+      ctrl.setGaitFromSpeed(0, false);
+    } else {
+      ctrl.play("idle");
+    }
+    return;
+  }
+
+  const dir = worldDir.clone().normalize();
+  if (ctrl.setDirLocomotion) {
+    const yaw = unit.mesh.rotation.y;
+    const sin = Math.sin(yaw);
+    const cos = Math.cos(yaw);
+    const lx = dir.x * cos - dir.z * sin;
+    const lz = dir.x * sin + dir.z * cos;
+    ctrl.setDirLocomotion(lx, lz, speed01, sprinting, false);
+  } else if (ctrl.setGaitFromSpeed) {
+    ctrl.setGaitFromSpeed(speed01, sprinting);
+  } else {
+    ctrl.play(sprinting ? "run" : "walk");
+  }
+}
+
 export class ArenaAI {
   constructor() {
     /** All AI-controlled units */
@@ -99,10 +136,7 @@ export class ArenaAI {
         continue;
       }
       if (!isCombatActive) {
-        // During countdown, just idle
-        if (unit.controller?.currentState !== 'idle') {
-          unit.controller?.play('idle');
-        }
+        driveUnitLocomotion(unit, null, 0);
         continue;
       }
 
@@ -134,7 +168,7 @@ export class ArenaAI {
         const target = this.findNearestEnemy(unit, allUnits);
         if (!target) {
           unit.aiState = AI_STATES.IDLE;
-          unit.controller?.play('idle');
+          driveUnitLocomotion(unit, null, 0);
           return;
         }
         unit.aiTarget = target;
@@ -194,8 +228,7 @@ export class ArenaAI {
           unit.aiTarget.mesh.position.z
         );
 
-        // Play run animation
-        unit.controller?.play('run');
+        driveUnitLocomotion(unit, moveDir, MOVE_SPEED, dist > weaponRange * 2);
         break;
       }
 
@@ -259,8 +292,7 @@ export class ArenaAI {
           this._performAttack(unit);
           unit.aiAttackTimer = ATTACK_COOLDOWN / (unit.weaponDef?.attackSpeed || 1);
         } else {
-          // Idle between attacks
-          unit.controller?.play('idle');
+          driveUnitLocomotion(unit, null, 0);
         }
         break;
       }
@@ -283,7 +315,7 @@ export class ArenaAI {
           .normalize();
         unit.mesh.position.addScaledVector(awayDir, MOVE_SPEED * 0.8 * delta);
         this._clampToArena(unit.mesh);
-        unit.controller?.play('run');
+        driveUnitLocomotion(unit, awayDir, MOVE_SPEED * 0.8, true);
 
         // Try defensive ability (block, heal, etc.)
         if (unit.aiAbilityTimer <= 0) {

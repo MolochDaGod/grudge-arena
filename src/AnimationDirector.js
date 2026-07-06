@@ -40,6 +40,8 @@ export class AnimationDirector {
     this.overlayEnd = null;
     this.overlayClones = new Map();
     this.buffered = null;
+    /** When true, locomotion weights are driven externally (DirLocoBlend). */
+    this.externalLoco = false;
 
     const mk = (clip) => {
       const a = mixer.clipAction(clip);
@@ -202,15 +204,20 @@ export class AnimationDirector {
     }
 
     const locoScale = 1 - this.overlayInf;
-    let locoSum = 0;
-    for (const { state } of BANDS) {
-      const bandWeight = w[state] * locoScale;
-      this.loco[state].setEffectiveWeight(bandWeight);
-      locoSum += bandWeight;
-    }
-
-    if (locoSum < LOCO_WEIGHT_FLOOR && !this.overlay) {
-      this.loco.idle.setEffectiveWeight(Math.max(LOCO_WEIGHT_FLOOR, locoScale));
+    if (this.externalLoco) {
+      for (const { state } of BANDS) {
+        this.loco[state].setEffectiveWeight(0);
+      }
+    } else {
+      let locoSum = 0;
+      for (const { state } of BANDS) {
+        const bandWeight = w[state] * locoScale;
+        this.loco[state].setEffectiveWeight(bandWeight);
+        locoSum += bandWeight;
+      }
+      if (locoSum < LOCO_WEIGHT_FLOOR && !this.overlay) {
+        this.loco.idle.setEffectiveWeight(Math.max(LOCO_WEIGHT_FLOOR, locoScale));
+      }
     }
     if (this.overlay) this.overlay.setEffectiveWeight(this.overlayInf);
 

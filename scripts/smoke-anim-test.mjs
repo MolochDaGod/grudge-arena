@@ -33,12 +33,25 @@ try {
   const texturedCount = matMatch ? Number(matMatch[1]) : 0;
   const totalMats = matMatch ? Number(matMatch[2]) : 0;
 
+  const scaleMatch = panel.log.match(
+    /scale: target=([\d.]+)m measured=([\d.]+)m.*\(.*\/(bones|body-bbox)\)/,
+  );
+  const targetH = scaleMatch ? Number(scaleMatch[1]) : 0;
+  const measuredH = scaleMatch ? Number(scaleMatch[2]) : 0;
+  const scaleMethod = scaleMatch?.[3] || "";
+  const scaleOk =
+    targetH > 0 &&
+    measuredH > 0 &&
+    scaleMethod === "bones" &&
+    Math.abs(measuredH - targetH) / targetH <= 0.15;
+
   const checks = {
     viteBundle: panel.scriptSrc.some((s) => s.includes("animTest")),
     bakedPipeline: panel.log.includes("baked"),
     textured: texturedCount > 0 && texturedCount === totalMats && totalMats >= 20,
     noFail: !panel.log.includes("FAIL:"),
     clipsLoaded: /baked clips: \d+/.test(panel.log),
+    scaleSane: scaleOk,
   };
 
   console.log("status:", panel.status);

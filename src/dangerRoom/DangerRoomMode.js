@@ -24,6 +24,15 @@ import {
   syncGearCatalog,
   applyLiveD1ToEquipment,
 } from "./dangerRoomLoadoutPanel.js";
+import { getDangerRoomMusic, disposeDangerRoomMusic } from "./DangerRoomMusic.js";
+import { createDjBoothRig } from "./DjBoothRig.js";
+import { mountDangerRoomDock, unmountDangerRoomDock } from "./dangerRoomDock.js";
+import {
+  setupWeaponRadialInput,
+  teardownWeaponRadialInput,
+} from "./weaponRadial.js";
+import { updateShooter, resetShooterAmmo } from "./ShooterSystem.js";
+import { setD1Weapon } from "../d1LoadoutStore.js";
 import { getD1LoadoutState, getD1LoadoutForRace } from "../d1LoadoutStore.js";
 import { getWeaponFeel, resolveMotionLabel } from "../engine/WeaponFeel.js";
 import {
@@ -95,10 +104,33 @@ export function bootstrapDangerRoom(arena) {
   arena._terrainMeshes = arena._dangerEnv.terrainMeshes;
 
   mountDangerRoomHud();
+  mountDangerRoomDock({
+    onWeaponPick: (weapon) => {
+      setD1Weapon(weapon);
+      arena.reloadDangerPlayer?.();
+    },
+  });
   mountDangerRoomLoadoutPanel({
     onApply: (opts) => arena.reloadDangerPlayer?.(opts),
     getEquipment: () => arena.playerUnit?.equipment,
   });
+  resetShooterAmmo();
+  setupWeaponRadialInput((weapon) => {
+    setD1Weapon(weapon);
+    arena.reloadDangerPlayer?.();
+  });
+
+  const music = getDangerRoomMusic();
+  music.setEnabled(state.musicEnabled);
+  music.setVolume(state.musicVolume);
+  const resumeMusic = () => void music.resume();
+  window.addEventListener("pointerdown", resumeMusic, { once: true });
+  window.addEventListener("keydown", resumeMusic, { once: true });
+  arena._dangerMusicResume = resumeMusic;
+
+  if (arena._dangerEnv?.showDjBooth !== false) {
+    arena._djBooth = createDjBoothRig(arena.scene);
+  }
   if (arena.playerUnit?.equipment) {
     syncGearCatalog(arena.playerUnit.equipment);
   }
@@ -107,19 +139,32 @@ export function bootstrapDangerRoom(arena) {
 
   arena._dangerUnsub = subscribeDangerRoom(() => {
     const next = getDangerRoomState();
+    getDangerRoomMusic().setEnabled(next.musicEnabled);
+    getDangerRoomMusic().setVolume(next.musicVolume);
     arena._dangerEnv = applyDangerRoomPreset(arena.scene, arena._dangerEnv?.root, next.presetId);
     if (arena._dangerEnv) {
       arena._dangerClampRadius = arena._dangerEnv.clampRadius;
       arena._obstacleMeshes = arena._dangerEnv.obstacleMeshes;
       arena._terrainMeshes = arena._dangerEnv.terrainMeshes;
       arena.orbitCamera?.setCollisionMeshes?.(arena._obstacleMeshes);
+      if (next.presetId === "colosseum") {
+        arena._djBooth?.dispose?.();
+        arena._djBooth = null;
+      } else if (!arena._djBooth) {
+        arena._djBooth = createDjBoothRig(arena.scene);
+      }
     }
   });
 }
 
 export function teardownDangerRoom(arena) {
   unmountDangerRoomLoadoutPanel();
+  unmountDangerRoomDock();
   unmountDangerRoomHud();
+  teardownWeaponRadialInput();
+  arena._djBooth?.dispose?.();
+  arena._djBooth = null;
+  disposeDangerRoomMusic();
   arena._dangerUnsub?.();
   arena._dangerUnsub = null;
   setDangerMode(false);
@@ -156,6 +201,15 @@ function applyCameraAssist(arena, dt, weaponType, aiming) {
   const yaw = Math.atan2(_toTarget.x, _toTarget.z);
   const pitch = Math.asin(Math.max(-1, Math.min(1, _toTarget.y)));
   cam.setCameraAssist(yaw, pitch, rate);
+}
+
+/** Per-frame danger room systems (music, DJ, shooter, HUD). */
+export function tickDangerRoomSystems(arena, delta = 0.016) {
+  getDangerRoomMusic().setIntensityTarget(0.35);
+  getDangerRoomMusic().update(delta);
+  arena._djBooth?.update?.(delta);
+  updateShooter(arena, delta);
+  tickDangerRoomHud(arena, delta);
 }
 
 /** Per-frame danger room HUD updates. */

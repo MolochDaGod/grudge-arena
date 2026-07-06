@@ -1161,6 +1161,7 @@ export async function loadRaceModel(race) {
   // Guaranteed color fallback — runs even when texture atlas is unavailable
   applyFactionBodyColor(scene, race);
 
+  resetSkeletonBindPose(scene);
   // Normalise to 1.75 m using bounding box Y, regardless of GLB export scale.
   // WK/BRB/ELF/DWF/ORC/UD GLBs ship with root scale ~4.26, yielding 7.45 m
   // world-height — this corrects that to the expected humanoid size.
@@ -1888,6 +1889,7 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     }
   });
 
+  resetSkeletonBindPose(scene);
   const metrics = await applyCharacterScale(scene, race, {
     log: (m) => console.log(m.replace("[characterScale]", "[modelLoader]")),
   });
@@ -1918,6 +1920,7 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     scene,
     { idle, walk, run, sprint },
     clips,
+    resolvedWeapon,
   );
 
   const isD1 = isD1ModularScene(scene);
@@ -1947,6 +1950,8 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
 
   const texPatched = await applyRaceTextureFix(scene, race);
   if (texPatched === 0) applyFactionBodyColor(scene, race);
+
+  regroundCharacter(scene, race);
 
   const matAudit = auditCharacterMaterials(scene);
   const tex = textureHealth(matAudit);

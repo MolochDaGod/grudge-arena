@@ -61,11 +61,29 @@ const gameReady =
 const humanTextured = logs.some((l) =>
   /human: applied atlas texture to \d+ material slots/i.test(l),
 );
-const humanScaled = logs.some(
-  (l) =>
-    /\[modelLoader\].*target=.*measured=.*scale=/.test(l) ||
-    /normalizeCharacterScale: height=/.test(l),
+const scaleLog = logs.find((l) =>
+  /\[modelLoader\].*target=.*measured=.*bones=/.test(l),
 );
+const humanScaled = !!scaleLog;
+const scaleSane = (() => {
+  if (!scaleLog) return false;
+  const m = scaleLog.match(
+    /target=([\d.]+)m measured=([\d.]+)m.*bones=([\d.]+).*bbox=([\d.]+)/,
+  );
+  if (!m) return humanScaled;
+  const target = Number(m[1]);
+  const measured = Number(m[2]);
+  const bones = Number(m[3]);
+  const bbox = Number(m[4]);
+  return (
+    target > 0 &&
+    measured > 0 &&
+    bones > 0 &&
+    Math.abs(measured - target) / target <= 0.12 &&
+    Math.abs(bones - target) / target <= 0.12 &&
+    bbox < Math.max(4, measured * 2.5)
+  );
+})();
 /** Danger room uses CDN GLB + baked Bip001 clips (not legacy Mixamo remap). */
 const bakedGrudge6 = logs.some((l) =>
   /baked-grudge6 ready:.*mesh=\/cdn\/assets\/characters\//.test(l),
@@ -82,6 +100,7 @@ const checks = {
   gameReady,
   humanTextured,
   humanScaled,
+  scaleSane,
   bakedGrudge6,
   playerBaked,
   bakedUnitsAll4: bakedUnits >= 4,

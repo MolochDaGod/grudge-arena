@@ -65,6 +65,82 @@ export const WeaponToBakedPack = {
   unarmed: 'unarmed',
 };
 
+/** Directional locomotion rel paths per baked pack (4-way cardinal). */
+export const BAKED_DIR_RELS = {
+  unarmed: {
+    walkBack: 'locomotion/walking',
+    runBack: 'locomotion/running',
+    strafeLeft: 'locomotion/walking',
+    strafeRight: 'locomotion/walking',
+  },
+  magic: {
+    walkBack: 'magic/standing walk back',
+    runBack: 'magic/standing run back',
+    strafeLeft: 'magic/standing walk left',
+    strafeRight: 'magic/standing walk right',
+  },
+  sword_shield: {
+    walkBack: 'sword_shield/sword and shield walk',
+    runBack: 'sword_shield/sword and shield run',
+    strafeLeft: 'sword_shield/sword and shield strafe',
+    strafeRight: 'sword_shield/sword and shield strafe (2)',
+  },
+  longbow: {
+    walkBack: 'longbow/standing walk back',
+    runBack: 'longbow/standing run back',
+    strafeLeft: 'longbow/standing walk left',
+    strafeRight: 'longbow/standing walk right',
+  },
+  rifle: {
+    walkBack: 'rifle/walk backward',
+    runBack: 'rifle/run backward',
+    strafeLeft: 'rifle/walk forward',
+    strafeRight: 'rifle/walk forward',
+  },
+  pistol: {
+    walkBack: 'pistol/pistol walk backward',
+    runBack: 'pistol/pistol run backward',
+    strafeLeft: 'pistol/pistol strafe',
+    strafeRight: 'pistol/pistol strafe 2',
+  },
+};
+
+/** Pack-specific combat overlays (fire / reload / aim). */
+export const PACK_COMBAT_EXTRAS = {
+  unarmed: {
+    fire: 'unarmed/punching',
+    reload: 'unarmed/fight_idle',
+    aimIdle: 'unarmed/fight_idle',
+  },
+  magic: {
+    fire: 'magic/standing 1h cast spell 01',
+    reload: 'magic/standing idle',
+    aimIdle: 'magic/standing idle',
+  },
+  sword_shield: {
+    fire: 'sword_shield/sword and shield attack',
+    reload: 'sword_shield/sword and shield idle',
+    aimIdle: 'sword_shield/sword and shield block idle',
+  },
+  longbow: {
+    fire: 'longbow/standing aim recoil',
+    reload: 'longbow/standing aim idle',
+    aimIdle: 'longbow/standing aim idle',
+    draw: 'longbow/standing aim idle 02',
+  },
+  rifle: {
+    fire: 'rifle/firing',
+    fire2: 'rifle/firing 2',
+    reload: 'rifle/reloading',
+    aimIdle: 'rifle/idle',
+  },
+  pistol: {
+    fire: 'pistol/gunplay',
+    reload: 'pistol/pistol reload',
+    aimIdle: 'pistol/pistol idle',
+  },
+};
+
 /** Extra combat clips keyed by FSM / arena state name. */
 export const BAKED_COMBAT_EXTRAS = {
   attack2: 'sword_shield/sword and shield slash',
@@ -77,6 +153,7 @@ export const BAKED_COMBAT_EXTRAS = {
   dodge: 'uploads/locomotion/Jump_From_Wall',
   jump: 'locomotion/jump',
   blockIdle: 'sword_shield/sword and shield block idle',
+  aimIdle: 'longbow/standing aim idle',
   taunt: 'unarmed/taunt',
 };
 
@@ -94,6 +171,32 @@ export class BakedAnimLoadError extends Error {
     this.packName = packName;
     this.missing = missing;
   }
+}
+
+const LOCO_CARDINAL = {
+  forward: { idle: "idle", walk: "walk", run: "run", sprint: "sprint" },
+  backward: { idle: "idle", walk: "walkBack", run: "runBack", sprint: "runBack" },
+  left: { idle: "idle", walk: "strafeLeft", run: "strafeLeft", sprint: "strafeLeft" },
+  right: { idle: "idle", walk: "strafeRight", run: "strafeRight", sprint: "strafeRight" },
+};
+
+/** Map gait band + direction + weapon to a loaded clip registry key. */
+export function resolveBakedLocoClipKey(band, dir, weaponType) {
+  const pack = WeaponToBakedPack[weaponType] || "sword_shield";
+  const cardinal =
+    dir === "back" ? "backward" : dir === "forward" || dir === "backward" || dir === "left" || dir === "right"
+      ? dir
+      : dir?.startsWith("backward") ? "backward"
+      : dir?.startsWith("forward") ? "forward"
+      : dir === "left" || dir === "right" ? dir
+      : "forward";
+  const map = LOCO_CARDINAL[cardinal] || LOCO_CARDINAL.forward;
+  if (band === "sprint") return map.sprint || map.run;
+  return map[band] || map.idle || "idle";
+}
+
+export function animPackForWeapon(weaponType) {
+  return WeaponToBakedPack[weaponType] || "sword_shield";
 }
 
 export function validateBakedLocoClips(clips, weaponType, packName) {
@@ -141,6 +244,16 @@ export async function loadBakedPackClips(weaponType) {
   ]);
 
   for (const [state, rel] of Object.entries(BAKED_COMBAT_EXTRAS)) {
+    if (!rels.has(state)) rels.set(state, rel);
+  }
+
+  const packExtras = PACK_COMBAT_EXTRAS[packName] || {};
+  for (const [state, rel] of Object.entries(packExtras)) {
+    if (!rels.has(state)) rels.set(state, rel);
+  }
+
+  const dirRels = BAKED_DIR_RELS[packName] || BAKED_DIR_RELS.unarmed;
+  for (const [state, rel] of Object.entries(dirRels)) {
     if (!rels.has(state)) rels.set(state, rel);
   }
 

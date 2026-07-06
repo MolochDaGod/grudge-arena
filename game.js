@@ -50,7 +50,7 @@ import {
   getDangerTrainingTeams,
   getDangerSpawnPosition,
   getDangerSpawnFacing,
-  tickDangerRoomHud,
+  tickDangerRoomSystems,
   dangerRoomCycleTarget,
   applyDangerLiveLoadout,
 } from './src/dangerRoom/DangerRoomMode.js';
@@ -61,6 +61,13 @@ import {
 } from './src/d1LoadoutStore.js';
 import { syncGearCatalog } from './src/dangerRoom/dangerRoomLoadoutPanel.js';
 import { setRawMouse } from './src/engine/SoftLockSystem.js';
+import { AbilityQueue } from './src/engine/AbilityQueue.js';
+import {
+  deriveCombatTiming,
+  scaledSwingInterval,
+  scaledCastTime,
+  scaledAbilityCooldown,
+} from './src/engine/CombatStats.js';
 import { getWeaponFeel, skillSfxIndex } from './src/engine/WeaponFeel.js';
 import {
   registerHit,
@@ -137,6 +144,9 @@ class GrudgeArena {
     this._autoAttackTimer = 0;
     this._autoAttackOn = false;
     this._attackSwingIdx = 0;
+    this._abilityQueue = new AbilityQueue();
+    this._queuedAbilityKey = null;
+    this._swingInProgress = false;
     this._bowDrawing = false;
     this._bowDrawTimer = 0;
     this._sabreSlashIndex = 0;
@@ -317,6 +327,9 @@ class GrudgeArena {
         if (this.dangerMode && this._dangerClampRadius) {
           this.playerController.clampRadius = this._dangerClampRadius;
         }
+        this.playerUnit?.controller?.setWeaponType?.(
+          this.playerUnit.resolvedWeapon || this._getWeaponTypeKey?.(),
+        );
         // Wire combat callbacks. RMB toggles auto-attack (WoW-style) —
         // _performAttack is driven by _updateAutoAttack each frame.
         this.playerController.onAttack = (_type) => this._toggleAutoAttack();
@@ -462,6 +475,29 @@ class GrudgeArena {
     if (rect) {
       setRawMouse(rect.left + rect.width * 0.5, rect.top + rect.height * 0.5);
     }
+    if (!this._dangerMouseDown) {
+      this._dangerMouseDown = (e) => {
+        if (e.button === 0 && this.playerController) this.playerController.holdKey._LMB = true;
+      };
+      this._dangerMouseUp = (e) => {
+        if (e.button === 0 && this.playerController) {
+          this.playerController.holdKey._LMB = false;
+          this.playerController.tickKey._LMB = true;
+        }
+      };
+      this._dangerReloadKey = (e) => {
+        if (e.code === "KeyR" && !e.repeat && this.dangerMode) {
+          const wt = this._getWeaponTypeKey?.() ?? "";
+          if (wt === "bow" || wt === "rifle") {
+            import("./src/dangerRoom/ShooterSystem.js").then((m) => m.startReload(wt));
+            this.playerUnit?.controller?.playOnce?.("reload");
+          }
+        }
+      };
+      window.addEventListener("mousedown", this._dangerMouseDown);
+      window.addEventListener("mouseup", this._dangerMouseUp);
+      window.addEventListener("keydown", this._dangerReloadKey);
+    }
   }
 
   _setupScene() {
@@ -577,6 +613,7 @@ class GrudgeArena {
       energyMax:
         100 + (attrs.Dexterity || 0) * 0.8 + (attrs.Agility || 0) * 0.8,
       rageMax: 100 + (attrs.Strength || 0) * 0.6 + (attrs.Endurance || 0) * 0.4,
+      hasteRating: (attrs.Agility || 0) * 0.65 + (attrs.Dexterity || 0) * 0.45,
       cdrMult: ringPerks.has("focus") ? 0.9 : 1,
       damageMult: ringPerks.has("valor") ? 1.08 : 1,
       combatPower: buildConfig?.combatPower || 0,
@@ -654,6 +691,11 @@ class GrudgeArena {
         }
       }
       if (!unitResult) {
+        if (this.dangerMode) {
+          throw new Error(
+            `[arena] baked pipeline required in Danger Room for ${raceId} — legacy Mixamo fallback disabled`,
+          );
+        }
         unitResult = await modelMod.createAnimatedUnit(raceId, comp.weapon, {
           tier: comp.tier || 1,
         });
@@ -835,6 +877,7 @@ class GrudgeArena {
       this.playerController.mesh = mesh;
       this.playerController.animCtrl = unitResult.controller;
       this.playerController.useBakedLoco = !!unitResult.controller?.useBakedLoco;
+      unitResult.controller?.setWeaponType?.(unitResult.resolvedWeapon);
     }
     this.orbitCamera?.setTarget(mesh);
 
@@ -1074,20 +1117,25 @@ class GrudgeArena {
     if (this.playerController) this.playerController.targetYaw = yaw;
   }
 
-  useAbility(key) {
-    if (!this.playerUnit || !this.playerEntity) return;
-    if (this.playerEntity.hasTag("dead")) return;
-    const weapon = this.getCurrentWeapon();
-    const ability = weapon?.abilities[key];
-    if (!ability) return;
+  _getCombatTiming() {
+    const profile = this.playerEntity?.getComponent("BuildProfile");
+    return deriveCombatTiming(profile);
+  }
 
-    // GCD (WoW-style 1.5s shared cooldown)
-    if (this._gcdTimer > 0 && ability.offGCD !== true) return;
+  _refreshGcdDuration() {
+    this._gcdDuration = this._getCombatTiming().gcd;
+  }
 
+  /** Can this ability fire right now (resources, range, CDs — not GCD/cast queue)? */
+  _abilityBlockedReason(key, ability, weapon) {
+    if (!this.playerUnit || !this.playerEntity) return "no_player";
+    if (this.playerEntity.hasTag("dead")) return "dead";
     const as = this.playerEntity.getComponent("AbilityState");
-    if (!as || as.cooldowns[key] > 0) return;
+    if (!as) return "no_state";
+    const profile = this.playerEntity.getComponent("BuildProfile");
+    const cd = as.cooldowns[key] || 0;
+    if (cd > 0) return "ability_cd";
 
-    // Range check vs. current target (WoW: "Out of range" fail)
     const target = this.targeting?.currentTarget;
     const needsTarget =
       ability.range !== undefined || ability.requiresTarget === true;
@@ -1097,37 +1145,133 @@ class GrudgeArena {
         target.team === this.playerUnit.team ||
         target.entity?.hasTag("dead")
       )
-        return;
+        return "no_target";
       const range = ability.range ?? weapon.range ?? 5;
-      const dist = this.playerUnit.mesh.position.distanceTo(
-        target.mesh.position,
-      );
-      if (dist > range + 1) return;
+      const dist = this.playerUnit.mesh.position.distanceTo(target.mesh.position);
+      if (dist > range + 1) return "out_of_range";
     }
 
     const res = this.playerEntity.getComponent("Resources");
     if (ability.cost && ability.costType && res) {
       const pool = res[ability.costType];
-      if (pool && pool.current < ability.cost) return;
+      if (pool && pool.current < ability.cost) return "no_resource";
+    }
+    return null;
+  }
+
+  _canFireAbilityNow(key, ability, weapon) {
+    const block = this._abilityBlockedReason(key, ability, weapon);
+    if (block) return false;
+    if (this._casting) return false;
+    if (this._gcdTimer > 0 && ability.offGCD !== true) return false;
+    return true;
+  }
+
+  _canQueueAbility(key, ability, weapon) {
+    if (this._abilityBlockedReason(key, ability, weapon)) return false;
+    if (ability.offGCD === true) return false;
+    return this._casting || this._gcdTimer > 0;
+  }
+
+  _setQueuedAbility(key) {
+    if (!this._abilityQueue) this._abilityQueue = new AbilityQueue();
+    this._abilityQueue.queue(key);
+    this._queuedAbilityKey = key;
+    this._updateAbilityQueueUI();
+  }
+
+  _clearQueuedAbility() {
+    this._abilityQueue?.clear();
+    this._queuedAbilityKey = null;
+    this._updateAbilityQueueUI();
+  }
+
+  _updateAbilityQueueUI() {
+    const bar = document.getElementById("abilityBar");
+    if (!bar) return;
+    bar.querySelectorAll(".ability-slot").forEach((slot) => {
+      slot.classList.toggle("ability-queued", slot.dataset.key === this._queuedAbilityKey);
+    });
+    const gcdEl = document.getElementById("gcd-indicator");
+    if (gcdEl) {
+      const pct = this._gcdTimer > 0
+        ? Math.min(100, (this._gcdTimer / (this._gcdDuration || 1.5)) * 100)
+        : 0;
+      gcdEl.style.setProperty("--gcd-pct", `${pct}%`);
+      gcdEl.classList.toggle("gcd-active", this._gcdTimer > 0.02);
+    }
+  }
+
+  _processAbilityQueue() {
+    if (!this._abilityQueue?.peek()) return;
+    if (this._abilityQueue.isStale()) {
+      this._clearQueuedAbility();
+      return;
+    }
+    const key = this._abilityQueue.peek();
+    const weapon = this.getCurrentWeapon();
+    const ability = weapon?.abilities[key];
+    if (!ability) {
+      this._clearQueuedAbility();
+      return;
+    }
+    if (this._canFireAbilityNow(key, ability, weapon)) {
+      this._abilityQueue.consume();
+      this._queuedAbilityKey = null;
+      this._fireAbility(key, ability, weapon);
+      this._updateAbilityQueueUI();
+    }
+  }
+
+  useAbility(key) {
+    const weapon = this.getCurrentWeapon();
+    const ability = weapon?.abilities[key];
+    if (!ability) return;
+
+    if (this._canFireAbilityNow(key, ability, weapon)) {
+      this._clearQueuedAbility();
+      this._fireAbility(key, ability, weapon);
+      return;
+    }
+
+    if (this._canQueueAbility(key, ability, weapon)) {
+      this._setQueuedAbility(key);
+    }
+  }
+
+  _fireAbility(key, ability, weapon) {
+    if (!this.playerUnit || !this.playerEntity) return;
+    const as = this.playerEntity.getComponent("AbilityState");
+    const profile = this.playerEntity.getComponent("BuildProfile");
+    const timing = this._getCombatTiming();
+    const target = this.targeting?.currentTarget;
+
+    const res = this.playerEntity.getComponent("Resources");
+    if (ability.cost && ability.costType && res) {
+      const pool = res[ability.costType];
       if (pool) pool.current -= ability.cost;
     }
 
-    // Face target before animating
-    if (target && target.team !== this.playerUnit.team)
-      this._faceTarget(target);
+    if (target && target.team !== this.playerUnit.team) this._faceTarget(target);
 
-    as.cooldowns[key] = ability.cooldown;
-    if (ability.offGCD !== true) this._gcdTimer = this._gcdDuration;
+    as.cooldowns[key] = scaledAbilityCooldown(
+      ability.cooldown,
+      profile?.cdrMult ?? 1,
+    );
+    if (ability.offGCD !== true) {
+      this._gcdTimer = timing.gcd;
+      this._refreshGcdDuration();
+    }
 
     const weaponType = this._getWeaponTypeKey();
     const feel = getWeaponFeel(weaponType);
-    const animSpeed = feel.skillAnimSpeed ?? 1.0;
+    const animSpeed = (feel.skillAnimSpeed ?? 1.0) * timing.haste;
     const ctrl = this.playerUnit.controller;
 
     flashAbilityUsed(key);
     this._playSkillSfx(weaponType, key);
 
-    const castTime = ability.castTime ?? 0;
+    const castTime = scaledCastTime(ability.castTime ?? 0, timing);
     const selfCastEffects = new Set(["meteor"]);
     if (castTime > 0 && !selfCastEffects.has(ability.effect)) {
       this._casting = true;
@@ -1135,12 +1279,14 @@ class GrudgeArena {
       this.gameTimers.add(castTime, () => {
         this._casting = false;
         this._executeAbility(ability);
+        this._processAbilityQueue();
       });
     } else {
       if (ctrl) ctrl.playOnce(this._getSkillAnim(ability), animSpeed);
       this._executeAbility(ability);
     }
     this._updateUI();
+    this._updateAbilityQueueUI();
   }
 
   /**
@@ -1184,6 +1330,9 @@ class GrudgeArena {
 
   _executeAbility(ability) {
     if (!this.playerUnit) return;
+    const profile = this.playerEntity?.getComponent("BuildProfile");
+    const dmgMult = profile?.damageMult ?? 1;
+    if (ability.damage) ability = { ...ability, damage: ability.damage * dmgMult };
     const mesh = this.playerUnit.mesh;
     const pos  = mesh.position.clone();
     const fwd  = new THREE.Vector3(0, 0, -1).applyQuaternion(mesh.quaternion);
@@ -1487,6 +1636,7 @@ class GrudgeArena {
    */
   _performAttack() {
     if (!this.playerUnit || this.playerEntity?.hasTag("dead")) return;
+    if (this._casting || this._swingInProgress) return;
     const weapon = this.getCurrentWeapon();
     const mesh = this.playerUnit.mesh;
     const ctrl = this.playerUnit.controller;
@@ -1494,7 +1644,10 @@ class GrudgeArena {
 
     const weaponType = this._getWeaponTypeKey();
     const feel = getWeaponFeel(weaponType);
-    const animSpeed = feel.attackAnimSpeed ?? 1.2;
+    const timing = this._getCombatTiming();
+    const animSpeed = (feel.attackAnimSpeed ?? 1.2) * timing.haste;
+    const profile = this.playerEntity?.getComponent("BuildProfile");
+    const dmgMult = profile?.damageMult ?? 1;
 
     const target = this.targeting?.currentTarget;
     const validTarget =
@@ -1525,6 +1678,9 @@ class GrudgeArena {
       ? weapon.attackAnims
       : ["attack1", "attack2", "attack3"];
     this._attackSwingIdx = (this._attackSwingIdx + 1) % attacks.length;
+    this._swingInProgress = true;
+    const swingDur = scaledSwingInterval(weapon.attackSpeed, timing) * 0.85;
+    this.gameTimers.add(swingDur, () => { this._swingInProgress = false; });
     if (ctrl) ctrl.playOnce(attacks[this._attackSwingIdx], animSpeed);
     this._playAttackSfx(weaponType);
 
@@ -1540,7 +1696,7 @@ class GrudgeArena {
           .add(new THREE.Vector3(0, 1, 0)),
         direction: dir,
         speed: ranged.projectileSpeed ?? 30,
-        damage: weapon.baseAttackDamage,
+        damage: weapon.baseAttackDamage * dmgMult,
         color: ranged.projectileColor ?? (weaponType === "bow" ? 0x8b4513 : 0x3366ff),
         shader: ranged.shader ?? null,
         lifetime: 2,
@@ -1559,7 +1715,7 @@ class GrudgeArena {
         if (dist <= weapon.range + 1) {
           const hp = target.entity.getComponent("Health");
           if (hp && !hp.invulnerable) {
-            const dmg = weapon.baseAttackDamage * (0.8 + Math.random() * 0.4);
+            const dmg = weapon.baseAttackDamage * dmgMult * (0.8 + Math.random() * 0.4);
             hp.current = Math.max(0, hp.current - dmg);
             hp.lastDamageTime = performance.now();
             registerHit();
@@ -1603,9 +1759,9 @@ class GrudgeArena {
     const dist = this.playerUnit.mesh.position.distanceTo(target.mesh.position);
     const range = weapon.range ?? 5;
     if (dist > range + (range > 5 ? 2 : 1)) return;
-    if (this._autoAttackTimer > 0) return;
+    if (this._autoAttackTimer > 0 || this._swingInProgress || this._casting) return;
     this._performAttack();
-    this._autoAttackTimer = 1 / (weapon.attackSpeed || 1);
+    this._autoAttackTimer = scaledSwingInterval(weapon.attackSpeed, this._getCombatTiming());
   }
 
   _createProjectile(config) {
@@ -1652,14 +1808,18 @@ class GrudgeArena {
   // ── Per-frame updates ──
 
   _updateCooldowns(delta) {
-    // Shared GCD (WoW-style 1.5s)
-    if (this._gcdTimer > 0)
+    this._refreshGcdDuration();
+    if (this._gcdTimer > 0) {
       this._gcdTimer = Math.max(0, this._gcdTimer - delta);
+      if (this._gcdTimer <= 0) this._processAbilityQueue();
+    }
     const as = this.playerEntity?.getComponent("AbilityState");
     if (!as) return;
     for (const key of Object.keys(as.cooldowns)) {
       if (as.cooldowns[key] > 0) as.cooldowns[key] -= delta;
     }
+    this._updateAbilityCooldownSweep();
+    this._updateAbilityQueueUI();
   }
 
   _updateResources(delta) {
@@ -1813,6 +1973,14 @@ class GrudgeArena {
     const FALLBACK_ICON = i('ability_arcane_bolt');
 
     bar.innerHTML = "";
+    let gcdInd = document.getElementById("gcd-indicator");
+    if (!gcdInd) {
+      gcdInd = document.createElement("div");
+      gcdInd.id = "gcd-indicator";
+      gcdInd.className = "gcd-indicator";
+      gcdInd.setAttribute("aria-hidden", "true");
+      bar.parentElement?.insertBefore(gcdInd, bar);
+    }
     const entries = Object.entries(weapon.abilities);
 
     entries.forEach(([key, ability], idx) => {
@@ -1858,6 +2026,7 @@ class GrudgeArena {
     if (active) {
       if (this.playerController) this.playerController.update(delta);
       this._updateCooldowns(delta);
+      this._processAbilityQueue();
       this._updateResources(delta);
       this._updateAutoAttack(delta);
       this._updateProjectiles(delta);
@@ -1898,7 +2067,7 @@ class GrudgeArena {
     tickCombatFeedback(delta);
     syncAbilityBarFlash();
     if (this.dangerMode) {
-      tickDangerRoomHud(this, delta);
+      tickDangerRoomSystems(this, delta);
       this._dangerLighting?.update(this.playerUnit?.mesh);
     }
 
@@ -1938,7 +2107,7 @@ class GrudgeArena {
             lifetime: 2,
           });
           pulseCrosshairSpread(10);
-          this._autoAttackTimer = 1 / (weapon.attackSpeed || 1);
+          this._autoAttackTimer = scaledSwingInterval(weapon.attackSpeed, this._getCombatTiming());
         }
       }
     }
@@ -2019,10 +2188,10 @@ class GrudgeArena {
       const key = keys[i];
       if (!key) continue;
       const ability = weapon.abilities[key];
+      const profile = this.playerEntity.getComponent("BuildProfile");
       const cd = as.cooldowns[key] || 0;
-      const cdMax = ability?.cooldown || 0;
-      const gcd = ability?.offGCD ? 0 : this._gcdTimer || 0;
-      const remaining = Math.max(cd, gcd);
+      const cdMax = scaledAbilityCooldown(ability?.cooldown || 0, profile?.cdrMult ?? 1) || ability?.cooldown || 0;
+      const remaining = cd;
       let mask = slot.querySelector(".ability-cd-mask");
       let text = slot.querySelector(".ability-cd-text");
       if (remaining <= 0.01) {
@@ -2042,8 +2211,7 @@ class GrudgeArena {
         text.className = "ability-cd-text";
         slot.appendChild(text);
       }
-      // Sweep: full disc shrinks counterclockwise as cooldown expires.
-      const denom = cd > 0 ? cdMax : this._gcdDuration || 1.5;
+      const denom = cdMax || ability?.cooldown || 1;
       const pct = Math.min(1, remaining / denom);
       const deg = Math.round(360 * pct);
       mask.style.display = "block";
