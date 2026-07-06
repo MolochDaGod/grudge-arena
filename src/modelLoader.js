@@ -1153,12 +1153,13 @@ function measureCharacterHeight(scene) {
   if (bodyMeshes > 0) {
     const bboxH = bodyBox.getSize(new THREE.Vector3()).y;
     if (bboxH >= 1.0) return bboxH;
+    const boneH = measureBoneHeight(scene);
+    // Pelvis→head over-estimates on A-pose rigs; only trust a narrow band.
+    if (boneH >= 1.2 && boneH <= 2.0) return boneH;
+    if (bboxH > 0.25) return bboxH;
   }
-  const boneH = measureBoneHeight(scene);
-  if (boneH >= 1.0) return boneH;
-  if (bodyMeshes > 0) return bodyBox.getSize(new THREE.Vector3()).y;
-  const fallback = new THREE.Box3().setFromObject(scene);
-  return fallback.getSize(new THREE.Vector3()).y;
+  // CDN race GLBs are authored for ~1.75 m — safe default when bbox is partial.
+  return 1.75;
 }
 
 /**
@@ -1167,6 +1168,7 @@ function measureCharacterHeight(scene) {
  * Also grounds the scene so its bottom sits at Y=0.
  */
 function normalizeCharacterScale(scene, targetH = 1.75) {
+  resetSkeletonBindPose(scene);
   const height = measureCharacterHeight(scene);
   if (height < 0.001) {
     console.warn("[modelLoader] normalizeCharacterScale: could not compute bounding box");
@@ -1181,6 +1183,14 @@ function normalizeCharacterScale(scene, targetH = 1.75) {
   const { bodyBox, bodyMeshes } = measureBodyBoundingBox(scene);
   const grounded = bodyMeshes > 0 ? bodyBox : new THREE.Box3().setFromObject(scene);
   scene.position.y = -grounded.min.y;
+}
+
+/** Reset all skinned meshes to bind pose before applying Mixamo clips. */
+function resetSkeletonBindPose(scene) {
+  scene.traverse((node) => {
+    if (node.isSkinnedMesh && node.skeleton) node.skeleton.pose();
+  });
+  scene.updateMatrixWorld(true);
 }
 
 function hasValidTextureMap(mat) {
@@ -2011,6 +2021,7 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
 
   // Weapon pack is now the primary loader so idle should be bound.
   // Still verify and log binding stats.
+  resetSkeletonBindPose(scene);
   controller.stop();
   controller.play("idle");
   mixer.update(0);
@@ -2191,6 +2202,7 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
     }
   }
 
+  resetSkeletonBindPose(scene);
   controller.stop();
   controller.play("idle");
   mixer.update(0);
