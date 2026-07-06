@@ -10,25 +10,31 @@ import * as THREE from "three";
  * @param {import('../../game.js').GrudgeArena} [arena]
  * @returns {{ lights: THREE.Light[], spotlight: THREE.SpotLight, dispose: () => void, update: (playerMesh?: THREE.Object3D) => void }}
  */
-export function installDangerRoomLighting(scene, arena = null) {
+export function installDangerRoomLighting(scene, arena = null, outdoor = false) {
   const lights = [];
 
-  const hemi = new THREE.HemisphereLight(0xbcc8da, 0x20242c, 0.85);
+  const hemi = new THREE.HemisphereLight(
+    outdoor ? 0xc8e8ff : 0xbcc8da,
+    outdoor ? 0x3a5a2a : 0x20242c,
+    outdoor ? 1.1 : 0.85,
+  );
   scene.add(hemi);
   lights.push(hemi);
 
-  const key = new THREE.DirectionalLight(0xfff1dc, 1.75);
-  key.position.set(8, 14, 6);
+  const key = new THREE.DirectionalLight(0xfff1dc, outdoor ? 2.1 : 1.75);
+  if (outdoor) key.position.set(40, 55, 25);
+  else key.position.set(8, 14, 6);
   key.castShadow = true;
   key.shadow.bias = -0.0004;
   key.shadow.normalBias = 0.02;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.camera.near = 1;
-  key.shadow.camera.far = 60;
-  key.shadow.camera.left = -20;
-  key.shadow.camera.right = 20;
-  key.shadow.camera.top = 20;
-  key.shadow.camera.bottom = -20;
+  key.shadow.camera.far = outdoor ? 140 : 60;
+  const shadowExtent = outdoor ? 55 : 20;
+  key.shadow.camera.left = -shadowExtent;
+  key.shadow.camera.right = shadowExtent;
+  key.shadow.camera.top = shadowExtent;
+  key.shadow.camera.bottom = -shadowExtent;
   scene.add(key);
   lights.push(key);
 

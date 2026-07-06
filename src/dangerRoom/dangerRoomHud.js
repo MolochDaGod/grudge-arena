@@ -46,8 +46,8 @@ function buildShell(presetName) {
       <span class="dr-combo-badge" id="dr-combo-badge" hidden>Hit <span id="dr-combo-n">1</span></span>
     </div>
     <div class="dr-controls-hint">
-      <div><kbd>W/S</kbd> Move <kbd>A/D</kbd> Turn <kbd>Q/E</kbd> Strafe</div>
-      <div><kbd>Tab</kbd> Target <kbd>RMB</kbd> Aim/Attack <kbd>LMB</kbd> Fire <kbd>1-4</kbd> Skills</div>
+      <div><kbd>WASD</kbd> Move <kbd>Shift</kbd> Sprint <kbd>RMB</kbd> Look/Aim</div>
+      <div><kbd>Tab</kbd> Target <kbd>RMB</kbd> Attack <kbd>LMB</kbd> Fire <kbd>1-4</kbd> Skills</div>
       <div><kbd>G</kbd> Gear · <kbd>M</kbd> Menu · <kbd>Hold F</kbd> Weapons · <kbd>Tab</kbd> Target</div>
       <div><kbd>[</kbd><kbd>]</kbd> Room preset · <kbd>R</kbd> Reload (bow/rifle)</div>
     </div>

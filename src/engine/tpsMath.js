@@ -33,3 +33,29 @@ export function gaitTargetWhileAiming(rawGait, aiming, weaponType) {
   const cap = weaponType === "bow" ? 0.5 : weaponType === "rifle" ? 0.68 : 0.75;
   return Math.min(rawGait, cap);
 }
+
+/** Shortest signed angle delta from `a` to `b` (radians). */
+export function angleDelta(a, b) {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+/** Shortest-arc lerp between two angles (radians). */
+export function lerpAngle(from, to, t) {
+  return from + angleDelta(from, to) * t;
+}
+
+/**
+ * Camera-relative planar move direction (Fortnite / island sandbox).
+ * `right` = D+, `forward` = W+ at camera `yaw`.
+ */
+export function moveDir(right, forward, yaw) {
+  const s = Math.sin(yaw);
+  const c = Math.cos(yaw);
+  return {
+    x: forward * s - right * c,
+    z: forward * c + right * s,
+  };
+}

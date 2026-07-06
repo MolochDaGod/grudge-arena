@@ -51,6 +51,31 @@ export const ROOM_PRESETS = {
     background: 0x180f09,
     clampRadius: 14,
   },
+  island: {
+    id: "island",
+    name: "Combat Island",
+    blurb: "Open island sandbox — grassy hills, shoreline, Fortnite-style traversal.",
+    floorColor: 0x4a7a3a,
+    floorMetalness: 0,
+    floorRoughness: 1,
+    showGrid: false,
+    gridColor1: 0x000000,
+    gridColor2: 0x000000,
+    wallColor: 0x87ceeb,
+    ceilColor: 0x87ceeb,
+    pillarColor: 0x3d6b2e,
+    pillarGlowColor: 0xa8e06a,
+    accents: [
+      { color: 0xfff4d6, intensity: 2.4, pos: [30, 40, 20], distance: 120 },
+      { color: 0x88ccff, intensity: 0.8, pos: [-20, 12, -30], distance: 80 },
+    ],
+    fogColor: 0x8ab4d4,
+    fogNear: 40,
+    fogFar: 140,
+    background: 0x7eb8e8,
+    clampRadius: 40,
+    outdoor: true,
+  },
   colosseum: {
     id: "colosseum",
     name: "Colosseum",
@@ -81,4 +106,4 @@ export const ROOM_PRESETS = {
 
 export const ROOM_PRESET_LIST = Object.values(ROOM_PRESETS);
 
-export const DEFAULT_PRESET_ID = "holo";
+export const DEFAULT_PRESET_ID = "island";

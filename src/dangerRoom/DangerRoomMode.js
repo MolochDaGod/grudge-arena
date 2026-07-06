@@ -1,6 +1,6 @@
 /**
  * Danger Room training mode — solo player + stationary dummies, no match timer.
- * Uses dangerroom.puter.site controller outline (W/S, A/D turn, Q/E strafe, 1-4 skills).
+ * Island sandbox TPS: WASD move, RMB look, Shift sprint, Q/E/R/F skills.
  */
 
 import * as THREE from "three";
@@ -146,6 +146,10 @@ export function bootstrapDangerRoom(arena) {
       arena._dangerClampRadius = arena._dangerEnv.clampRadius;
       arena._obstacleMeshes = arena._dangerEnv.obstacleMeshes;
       arena._terrainMeshes = arena._dangerEnv.terrainMeshes;
+      arena._groundSampler?.setTerrainMeshes?.(arena._terrainMeshes);
+      for (const u of arena.allUnits || []) {
+        arena._groundSampler?.snapMesh?.(u.mesh);
+      }
       arena.orbitCamera?.setCollisionMeshes?.(arena._obstacleMeshes);
       if (next.presetId === "colosseum") {
         arena._djBooth?.dispose?.();

@@ -77,6 +77,7 @@ import {
 } from './src/engine/CombatFeedback.js';
 import { CombatPostFX } from './src/engine/CombatPostFX.js';
 import { installDangerRoomLighting } from './src/engine/DangerRoomLighting.js';
+import { GroundSampler } from './src/engine/GroundSampler.js';
 import { syncAbilityBarFlash, setDangerWeaponLabel } from './src/dangerRoom/dangerRoomHud.js';
 
 const VALID_RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
@@ -166,6 +167,7 @@ class GrudgeArena {
     this._dangerClampRadius = ARENA_CLAMP_RADIUS;
     this._dangerLighting = null;
     this.postFX = null;
+    this._groundSampler = null;
   }
 
   async init(config) {
@@ -311,6 +313,9 @@ class GrudgeArena {
           this.camera,
           this.renderer.domElement,
         );
+        if (this.dangerMode) {
+          this.orbitCamera.setControlMode('tps');
+        }
         this.orbitCamera.setTarget(this.playerUnit.mesh);
         // Register arena obstacles for souls-like camera wall collision
         if (this._obstacleMeshes?.length) {
@@ -324,7 +329,13 @@ class GrudgeArena {
           this.playerUnit.controller,
           this.orbitCamera,
         );
-        if (this.dangerMode && this._dangerClampRadius) {
+        if (this.dangerMode) {
+          this.playerController.controlScheme = 'tps';
+          this.playerController.groundSampler = this._groundSampler;
+          if (this._dangerClampRadius) {
+            this.playerController.clampRadius = this._dangerClampRadius;
+          }
+        } else if (this._dangerClampRadius) {
           this.playerController.clampRadius = this._dangerClampRadius;
         }
         this.playerUnit?.controller?.setWeaponType?.(
@@ -396,6 +407,14 @@ class GrudgeArena {
         }
         this._setupSoftLockInput();
         bootstrapDangerRoom(this);
+        this._groundSampler = new GroundSampler();
+        this._groundSampler.setTerrainMeshes(this._terrainMeshes);
+        if (this.playerController) {
+          this.playerController.groundSampler = this._groundSampler;
+        }
+        for (const u of this.allUnits) {
+          this._groundSampler.snapMesh(u.mesh);
+        }
         if (this.playerUnit?.equipment) {
           syncGearCatalog(this.playerUnit.equipment);
         }
@@ -405,7 +424,11 @@ class GrudgeArena {
         for (const mesh of this._dangerEnv?.terrainMeshes || []) {
           this.collisionSystem.addCollider(mesh, "environment");
         }
-        this._dangerLighting = installDangerRoomLighting(this.scene, this);
+        this._dangerLighting = installDangerRoomLighting(
+          this.scene,
+          this,
+          this._dangerEnv?.outdoor,
+        );
         this.postFX = new CombatPostFX(this.renderer, this.scene, this.camera);
       }
 
@@ -712,7 +735,11 @@ class GrudgeArena {
     } = unitResult;
     const groundedY = mesh.position.y;
     mesh.position.copy(spawnPos);
-    mesh.position.y = groundedY;
+    if (this.dangerMode && this._groundSampler) {
+      this._groundSampler.snapMesh(mesh);
+    } else {
+      mesh.position.y = groundedY;
+    }
     mesh.rotation.y = facing;
     this.scene.add(mesh);
 

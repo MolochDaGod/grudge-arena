@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { ROOM_PRESETS } from "./roomPresets.js";
 import { loadColosseumMap } from "./ColosseumMap.js";
+import { buildIslandTerrain } from "./IslandTerrain.js";
 
 const HALF = 16;
 const HEIGHT = 18;
@@ -34,6 +35,7 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
   const root = new THREE.Group();
   root.name = "danger-room";
   const isColosseum = presetId === "colosseum";
+  const isIsland = presetId === "island";
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(HALF * 2, HALF * 2),
@@ -45,29 +47,34 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
-  root.add(floor);
+  if (!isIsland) root.add(floor);
 
   if (preset.showGrid) {
     root.add(makeGridHelper(preset));
+  }
+
+  let islandTerrain = null;
+  if (isIsland) {
+    islandTerrain = buildIslandTerrain(root);
   }
 
   const wallMat = new THREE.MeshStandardMaterial({ color: preset.wallColor, roughness: 0.85 });
   const backWall = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2, HEIGHT), wallMat);
   backWall.position.set(0, HEIGHT / 2, -HALF);
   backWall.receiveShadow = true;
-  root.add(backWall);
+  if (!isIsland) root.add(backWall);
 
   const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2, HEIGHT), wallMat);
   leftWall.position.set(-HALF, HEIGHT / 2, 0);
   leftWall.rotation.y = Math.PI / 2;
   leftWall.receiveShadow = true;
-  root.add(leftWall);
+  if (!isIsland) root.add(leftWall);
 
   const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2, HEIGHT), wallMat);
   rightWall.position.set(HALF, HEIGHT / 2, 0);
   rightWall.rotation.y = -Math.PI / 2;
   rightWall.receiveShadow = true;
-  root.add(rightWall);
+  if (!isIsland) root.add(rightWall);
 
   const ceiling = new THREE.Mesh(
     new THREE.PlaneGeometry(HALF * 2, HALF * 2),
@@ -76,7 +83,7 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
   ceiling.position.y = HEIGHT;
   ceiling.rotation.x = Math.PI / 2;
   ceiling.receiveShadow = true;
-  root.add(ceiling);
+  if (!isIsland) root.add(ceiling);
 
   const pillarPositions = [
     [-HALF + 1.2, -HALF + 1.2],
@@ -85,7 +92,7 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
     [HALF - 1.2, HALF - 1.2],
   ];
   const obstacleMeshes = [];
-  for (const [x, z] of pillarPositions) {
+  if (!isIsland) for (const [x, z] of pillarPositions) {
     const pillar = new THREE.Mesh(
       new THREE.BoxGeometry(0.9, HEIGHT, 0.9),
       new THREE.MeshStandardMaterial({
@@ -101,9 +108,9 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
     obstacleMeshes.push(pillar);
   }
 
-  // DJ alcove + neon frame (hidden for colosseum — puter.site parity)
+  // DJ alcove + neon frame (hidden for colosseum / outdoor island)
   const djGroup = new THREE.Group();
-  djGroup.visible = !isColosseum;
+  djGroup.visible = !isColosseum && !isIsland;
   djGroup.position.set(0, 0, HALF);
   const djFloor = new THREE.Mesh(
     new THREE.BoxGeometry(8, 0.3, DJ_DEPTH + 0.4),
@@ -154,7 +161,7 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
     [-7, 0, 6],
     [7, 0, 6],
   ];
-  for (const [x, , z] of bagPositions) {
+  if (!isIsland) for (const [x, , z] of bagPositions) {
     const bagGroup = new THREE.Group();
     bagGroup.position.set(x, 0, z);
     const chain = new THREE.Mesh(
@@ -183,17 +190,22 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
 
   scene.add(root);
   scene.background = new THREE.Color(preset.background);
-  scene.fog = new THREE.Fog(preset.fogColor, preset.fogNear, preset.fogFar);
+  if (isIsland) {
+    scene.fog = new THREE.FogExp2(preset.fogColor, 0.008);
+  } else {
+    scene.fog = new THREE.Fog(preset.fogColor, preset.fogNear, preset.fogFar);
+  }
 
   const env = {
     root,
     preset,
     presetId,
-    terrainMeshes: [floor],
+    terrainMeshes: islandTerrain?.terrainMeshes ?? [floor],
     obstacleMeshes,
-    clampRadius: preset.clampRadius,
+    clampRadius: islandTerrain?.clampRadius ?? preset.clampRadius,
     colosseumRoot: null,
-    showDjBooth: !isColosseum,
+    showDjBooth: !isColosseum && !isIsland,
+    outdoor: !!preset.outdoor,
   };
 
   if (isColosseum) {

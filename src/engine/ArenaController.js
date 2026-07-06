@@ -43,6 +43,7 @@ import {
   resolveLocoDir,
   defaultLocoClip,
 } from './DirLocoBlend.js';
+import { moveDir, lerpAngle } from './tpsMath.js';
 
 // ── Constants ────────────────────────────────
 
@@ -96,6 +97,11 @@ export class ArenaController {
 
     /** Optional override for danger room / custom arenas (defaults to ProceduralArena radius). */
     this.clampRadius = null;
+
+    /** `tps` = island sandbox (W/S/A/D move, RMB orbit); `wow` = MMO default. */
+    this.controlScheme = 'wow';
+    /** Raycast terrain snap — set by danger room bootstrap. */
+    this.groundSampler = null;
 
     /** Baked Bip001 gait (AnimationDirector) — danger room Grudge6 pipeline. */
     this.useBakedLoco = !!animCtrl?.useBakedLoco;
@@ -293,55 +299,69 @@ export class ArenaController {
 
     this.tickKey = {};
 
-    // ── A/D behaviour depends on RMB (WoW standard) ──
-    // RMB NOT held: A/D = keyboard turn (character rotates, camera follows)
-    // RMB held:     A/D = strafe (camera-relative movement, character faces camera yaw)
     const rmbHeld = !!this.holdKey._RMB;
     const pressA  = this.holdKey.KeyA || this.holdKey.ArrowLeft;
     const pressD  = this.holdKey.KeyD || this.holdKey.ArrowRight;
+    const isTps = this.controlScheme === 'tps';
 
-    if (!rmbHeld && this.canMove && (pressA || pressD)) {
-      // Keyboard turn mode
-      const turnDir = (pressA ? 1 : 0) - (pressD ? 1 : 0);
-      this.targetYaw += turnDir * KB_TURN_SPEED * delta;
-      while (this.targetYaw > Math.PI) this.targetYaw -= Math.PI * 2;
-      while (this.targetYaw < -Math.PI) this.targetYaw += Math.PI * 2;
-    }
-
-    // When RMB is held, snap character facing to camera yaw (WoW strafe mode)
-    if (rmbHeld && this.canMove) {
-      this.targetYaw = this.camera.getYaw() + Math.PI;
+    if (!isTps) {
+      // ── A/D behaviour depends on RMB (WoW standard) ──
+      if (!rmbHeld && this.canMove && (pressA || pressD)) {
+        const turnDir = (pressA ? 1 : 0) - (pressD ? 1 : 0);
+        this.targetYaw += turnDir * KB_TURN_SPEED * delta;
+        while (this.targetYaw > Math.PI) this.targetYaw -= Math.PI * 2;
+        while (this.targetYaw < -Math.PI) this.targetYaw += Math.PI * 2;
+      }
+      if (rmbHeld && this.canMove) {
+        this.targetYaw = this.camera.getYaw() + Math.PI;
+      }
     }
 
     // ── Build input direction from held keys ──
-    // W   = forward (camera-relative)
-    // S   = backward (camera-relative)
-    // Q/E = strafe (always camera-relative)
-    // A/D = strafe ONLY when RMB held; otherwise turn-only (no movement)
-    let ix = 0, iz = 0;
-    if (this.holdKey.KeyW || this.holdKey.ArrowUp)   iz -= 1;
-    if (this.holdKey.KeyS || this.holdKey.ArrowDown)  iz += 1;
-    if (this.holdKey.KeyQ) ix -= 1;
-    if (this.holdKey.KeyE) ix += 1;
-    // A/D strafe when RMB held (WoW standard)
-    if (rmbHeld && pressA) ix -= 1;
-    if (rmbHeld && pressD) ix += 1;
+    let ix = 0;
+    let iz = 0;
+    let fwd = 0;
+    let rgt = 0;
 
-    const hasInput = ix !== 0 || iz !== 0;
+    if (isTps) {
+      if (this.holdKey.KeyW || this.holdKey.ArrowUp) fwd += 1;
+      if (this.holdKey.KeyS || this.holdKey.ArrowDown) fwd -= 1;
+      if (this.holdKey.KeyD || this.holdKey.ArrowRight) rgt += 1;
+      if (this.holdKey.KeyA || this.holdKey.ArrowLeft) rgt -= 1;
+    } else {
+      if (this.holdKey.KeyW || this.holdKey.ArrowUp) iz -= 1;
+      if (this.holdKey.KeyS || this.holdKey.ArrowDown) iz += 1;
+      if (this.holdKey.KeyQ) ix -= 1;
+      if (this.holdKey.KeyE) ix += 1;
+      if (rmbHeld && pressA) ix -= 1;
+      if (rmbHeld && pressD) ix += 1;
+    }
+
+    const hasInput = isTps ? (fwd !== 0 || rgt !== 0) : (ix !== 0 || iz !== 0);
     const isSprint = this.holdKey.ShiftLeft || this.holdKey.ShiftRight;
     const maxSpeed = isSprint ? MOVE_SPEED * SPRINT_MULTIPLIER : MOVE_SPEED;
 
-    // ── Camera-relative world direction ──
-    // All movement axes are resolved relative to the camera yaw so W always
-    // goes in the direction the camera is pointing (Fortnite feel).
-    let worldDirX = 0, worldDirZ = 0;
+    let worldDirX = 0;
+    let worldDirZ = 0;
     if (hasInput) {
-      const len = Math.sqrt(ix * ix + iz * iz);
-      ix /= len; iz /= len;
-      const yaw = this.camera.getYaw();
-      const cos = Math.cos(yaw), sin = Math.sin(yaw);
-      worldDirX = ix * cos - iz * sin;
-      worldDirZ = ix * sin + iz * cos;
+      if (isTps) {
+        const world = moveDir(rgt, fwd, this.camera.getYaw());
+        const len = Math.hypot(world.x, world.z) || 1;
+        worldDirX = world.x / len;
+        worldDirZ = world.z / len;
+        const flen = Math.hypot(fwd, rgt) || 1;
+        ix = rgt / flen;
+        iz = -fwd / flen;
+      } else {
+        const len = Math.sqrt(ix * ix + iz * iz);
+        ix /= len;
+        iz /= len;
+        const yaw = this.camera.getYaw();
+        const cos = Math.cos(yaw);
+        const sin = Math.sin(yaw);
+        worldDirX = ix * cos - iz * sin;
+        worldDirZ = ix * sin + iz * cos;
+      }
     }
 
     // ── Movement (only when FSM allows) ──
@@ -358,13 +378,12 @@ export class ArenaController {
           this.currentSpeed + ACCEL_RATE * delta,
         );
 
-        // Compute target facing angle from movement direction
         this.targetYaw = Math.atan2(worldDirX, worldDirZ);
 
-        // Move mesh
         this.mesh.position.x += worldDirX * this.currentSpeed * delta;
         this.mesh.position.z += worldDirZ * this.currentSpeed * delta;
         this._clampPosition();
+        this._snapToGround();
 
         // Update FSM bridge facing
         this._fsmChar.facing.set(worldDirX, worldDirZ);
@@ -390,12 +409,21 @@ export class ArenaController {
     }
 
     // ── Notify camera of movement + aim state ──
-    const isActuallyMoving = hasInput || (!rmbHeld && (pressA || pressD));
+    const isActuallyMoving = isTps
+      ? hasInput
+      : (hasInput || (!rmbHeld && (pressA || pressD)));
     this.camera.setPlayerMoving?.(isActuallyMoving);
     this.camera.setAiming?.(rmbHeld);
 
+    if (isTps && this.canMove && !hasInput) {
+      this.targetYaw = lerpAngle(
+        this.targetYaw,
+        this.camera.getYaw(),
+        Math.min(1, delta * 6),
+      );
+    }
+
     // ── Smooth rotation ──
-    // Lerp mesh.rotation.y toward targetYaw
     let diff = this.targetYaw - this.mesh.rotation.y;
     // Wrap to [-PI, PI]
     while (diff > Math.PI) diff -= Math.PI * 2;
@@ -530,6 +558,11 @@ export class ArenaController {
     const r = this.clampRadius ?? ARENA_RADIUS;
     this.mesh.position.x = Math.max(-r, Math.min(r, this.mesh.position.x));
     this.mesh.position.z = Math.max(-r, Math.min(r, this.mesh.position.z));
+  }
+
+  _snapToGround() {
+    if (!this.groundSampler) return;
+    this.groundSampler.snapMesh(this.mesh);
   }
 
   /** Send an FSM event from outside (e.g. game.js combat system) */

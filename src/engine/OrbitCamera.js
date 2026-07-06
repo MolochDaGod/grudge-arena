@@ -71,6 +71,19 @@ const CFG = {
   ADS_SHOULDER:        0.55,
   CAM_POS_SMOOTH:      15,
   CAM_LOOK_SMOOTH:     18,
+
+  // Island sandbox / Fortnite TPS (CameraRig + probe RTS Player)
+  TPS_INITIAL_YAW:       Math.PI,
+  TPS_INITIAL_PITCH:     0.25,
+  TPS_INITIAL_DISTANCE:  4.5,
+  TPS_ZOOM_MIN:          2.0,
+  TPS_ZOOM_MAX:          10.0,
+  TPS_HIP_FOV:           55,
+  TPS_ORBIT_SENS_X:      0.0028,
+  TPS_ORBIT_SENS_Y:      0.0022,
+  TPS_PITCH_MIN:        -1.2,
+  TPS_PITCH_MAX:         0.6,
+  TPS_PIVOT_HEIGHT:      1.55,
 };
 
 // Tab-target nudge
@@ -116,8 +129,38 @@ export class OrbitCamera {
     this._assistPitch = null;
     this._assistRate = 0;
     this._currentFov = CFG.HIP_FOV;
+    /** @type {'wow'|'tps'} */
+    this.controlMode = 'wow';
+    this._rmbDragging = false;
 
     this._setupInput();
+  }
+
+  /** Switch camera control scheme — `tps` for island combat sandbox. */
+  setControlMode(mode) {
+    const next = mode === 'tps' ? 'tps' : 'wow';
+    if (next === this.controlMode) return;
+    this.controlMode = next;
+    if (next === 'tps') {
+      this.yaw = CFG.TPS_INITIAL_YAW;
+      this.pitch = CFG.TPS_INITIAL_PITCH;
+      this.distance = CFG.TPS_INITIAL_DISTANCE;
+      this._targetYaw = this.yaw;
+      this._targetPitch = this.pitch;
+      this._targetDistance = this.distance;
+      this._effectiveDistance = this.distance;
+      this.pivotOffset.y = CFG.TPS_PIVOT_HEIGHT;
+      this._currentFov = CFG.TPS_HIP_FOV;
+      if (this.camera?.isPerspectiveCamera) {
+        this.camera.fov = CFG.TPS_HIP_FOV;
+        this.camera.updateProjectionMatrix();
+      }
+    } else {
+      this.pivotOffset.y = CFG.PIVOT_HEIGHT;
+      this._currentFov = CFG.HIP_FOV;
+    }
+    this._initialized = false;
+    this._frameCount = 0;
   }
 
   /** RMB hold / attack — pull in over shoulder, tighten FOV. */
@@ -178,24 +221,36 @@ export class OrbitCamera {
     const el = this.domElement;
 
     el.addEventListener('mousedown', (e) => {
-      if (e.button === 0) this._isDragging = true;
+      if (this.controlMode === 'tps') {
+        if (e.button === 2) this._rmbDragging = true;
+      } else if (e.button === 0) {
+        this._isDragging = true;
+      }
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 0) this._isDragging = false;
+      if (e.button === 2) this._rmbDragging = false;
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (!this._isDragging) return;
-      this._targetYaw   -= e.movementX * CFG.ORBIT_SENSITIVITY_X;
-      this._targetPitch += e.movementY * CFG.ORBIT_SENSITIVITY_Y;
-      this._targetPitch  = Math.max(CFG.PITCH_MIN, Math.min(CFG.PITCH_MAX, this._targetPitch));
+      const dragging = this.controlMode === 'tps' ? this._rmbDragging : this._isDragging;
+      if (!dragging) return;
+      const sensX = this.controlMode === 'tps' ? CFG.TPS_ORBIT_SENS_X : CFG.ORBIT_SENSITIVITY_X;
+      const sensY = this.controlMode === 'tps' ? CFG.TPS_ORBIT_SENS_Y : CFG.ORBIT_SENSITIVITY_Y;
+      const pMin = this.controlMode === 'tps' ? CFG.TPS_PITCH_MIN : CFG.PITCH_MIN;
+      const pMax = this.controlMode === 'tps' ? CFG.TPS_PITCH_MAX : CFG.PITCH_MAX;
+      this._targetYaw   -= e.movementX * sensX;
+      this._targetPitch += e.movementY * sensY;
+      this._targetPitch  = Math.max(pMin, Math.min(pMax, this._targetPitch));
     });
 
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
       const d = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 30) * 0.01;
+      const zMin = this.controlMode === 'tps' ? CFG.TPS_ZOOM_MIN : CFG.ZOOM_MIN;
+      const zMax = this.controlMode === 'tps' ? CFG.TPS_ZOOM_MAX : CFG.ZOOM_MAX;
       this._targetDistance *= 1.0 + d * CFG.ZOOM_SENSITIVITY;
-      this._targetDistance  = Math.max(CFG.ZOOM_MIN, Math.min(CFG.ZOOM_MAX, this._targetDistance));
+      this._targetDistance  = Math.max(zMin, Math.min(zMax, this._targetDistance));
     }, { passive: false });
 
     el.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -233,8 +288,9 @@ export class OrbitCamera {
     if (!this.target) return;
     this._frameCount++;
 
-    // ── 1. Passive follow-behind ────────────────────────────────
-    if (!this._isDragging) {
+    // ── 1. Passive follow-behind (WoW only — TPS keeps independent camera yaw) ──
+    const orbitDragging = this.controlMode === 'tps' ? this._rmbDragging : this._isDragging;
+    if (this.controlMode !== 'tps' && !orbitDragging) {
       const behindYaw = this.target.rotation.y + Math.PI;
       let diff = behindYaw - this._targetYaw;
       while (diff >  Math.PI) diff -= PI2;
@@ -333,7 +389,8 @@ export class OrbitCamera {
 
     // ADS FOV zoom
     if (this.camera.isPerspectiveCamera) {
-      const wantFov = this._aiming ? CFG.ADS_FOV : CFG.HIP_FOV;
+      const hipFov = this.controlMode === 'tps' ? CFG.TPS_HIP_FOV : CFG.HIP_FOV;
+      const wantFov = this._aiming ? CFG.ADS_FOV : hipFov;
       this._currentFov += (wantFov - this._currentFov) * (1 - Math.exp(-10 * delta));
       if (Math.abs(this.camera.fov - this._currentFov) > 0.05) {
         this.camera.fov = this._currentFov;
