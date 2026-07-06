@@ -32,6 +32,7 @@ import {
   validateBakedLocoClips,
   BakedAnimLoadError,
 } from "./bakedAnimLoader.js";
+import { applyCharacterScale } from "./characterScale.js";
 import { createBakedController } from './BakedAnimationController.js';
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
@@ -1108,79 +1109,6 @@ function cloneGLTFScene(source) {
   return clone;
 }
 
-/** Body/armor skinned meshes only — D1 GLBs bake every weapon variant in at once. */
-function isBodyMeasureMesh(node) {
-  if (!node?.isSkinnedMesh) return false;
-  const n = (node.name || "").toLowerCase();
-  return !/weapon_|_shield_|xtra_|quiver|pick_|wood_/.test(n);
-}
-
-function measureBoneHeight(scene) {
-  scene.updateMatrixWorld(true);
-  let pelvis = null;
-  let head = null;
-  scene.traverse((node) => {
-    if (!node.isBone) return;
-    if (node.name === "Bip001_Pelvis" || node.name === "Bip001 Pelvis") pelvis = node;
-    if (node.name === "Bip001_Head" || node.name === "Bip001 Head") head = node;
-  });
-  if (!pelvis || !head) return 0;
-  const p = new THREE.Vector3();
-  const h = new THREE.Vector3();
-  pelvis.getWorldPosition(p);
-  head.getWorldPosition(h);
-  return Math.abs(h.y - p.y) + 0.25;
-}
-
-function measureBodyBoundingBox(scene) {
-  const bodyBox = new THREE.Box3();
-  let bodyMeshes = 0;
-  scene.traverse((node) => {
-    if (!isBodyMeasureMesh(node)) return;
-    bodyBox.expandByObject(node);
-    bodyMeshes++;
-  });
-  return { bodyBox, bodyMeshes };
-}
-
-function measureCharacterHeight(scene) {
-  scene.traverse((node) => {
-    if (node.isSkinnedMesh) node.normalizeSkinWeights();
-  });
-  const { bodyBox, bodyMeshes } = measureBodyBoundingBox(scene);
-  if (bodyMeshes > 0) {
-    const bboxH = bodyBox.getSize(new THREE.Vector3()).y;
-    if (bboxH >= 1.0) return bboxH;
-    const boneH = measureBoneHeight(scene);
-    // Pelvis→head over-estimates on A-pose rigs; only trust a narrow band.
-    if (boneH >= 1.2 && boneH <= 2.0) return boneH;
-  }
-  // CDN race GLBs are authored for ~1.75 m — use when partial bbox (orc/undead).
-  return 1.75;
-}
-
-/**
- * Normalise a character scene to TARGET_H metres tall using its T-pose
- * bounding box (Y axis only, ignoring arm-span width).
- * Also grounds the scene so its bottom sits at Y=0.
- */
-function normalizeCharacterScale(scene, targetH = 1.75) {
-  const height = measureCharacterHeight(scene);
-  if (height < 0.001) {
-    console.warn("[modelLoader] normalizeCharacterScale: could not compute bounding box");
-    return;
-  }
-  const scale = targetH / height;
-  scene.scale.setScalar(scale);
-  console.log(
-    `[modelLoader] normalizeCharacterScale: height=${height.toFixed(3)}m → scale=${scale.toFixed(4)}`,
-  );
-  scene.updateMatrixWorld(true);
-  const { bodyBox, bodyMeshes } = measureBodyBoundingBox(scene);
-  const grounded = bodyMeshes > 0 ? bodyBox : new THREE.Box3().setFromObject(scene);
-  scene.position.y = -grounded.min.y;
-}
-
 /** Reset all skinned meshes to bind pose before applying Mixamo clips. */
 function resetSkeletonBindPose(scene) {
   scene.traverse((node) => {
@@ -1229,7 +1157,9 @@ export async function loadRaceModel(race) {
   // Normalise to 1.75 m using bounding box Y, regardless of GLB export scale.
   // WK/BRB/ELF/DWF/ORC/UD GLBs ship with root scale ~4.26, yielding 7.45 m
   // world-height — this corrects that to the expected humanoid size.
-  normalizeCharacterScale(scene, 1.75);
+  await applyCharacterScale(scene, race, {
+    log: (m) => console.log(m.replace("[characterScale]", "[modelLoader]")),
+  });
 
   const mixer = new THREE.AnimationMixer(scene);
   const actions = new Map();
@@ -1953,7 +1883,9 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
 
   await applyRaceTextureFix(scene, race);
   applyFactionBodyColor(scene, race);
-  normalizeCharacterScale(scene, 1.75);
+  const metrics = await applyCharacterScale(scene, race, {
+    log: (m) => console.log(m.replace("[characterScale]", "[modelLoader]")),
+  });
 
   const { packName, clips } = await loadBakedPackClips(resolvedWeapon);
   try {
@@ -2039,6 +1971,7 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     pipeline: "baked",
     textureAudit: matAudit,
     meshLoadout,
+    characterMetrics: metrics,
   };
 }
 
@@ -2252,8 +2185,9 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
     });
     await applyRaceTextureFix(scene, hero.race);
     applyFactionBodyColor(scene, hero.race);
-    // Normalise to 1.75 m (same approach as loadRaceModel)
-    normalizeCharacterScale(scene, 1.75);
+    await applyCharacterScale(scene, hero.race, {
+      log: (m) => console.log(m.replace("[characterScale]", "[modelLoader]")),
+    });
     mixer = new THREE.AnimationMixer(scene);
     embeddedActions = new Map();
     const EMBEDDED_ALIASES = { running: ["run"], walking: ["walk"], idle: [] };

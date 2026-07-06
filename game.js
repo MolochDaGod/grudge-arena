@@ -18,6 +18,7 @@ import { ShaderLibrary, createShaderMaterial } from './src/engine/ShaderLibrary.
 import { ParticleSystem } from './src/engine/ParticleSystem.js';
 import { CollisionSystem } from './src/engine/CollisionSystem.js';
 import { mapUrl, assetUrl } from "./src/assetConfig.js";
+import { physicsSizeFromMetrics } from "./src/characterScale.js";
 import { OrbitCamera } from './src/engine/OrbitCamera.js';
 import { ArenaController } from './src/engine/ArenaController.js';
 import { SpriteSystem, createSkybox } from './src/engine/SpriteSystem.js';
@@ -673,6 +674,10 @@ class GrudgeArena {
     mesh.rotation.y = facing;
     this.scene.add(mesh);
 
+    const characterMetrics =
+      unitResult.characterMetrics || mesh.userData?.characterMetrics || null;
+    const colliderSize = physicsSizeFromMetrics(characterMetrics);
+
     const actualWeaponDef = WeaponDefinitions[resolvedWeapon] || weaponDef;
     const profile = comp.profile || null;
 
@@ -702,7 +707,10 @@ class GrudgeArena {
       .addComponent("Health", Components.Health(healthMax))
       .addComponent("Shield", Components.Shield(shieldMax))
       .addComponent("Resources", resources)
-      .addComponent("Collider", Components.Collider(0.5, 1.8))
+      .addComponent(
+        "Collider",
+        Components.Collider(colliderSize.radius, colliderSize.height),
+      )
       .addComponent("Movement", Components.Movement(moveSpeed))
       .addComponent(
         "WeaponState",
@@ -750,6 +758,7 @@ class GrudgeArena {
       raceConfig,
       resolvedWeapon,
       uuid,
+      characterMetrics,
     };
   }
 
@@ -864,12 +873,20 @@ class GrudgeArena {
         | (isTeamA ? GROUP_ENEMY : GROUP_PLAYER)  // same — for clarity
         | GROUP_TRIGGER;
 
-      // Character physics body
+      const metrics =
+        unit.mesh.userData?.characterMetrics ||
+        unit.characterMetrics ||
+        null;
+      const phys = physicsSizeFromMetrics(metrics);
       const spawnPos = unit.mesh.position;
       const body = pw.createCharacterBody(
-        { x: spawnPos.x, y: 0.9, z: spawnPos.z },
-        0.5, 1.8, group, mask,
+        { x: spawnPos.x, y: phys.offset, z: spawnPos.z },
+        phys.radius,
+        phys.height,
+        group,
+        mask,
       );
+      unit.physicsSize = phys;
       body.belongTo = {
         unit,
         isPlayer: isTeamA,

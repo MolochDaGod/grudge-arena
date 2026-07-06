@@ -418,14 +418,19 @@ export class ArenaController {
    * Returns true when locomotion was handled this frame.
    */
   _driveLocomotion(fsmValue, fsm, ix, iz, isSprint, maxSpeed, delta, hasInput) {
-    if (this.useBakedLoco && this.animCtrl?.setGaitTarget) {
+    if (this.useBakedLoco && this.animCtrl) {
       const movable = fsmValue === 'idle' || fsmValue === 'run';
       if (!movable) {
-        this.animCtrl.setGaitTarget(false, false);
+        this.animCtrl.setGaitTarget?.(false, false);
         return false;
       }
       const moving = hasInput || this.currentSpeed > 0.05;
-      this.animCtrl.setGaitTarget(moving, isSprint && moving);
+      const speed01 = maxSpeed > 0 ? Math.min(1, this.currentSpeed / maxSpeed) : 0;
+      if (this.animCtrl.setGaitFromSpeed) {
+        this.animCtrl.setGaitFromSpeed(moving ? speed01 : 0, isSprint && moving);
+      } else {
+        this.animCtrl.setGaitTarget?.(moving, isSprint && moving);
+      }
       if (hasInput && fsmValue === 'idle') fsm.send({ type: 'run' });
       if (!hasInput && this.currentSpeed < 0.01 && fsmValue === 'run') fsm.send({ type: 'stop' });
       return true;

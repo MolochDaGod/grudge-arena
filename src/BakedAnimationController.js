@@ -62,6 +62,23 @@ export class BakedAnimationController {
     this.director.setGaitTarget(moving, sprinting);
   }
 
+  /**
+   * Speed-aware locomotion — maps movement speed to gait bands (GRUDGE /world pattern).
+   * @param {number} speed01 0..1 normalized current speed
+   * @param {boolean} sprinting shift held
+   */
+  setGaitFromSpeed(speed01, sprinting) {
+    const s = Math.min(1, Math.max(0, speed01));
+    if (s < 0.05) {
+      this.director.setGaitScalar(0);
+    } else if (sprinting) {
+      this.director.setGaitScalar(1);
+    } else {
+      // walk@0.34 → run@0.7 across locomotion range
+      this.director.setGaitScalar(0.34 + s * 0.36);
+    }
+  }
+
   _resolveClip(stateName) {
     let clip = this.clips.get(stateName);
     if (clip) return { clip, stateName };

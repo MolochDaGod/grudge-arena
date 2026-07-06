@@ -224,7 +224,15 @@ async function loadCharacter() {
     const health = textureHealth(mats);
     log(`mesh: ${unit.modelPath || unit.scene?.userData?.path || "(loaded)"}`);
     log(`pipeline: ${unit.pipeline || (baked ? "baked" : "legacy")}`);
-    log(`scale: ${mesh.scale.x.toFixed(4)} · y=${mesh.position.y.toFixed(3)}`);
+    const m = unit.characterMetrics || mesh.userData?.characterMetrics;
+    if (m) {
+      log(
+        `scale: target=${m.targetHeight.toFixed(2)}m measured=${m.measuredHeight.toFixed(2)}m ` +
+          `world=${m.worldScale.toFixed(4)} (${m.source}) · y=${m.groundedY.toFixed(3)}`,
+      );
+    } else {
+      log(`scale: ${mesh.scale.x.toFixed(4)} · y=${mesh.position.y.toFixed(3)}`);
+    }
     log(`materials: ${mats.withMap}/${mats.total} textured · ${mats.visible} visible meshes`);
 
     if (!health.ok) {

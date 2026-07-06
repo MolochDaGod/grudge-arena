@@ -70,6 +70,11 @@ export class AnimationDirector {
     this.gaitTarget = !moving ? 0 : sprinting ? 1 : 0.7;
   }
 
+  /** Direct gait scalar 0..1 (idle@0 walk@0.34 run@0.7 sprint@1). */
+  setGaitScalar(value) {
+    this.gaitTarget = Math.min(1, Math.max(0, value));
+  }
+
   primeLocomotion() {
     this.gait = 0;
     this.gaitTarget = 0;

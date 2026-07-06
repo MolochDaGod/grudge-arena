@@ -61,7 +61,11 @@ const gameReady =
 const humanTextured = logs.some((l) =>
   /human: applied atlas texture to \d+ material slots/i.test(l),
 );
-const humanScaled = logs.some((l) => /normalizeCharacterScale: height=/.test(l));
+const humanScaled = logs.some(
+  (l) =>
+    /\[modelLoader\].*target=.*measured=.*scale=/.test(l) ||
+    /normalizeCharacterScale: height=/.test(l),
+);
 /** Danger room uses CDN GLB + baked Bip001 clips (not legacy Mixamo remap). */
 const bakedGrudge6 = logs.some((l) =>
   /baked-grudge6 ready:.*mesh=\/cdn\/assets\/characters\//.test(l),
@@ -77,7 +81,7 @@ const fatal = errors.filter(
 const checks = {
   gameReady,
   humanTextured,
-  humanScaled: humanScaled || logs.some((l) => /normalizeCharacterScale/.test(l)),
+  humanScaled,
   bakedGrudge6,
   playerBaked,
   bakedUnitsAll4: bakedUnits >= 4,

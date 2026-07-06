@@ -63,11 +63,20 @@ Danger Room uses **baked only** (`game.js` → `createBakedGrudge6Unit`) — no 
 - Apply atlas **twice**: before equipment + after `EquipmentManager.applyLoadout()`
 - Prod URLs must use `charUrl()` → `/cdn/assets/characters/...` (not bare `/assets/...`)
 
-## Scale / grounding
+## Scale / grounding (`src/characterScale.js`)
 
-- Measure height from **body skinned meshes only** (`isBodyMeasureMesh`) — ignore `weapon_*` variants
-- Ground using body bbox only — hidden weapon meshes must not lift character
-- Orc/undead partial bbox → default 1.75 m target
+- **Manifest-first:** `characterManifest.json` stores `targetHeight` + `scaleFactor` per race (from `build-character-library.mjs`)
+- **Per-race height:** `targetHeight × RaceConfig.scale` (dwarf ~1.49m, barbarian ~1.96m, human 1.75m)
+- Runtime only re-scales if measured height drifts >8% from target
+- Metrics on `scene.userData.characterMetrics` — used for physics capsule sizing
+- Body bbox excludes `weapon_*`, `_shield_*`, `xtra_*` meshes
+
+## Motion (baked pipeline)
+
+- **Rotation-only clips** — retarget across all races/scales (`toRotationOnlyClip`)
+- **AnimationDirector** gait bands: idle@0 → walk@0.34 → run@0.7 → sprint@1
+- **Speed-proportional gait:** `BakedAnimationController.setGaitFromSpeed(speed01, sprint)` — do not binary idle/run switch
+- **Overlays:** attacks/skills via `playOneShot` / `requestOneShot`; locomotion scales down by overlay influence
 
 ## Bone names (CDN GLBs)
 
