@@ -795,12 +795,6 @@ function raceModelPaths(race) {
   return paths.filter(Boolean);
 }
 
-/** Grudge6 Bip001 FBX only — canonical race meshes for baked animation. */
-function grudge6RaceModelPaths(race) {
-  const g6 = grudge6RaceModelPath(race);
-  return g6 ? [grudge6AssetUrl(g6)] : raceModelPaths(race);
-}
-
 async function loadCharacterManifest() {
   if (_characterManifestPromise) return _characterManifestPromise;
   _characterManifestPromise = fetch(modelUrl("characterManifest.json"))
@@ -1936,7 +1930,8 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
   const tierCfg = TierConfig[tier] || TierConfig[1];
   const resolvedWeapon = resolveWeapon(race, weaponType);
 
-  const loaded = await loadModelWithFallback(grudge6RaceModelPaths(race));
+  // CDN D1 GLBs (Bip001) + baked rotation clips — same mesh path as arena prod.
+  const loaded = await loadModelWithFallback(raceModelPaths(race));
   const sourceScene = loaded.scene;
   const scene = cloneGLTFScene(sourceScene);
 

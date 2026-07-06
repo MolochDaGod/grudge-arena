@@ -1,4 +1,8 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from "vite";
+import { resolve } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 const BUILD_TS = new Date().toISOString();
 const BUILD_VERSION = `${BUILD_TS.slice(0, 10)}-${Date.now().toString(36)}`;
@@ -19,7 +23,10 @@ export default defineConfig({
     outDir: "dist",
     assetsInlineLimit: 0,
     rollupOptions: {
-      input: "index.html",
+      input: {
+        main: resolve(__dirname, "index.html"),
+        animTest: resolve(__dirname, "anim-test.html"),
+      },
     },
   },
   server: {

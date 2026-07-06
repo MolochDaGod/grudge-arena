@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grudge Arena · Character Showcase</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f;
+      color: #e8dcc8;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow: hidden;
+    }
+    #toolbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 10;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.82);
+      border-bottom: 1px solid rgba(201, 168, 76, 0.3);
+      backdrop-filter: blur(8px);
+    }
+    #toolbar a {
+      color: #c9a84c;
+      text-decoration: none;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    #toolbar select, #toolbar button {
+      background: rgba(20, 20, 30, 0.9);
+      color: #e8dcc8;
+      border: 1px solid rgba(201, 168, 76, 0.4);
+      border-radius: 4px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    #toolbar select:hover, #toolbar button:hover { border-color: #c9a84c; }
+    #toolbar .label {
+      color: rgba(232, 220, 200, 0.6);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    #toolbar .spacer { flex: 1; }
+    #status-pill {
+      font-size: 10px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(92, 207, 122, 0.5);
+      color: #5fcf7a;
+    }
+    #stage { position: fixed; inset: 52px 0 0 0; display: flex; }
+    #log {
+      width: 40%;
+      min-width: 280px;
+      padding: 14px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 10.5px;
+      color: #5fcf7a;
+      background: #06060a;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      border-right: 1px solid rgba(201, 168, 76, 0.2);
+    }
+    #canvas-wrap { flex: 1; position: relative; }
+    #canvas-wrap canvas { display: block; }
+    #gait-row {
+      position: fixed;
+      bottom: 12px;
+      right: 16px;
+      z-index: 11;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: rgba(0,0,0,0.7);
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(201,168,76,0.3);
+      font-size: 11px;
+    }
+    #gait-row input { width: 120px; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <a href="/">← Arena</a>
+    <span class="label">Pipeline</span>
+    <select id="pipe-sel">
+      <option value="baked" selected>Baked Bip001 (prod)</option>
+      <option value="legacy">Legacy Mixamo</option>
+    </select>
+    <span class="label">Race</span>
+    <select id="race-sel"></select>
+    <span class="label">Weapon</span>
+    <select id="weapon-sel"></select>
+    <span class="label">Clip</span>
+    <select id="anim-sel"><option value="">— pick —</option></select>
+    <button id="prev-btn" type="button">◀ Prev</button>
+    <button id="next-btn" type="button">Next ▶</button>
+    <button id="cycle-btn" type="button">⏯ Auto</button>
+    <span class="spacer"></span>
+    <span id="status-pill">loading…</span>
+  </div>
+  <div id="stage">
+    <div id="log"></div>
+    <div id="canvas-wrap"></div>
+  </div>
+  <div id="gait-row">
+    <span>Gait</span>
+    <input id="gait-slider" type="range" min="0" max="100" value="0" />
+    <span id="gait-label">idle</span>
+  </div>
+  <script type="module" src="/src/animTest/main.js"></script>
+</body>
+</html>
