@@ -1237,9 +1237,9 @@ body { background: var(--void); color: var(--text); font-family: var(--font-ui);
   background: rgba(79, 195, 255, 0.2) !important;
 }
 
-body.danger-room-active #arena-canvas,
+body.danger-room-active,
 body.danger-room-active canvas {
-  cursor: crosshair;
+  cursor: none;
 }
 
 .dr-hud-root {
@@ -1268,14 +1268,86 @@ body.danger-room-active canvas {
   text-transform: uppercase;
 }
 
+.dr-aim-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 56;
+}
+
 .dr-crosshair {
-  position: absolute;
-  top: 50%;
+  position: fixed;
+  width: 28px;
+  height: 28px;
   left: 50%;
-  width: 26px;
-  height: 26px;
+  top: 50%;
   transform: translate(-50%, -50%);
-  --ch-gap: 8px;
+  pointer-events: none;
+  --ch-gap: 0px;
+}
+
+.dr-crosshair-cursor {
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 0 10px rgba(0, 0, 0, 0.75),
+    inset 0 0 8px rgba(0, 0, 0, 0.45);
+}
+
+.dr-ch-arm {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.85);
+  border-radius: 1px;
+}
+
+.dr-ch-arm-t,
+.dr-ch-arm-b {
+  width: 2px;
+  height: 11px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.dr-ch-arm-t { top: 1px; }
+.dr-ch-arm-b { bottom: 1px; }
+
+.dr-ch-arm-l,
+.dr-ch-arm-r {
+  width: 11px;
+  height: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.dr-ch-arm-l { left: 1px; }
+.dr-ch-arm-r { right: 1px; }
+
+.dr-crosshair-aiming .dr-ch-arm,
+.dr-crosshair-softlock .dr-ch-arm,
+.dr-crosshair-hardlock .dr-ch-arm {
+  background: rgba(140, 220, 255, 1);
+}
+
+.dr-crosshair-aiming,
+.dr-crosshair-softlock,
+.dr-crosshair-hardlock {
+  border-color: rgba(140, 220, 255, 0.65);
+}
+
+.dr-ch-magnet-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  border: 2px solid rgba(140, 220, 255, 0.45);
+  box-shadow: 0 0 18px rgba(140, 220, 255, 0.2);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
 
 .dr-ch-range {
@@ -1334,28 +1406,22 @@ body.danger-room-active canvas {
 
 .dr-ch-dot {
   position: absolute;
-  top: 50%;
   left: 50%;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--dr-accent);
+  top: 50%;
+  width: 5px;
+  height: 5px;
   transform: translate(-50%, -50%);
-  box-shadow: 0 0 6px var(--dr-accent);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.9);
 }
 
-.dr-ch-line {
-  position: absolute;
-  background: var(--dr-accent);
-  box-shadow: 0 0 4px var(--dr-accent);
+.dr-crosshair-aiming .dr-ch-dot,
+.dr-crosshair-softlock .dr-ch-dot,
+.dr-crosshair-hardlock .dr-ch-dot {
+  background: #8cdcff;
+  box-shadow: 0 0 8px rgba(140, 220, 255, 0.85);
 }
-
-.dr-ch-top, .dr-ch-bottom { width: 2px; height: 7px; left: 50%; }
-.dr-ch-left, .dr-ch-right { height: 2px; width: 7px; top: 50%; }
-.dr-ch-top { bottom: 50%; transform: translateX(-50%) translateY(calc(-50% - var(--ch-gap))); }
-.dr-ch-bottom { top: 50%; transform: translateX(-50%) translateY(calc(50% + var(--ch-gap))); }
-.dr-ch-left { right: 50%; transform: translateY(-50%) translateX(calc(-50% - var(--ch-gap))); }
-.dr-ch-right { left: 50%; transform: translateY(-50%) translateX(calc(50% + var(--ch-gap))); }
 
 .dr-mm-panel {
   position: absolute;

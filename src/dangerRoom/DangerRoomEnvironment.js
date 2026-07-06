@@ -7,6 +7,8 @@ import { ROOM_PRESETS } from "./roomPresets.js";
 
 const HALF = 16;
 const HEIGHT = 18;
+const DJ_FLOOR_Y = 4.9;
+const DJ_DEPTH = 3;
 
 function hex(n) {
   return `#${n.toString(16).padStart(6, "0")}`;
@@ -97,17 +99,78 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
     obstacleMeshes.push(pillar);
   }
 
-  // DJ alcove shell (training room vibe from dangerroom.puter.site)
+  // DJ alcove + neon frame (dangerroom.puter.site)
   const djGroup = new THREE.Group();
   djGroup.position.set(0, 0, HALF);
   const djFloor = new THREE.Mesh(
-    new THREE.BoxGeometry(8, 0.3, 3.4),
+    new THREE.BoxGeometry(8, 0.3, DJ_DEPTH + 0.4),
     new THREE.MeshStandardMaterial({ color: 0x0c0f17, metalness: 0.5, roughness: 0.6 }),
   );
-  djFloor.position.set(0, 4.75, 1.5);
+  djFloor.position.set(0, DJ_FLOOR_Y - 0.15, DJ_DEPTH / 2);
   djFloor.receiveShadow = true;
   djGroup.add(djFloor);
+  const djWall = new THREE.Mesh(
+    new THREE.PlaneGeometry(8, 5.2),
+    new THREE.MeshStandardMaterial({ color: 0x0c0f17, roughness: 0.9 }),
+  );
+  djWall.position.set(0, (DJ_FLOOR_Y + 9.6) / 2, DJ_DEPTH);
+  djWall.receiveShadow = true;
+  djGroup.add(djWall);
+  const frameColor = preset.pillarGlowColor || 0xff2bd6;
+  const frames = [
+    [7.5, 0.16, 0, DJ_FLOOR_Y],
+    [7.5, 0.16, 0, 9.4],
+    [0.16, 4.5, -3.6, (DJ_FLOOR_Y + 9.4) / 2],
+    [0.16, 4.5, 3.6, (DJ_FLOOR_Y + 9.4) / 2],
+  ];
+  for (const [w, h, x, y] of frames) {
+    const frame = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({
+        color: frameColor,
+        transparent: true,
+        opacity: 0.85,
+        toneMapped: false,
+      }),
+    );
+    frame.position.set(x, y, -0.08);
+    frame.rotation.y = Math.PI;
+    djGroup.add(frame);
+  }
   root.add(djGroup);
+
+  // Heavy training bags — side anchors with local spot fill
+  const bagMat = new THREE.MeshStandardMaterial({
+    color: 0x5c3d1e,
+    roughness: 0.82,
+    metalness: 0.08,
+  });
+  const bagPositions = [
+    [-9, 0, -4],
+    [9, 0, -4],
+    [-7, 0, 6],
+    [7, 0, 6],
+  ];
+  for (const [x, , z] of bagPositions) {
+    const bagGroup = new THREE.Group();
+    bagGroup.position.set(x, 0, z);
+    const chain = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 2.2, 6),
+      new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.7, roughness: 0.35 }),
+    );
+    chain.position.y = HEIGHT - 1.1;
+    bagGroup.add(chain);
+    const bag = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.7, 2.4, 12), bagMat);
+    bag.position.y = HEIGHT - 2.8;
+    bag.castShadow = true;
+    bag.receiveShadow = true;
+    bagGroup.add(bag);
+    const bagLight = new THREE.PointLight(0xffe8c0, 1.1, 10);
+    bagLight.position.set(0, HEIGHT - 2.5, 0.8);
+    bagGroup.add(bagLight);
+    root.add(bagGroup);
+    obstacleMeshes.push(bag);
+  }
 
   for (const a of preset.accents) {
     const light = new THREE.PointLight(a.color, a.intensity, a.distance);

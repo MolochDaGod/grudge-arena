@@ -95,6 +95,35 @@ export function teardownDangerRoom(arena) {
   setDangerMode(false);
 }
 
+const _proj = new THREE.Vector3();
+
+/** Tab-target soft-lock — crosshair magnet toward enemy chest on screen. */
+function resolveSoftLockScreen(arena) {
+  const target = arena.targeting?.currentTarget;
+  const canvas = arena.renderer?.domElement;
+  if (!target?.mesh || !canvas || target.entity?.hasTag("dead")) {
+    return {
+      active: false,
+      aiming: !!(arena._autoAttackOn || arena.playerController?.holdKey?.Mouse2),
+    };
+  }
+  const rect = canvas.getBoundingClientRect();
+  _proj.copy(target.mesh.position);
+  _proj.y += 1.25;
+  _proj.project(arena.camera);
+  if (_proj.z < -1 || _proj.z > 1) {
+    return { active: false, aiming: !!arena._autoAttackOn };
+  }
+  return {
+    active: true,
+    x: rect.left + (_proj.x * 0.5 + 0.5) * rect.width,
+    y: rect.top + (-_proj.y * 0.5 + 0.5) * rect.height,
+    hardLock: !!arena._autoAttackOn,
+    aiming: !!(arena._autoAttackOn || arena.playerController?.holdKey?.Mouse2),
+    magnet: 0.55,
+  };
+}
+
 /** Per-frame danger room HUD updates. */
 export function tickDangerRoomHud(arena) {
   if (!arena.playerController) return;
@@ -141,6 +170,7 @@ export function tickDangerRoomHud(arena) {
     spread: getCrosshairSpread(),
     hitMarker: getHitMarkerId(),
     rangeState,
+    softLock: resolveSoftLockScreen(arena),
   });
   syncAbilityBarFlash();
 }

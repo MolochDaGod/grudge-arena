@@ -58,6 +58,8 @@ import {
   tickCombatFeedback,
   pulseCrosshairSpread,
 } from './src/engine/CombatFeedback.js';
+import { CombatPostFX } from './src/engine/CombatPostFX.js';
+import { installDangerRoomLighting } from './src/engine/DangerRoomLighting.js';
 import { syncAbilityBarFlash } from './src/dangerRoom/dangerRoomHud.js';
 
 const VALID_RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
@@ -142,6 +144,8 @@ class GrudgeArena {
     this._dangerEnv = null;
     this._dangerUnsub = null;
     this._dangerClampRadius = ARENA_CLAMP_RADIUS;
+    this._dangerLighting = null;
+    this.postFX = null;
   }
 
   async init(config) {
@@ -360,6 +364,8 @@ class GrudgeArena {
         for (const mesh of this._dangerEnv?.terrainMeshes || []) {
           this.collisionSystem.addCollider(mesh, "environment");
         }
+        this._dangerLighting = installDangerRoomLighting(this.scene, this);
+        this.postFX = new CombatPostFX(this.renderer, this.scene, this.camera);
       }
 
       const gameUI = document.getElementById("gameUI");
@@ -416,6 +422,7 @@ class GrudgeArena {
       this.camera.aspect = w / h;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(w, h);
+      this.postFX?.setSize(w, h);
     });
   }
 
@@ -1712,7 +1719,10 @@ class GrudgeArena {
     if (this.arenaAI && !this.dangerMode) this.arenaAI.update(delta, this.allUnits, active);
     tickCombatFeedback(delta);
     syncAbilityBarFlash();
-    if (this.dangerMode) tickDangerRoomHud(this, delta);
+    if (this.dangerMode) {
+      tickDangerRoomHud(this, delta);
+      this._dangerLighting?.update(this.playerUnit?.mesh);
+    }
 
     if (this._bowDrawing) {
       this._bowDrawTimer -= delta;
@@ -1784,7 +1794,8 @@ class GrudgeArena {
       this.targeting.updateTeamFrames();
       this.targeting.cleanup();
     }
-    this.renderer.render(this.scene, this.camera);
+    if (this.postFX) this.postFX.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 
   /** Bind I/C/K to toggle inventory/character/skills panels. */
@@ -1878,6 +1889,10 @@ class GrudgeArena {
     }
 
     // Dispose subsystems
+    this.postFX?.dispose();
+    this.postFX = null;
+    this._dangerLighting?.dispose();
+    this._dangerLighting = null;
     this.particleSystem?.dispose();
     this.spriteSystem?.dispose();
     this.gameTimers.clear();

@@ -24,14 +24,17 @@ let lastPresetId = null;
 function buildShell(presetName) {
   return `
     <div class="dr-mode-badge">⚡ Danger Room · ${presetName}</div>
-    <div class="dr-crosshair" id="dr-crosshair" aria-hidden="true">
-      <span class="dr-ch-range" id="dr-ch-range"></span>
-      <span class="dr-ch-dot"></span>
-      <span class="dr-ch-hit" id="dr-ch-hit" hidden></span>
-      <span class="dr-ch-line dr-ch-top"></span>
-      <span class="dr-ch-line dr-ch-bottom"></span>
-      <span class="dr-ch-line dr-ch-left"></span>
-      <span class="dr-ch-line dr-ch-right"></span>
+    <div class="dr-aim-layer" aria-hidden="true">
+      <div class="dr-crosshair dr-crosshair-cursor" id="dr-crosshair">
+        <span class="dr-ch-magnet-ring" id="dr-ch-magnet"></span>
+        <span class="dr-ch-range" id="dr-ch-range"></span>
+        <span class="dr-ch-hit" id="dr-ch-hit" hidden></span>
+        <span class="dr-ch-arm dr-ch-arm-t"></span>
+        <span class="dr-ch-arm dr-ch-arm-b"></span>
+        <span class="dr-ch-arm dr-ch-arm-l"></span>
+        <span class="dr-ch-arm dr-ch-arm-r"></span>
+        <span class="dr-ch-dot"></span>
+      </div>
     </div>
     <div class="dr-mm-panel">
       <span>MM</span>
@@ -114,12 +117,13 @@ function onPresetKey(e) {
   }
 }
 
-/** Per-frame HUD refresh (motion, combo, hit marker, crosshair spread). */
+/** Per-frame HUD refresh (motion, combo, hit marker, crosshair spread + soft-lock). */
 export function updateDangerHud(opts = {}) {
   if (!rootEl) return;
   const motion = document.getElementById("dr-motion-label");
   const weapon = document.getElementById("dr-weapon-label");
   const crosshair = document.getElementById("dr-crosshair");
+  const magnet = document.getElementById("dr-ch-magnet");
   const hit = document.getElementById("dr-ch-hit");
   const comboBadge = document.getElementById("dr-combo-badge");
   const comboN = document.getElementById("dr-combo-n");
@@ -132,7 +136,31 @@ export function updateDangerHud(opts = {}) {
   }
 
   const spread = opts.spread ?? getCrosshairSpread();
-  if (crosshair) crosshair.style.setProperty("--ch-gap", `${spread}px`);
+  if (crosshair) {
+    crosshair.style.setProperty("--ch-gap", `${spread}px`);
+    const softLock = opts.softLock;
+    const cx = window.innerWidth * 0.5;
+    const cy = window.innerHeight * 0.5;
+    if (softLock?.active && softLock.x != null && softLock.y != null) {
+      const k = softLock.hardLock ? 0.72 : 0.38;
+      crosshair.style.left = `${cx + (softLock.x - cx) * k}px`;
+      crosshair.style.top = `${cy + (softLock.y - cy) * k}px`;
+      crosshair.classList.toggle("dr-crosshair-softlock", true);
+      crosshair.classList.toggle("dr-crosshair-hardlock", !!softLock.hardLock);
+      crosshair.classList.toggle("dr-crosshair-cursor", false);
+      crosshair.classList.toggle("dr-crosshair-aiming", !!softLock.aiming);
+      if (magnet) magnet.style.opacity = String(0.25 + (softLock.magnet || 0) * 0.55);
+    } else {
+      crosshair.style.left = "50%";
+      crosshair.style.top = "50%";
+      crosshair.classList.toggle("dr-crosshair-softlock", false);
+      crosshair.classList.toggle("dr-crosshair-hardlock", false);
+      crosshair.classList.toggle("dr-crosshair-cursor", true);
+      crosshair.classList.toggle("dr-crosshair-aiming", !!softLock?.aiming);
+      if (magnet) magnet.style.opacity = "0";
+    }
+    crosshair.style.transform = "translate(-50%, -50%)";
+  }
 
   const combo = opts.combo ?? getComboStage();
   if (comboBadge && comboN) {
