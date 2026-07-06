@@ -1156,9 +1156,8 @@ function measureCharacterHeight(scene) {
     const boneH = measureBoneHeight(scene);
     // Pelvis→head over-estimates on A-pose rigs; only trust a narrow band.
     if (boneH >= 1.2 && boneH <= 2.0) return boneH;
-    if (bboxH > 0.25) return bboxH;
   }
-  // CDN race GLBs are authored for ~1.75 m — safe default when bbox is partial.
+  // CDN race GLBs are authored for ~1.75 m — use when partial bbox (orc/undead).
   return 1.75;
 }
 
