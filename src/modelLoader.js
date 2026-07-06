@@ -855,6 +855,8 @@ async function loadRaceTextureMap(race) {
 function patchMaterialAtlas(mat, atlas) {
   mat.map = atlas;
   mat.color.set(0xffffff);
+  if (mat.emissive?.set) mat.emissive.set(0x000000);
+  if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = 0;
   // Unlit Synty mats must bypass ACES tone-mapping or the atlas reads black/washed.
   if (mat.isMeshBasicMaterial) {
     mat.toneMapped = false;
@@ -1116,6 +1118,7 @@ function isBodyMeasureMesh(node) {
 }
 
 function measureBoneHeight(scene) {
+  scene.updateMatrixWorld(true);
   let pelvis = null;
   let head = null;
   scene.traverse((node) => {
@@ -1131,10 +1134,7 @@ function measureBoneHeight(scene) {
   return Math.abs(h.y - p.y) + 0.25;
 }
 
-function measureCharacterHeight(scene) {
-  scene.traverse((node) => {
-    if (node.isSkinnedMesh) node.normalizeSkinWeights();
-  });
+function measureBodyBoundingBox(scene) {
   const bodyBox = new THREE.Box3();
   let bodyMeshes = 0;
   scene.traverse((node) => {
@@ -1142,6 +1142,14 @@ function measureCharacterHeight(scene) {
     bodyBox.expandByObject(node);
     bodyMeshes++;
   });
+  return { bodyBox, bodyMeshes };
+}
+
+function measureCharacterHeight(scene) {
+  scene.traverse((node) => {
+    if (node.isSkinnedMesh) node.normalizeSkinWeights();
+  });
+  const { bodyBox, bodyMeshes } = measureBodyBoundingBox(scene);
   if (bodyMeshes > 0) {
     const bboxH = bodyBox.getSize(new THREE.Vector3()).y;
     if (bboxH >= 1.0) return bboxH;
@@ -1169,7 +1177,9 @@ function normalizeCharacterScale(scene, targetH = 1.75) {
   console.log(
     `[modelLoader] normalizeCharacterScale: height=${height.toFixed(3)}m → scale=${scale.toFixed(4)}`,
   );
-  const grounded = new THREE.Box3().setFromObject(scene);
+  scene.updateMatrixWorld(true);
+  const { bodyBox, bodyMeshes } = measureBodyBoundingBox(scene);
+  const grounded = bodyMeshes > 0 ? bodyBox : new THREE.Box3().setFromObject(scene);
   scene.position.y = -grounded.min.y;
 }
 
