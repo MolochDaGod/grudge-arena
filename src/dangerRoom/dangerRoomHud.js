@@ -54,7 +54,7 @@ function buildShell(presetName) {
       <div><kbd>WASD</kbd> Move <kbd>Shift</kbd> Sprint <kbd>RMB</kbd> Look/Aim</div>
       <div><kbd>Tab</kbd> Target <kbd>RMB</kbd> Attack <kbd>LMB</kbd> Fire <kbd>1-4</kbd> Skills</div>
       <div><kbd>G</kbd> Gear · <kbd>M</kbd> Menu · <kbd>Hold F</kbd> Weapons · <kbd>Tab</kbd> Target</div>
-      <div><kbd>[</kbd><kbd>]</kbd> Room preset · <kbd>R</kbd> Reload (bow/rifle)</div>
+      <div><kbd>[</kbd><kbd>]</kbd> Room preset · <kbd>Hold R</kbd> Harvest tools · <kbd>LMB</kbd> Chop/Mine</div>
     </div>
     <button type="button" class="dr-exit-btn" id="dr-exit-btn" ${sandbox ? "hidden" : ""}>Exit Danger Room</button>
   `;

@@ -1952,3 +1952,65 @@ body.combat-sandbox-active .panel-toggles {
 .dr-radial-item:hover {
   background: rgba(79, 195, 255, 0.2);
 }
+
+.dr-harvest-radial .dr-radial-item {
+  border-color: rgba(127, 212, 106, 0.45);
+}
+
+.dr-harvest-radial .dr-radial-center {
+  border-color: rgba(127, 212, 106, 0.35);
+}
+
+.harvest-stash-hud {
+  position: fixed;
+  top: 56px;
+  left: 16px;
+  z-index: 56;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(6, 14, 28, 0.82);
+  border: 1px solid rgba(127, 212, 106, 0.35);
+  color: #d8f5dc;
+  font: 11px ui-monospace, Consolas, monospace;
+  pointer-events: none;
+}
+
+.harvest-stash-title {
+  width: 100%;
+  color: #7fd46a;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.harvest-toast-root {
+  position: fixed;
+  left: 50%;
+  top: 38%;
+  transform: translateX(-50%);
+  z-index: 60;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.harvest-toast {
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(8, 22, 14, 0.9);
+  border: 1px solid rgba(127, 212, 106, 0.45);
+  color: #e8ffe8;
+  font: 13px ui-monospace, Consolas, monospace;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.harvest-toast-show {
+  opacity: 1;
+  transform: translateY(0);
+}

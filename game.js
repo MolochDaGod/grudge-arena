@@ -514,6 +514,7 @@ class GrudgeArena {
       };
       this._dangerReloadKey = (e) => {
         if (e.code === "KeyR" && !e.repeat && this.dangerMode) {
+          if (this._harvest?.isActive?.() || isCombatSandboxMode()) return;
           const wt = this._getWeaponTypeKey?.() ?? "";
           if (wt === "bow" || wt === "rifle") {
             import("./src/dangerRoom/ShooterSystem.js").then((m) => m.startReload(wt));
@@ -840,6 +841,7 @@ class GrudgeArena {
    */
   async reloadDangerPlayer(opts = {}) {
     if (!this.dangerMode || !this.playerUnit) return;
+    this._harvest?.clearTool?.();
 
     if (opts.live && this.playerUnit.equipment) {
       applyDangerLiveLoadout(this);

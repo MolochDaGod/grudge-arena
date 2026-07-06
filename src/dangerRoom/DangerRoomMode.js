@@ -49,6 +49,11 @@ import {
   syncTargetLockFromTargeting,
   cycleTabTarget,
 } from "../engine/SoftLockSystem.js";
+import {
+  mountHarvestForArena,
+  teardownHarvestForArena,
+  tickHarvestForArena,
+} from "./HarvestSystem.js";
 
 /** Training dummies — enemy team targets that don't chase the player. */
 export function getDangerTrainingTeams(playerRace, playerWeapon, buildConfig) {
@@ -140,6 +145,7 @@ export function bootstrapDangerRoom(arena) {
   }
   const weaponName = arena.getCurrentWeapon?.()?.name || "Weapon";
   setDangerWeaponLabel(weaponName);
+  mountHarvestForArena(arena);
 
   arena._dangerUnsub = subscribeDangerRoom(() => {
     const next = getDangerRoomState();
@@ -161,11 +167,17 @@ export function bootstrapDangerRoom(arena) {
       } else if (!arena._djBooth) {
         arena._djBooth = createDjBoothRig(arena.scene);
       }
+      if (next.presetId === "island" && isCombatSandboxUi()) {
+        mountHarvestForArena(arena);
+      } else {
+        teardownHarvestForArena(arena);
+      }
     }
   });
 }
 
 export function teardownDangerRoom(arena) {
+  teardownHarvestForArena(arena);
   unmountDangerRoomLoadoutPanel();
   unmountDangerRoomDock();
   unmountDangerRoomHud();
@@ -218,6 +230,7 @@ export function tickDangerRoomSystems(arena, delta = 0.016) {
   getDangerRoomMusic().update(delta);
   arena._djBooth?.update?.(delta);
   updateShooter(arena, delta);
+  tickHarvestForArena(arena, delta);
   tickDangerRoomHud(arena, delta);
 }
 
@@ -241,7 +254,10 @@ export function tickDangerRoomHud(arena, delta = 0.016) {
   const aiming = !!(arena._autoAttackOn || ctrl.holdKey?._RMB);
 
   arena._reloading = isReloading(lockWeapon);
-  const motion = resolveMotionLabel(feel, {
+  const harvestTool = arena._harvest?.activeTool;
+  const motion = harvestTool
+    ? `HARVEST · ${harvestTool.label.toUpperCase()}`
+    : resolveMotionLabel(feel, {
     skillName: arena._activeSkillLabel,
     reloading: arena._reloading,
     aiming: aiming && weapon?.range > 5,
