@@ -43,7 +43,8 @@ npm test && npm run build && npm run deploy:prod
 2. Log panel must show: `materials: N/N textured` (N > 40 for D1 races)
 3. Character visible, grounded, idle anim smooth (not exploded yellow shards)
 4. Gait slider: idle → walk → run → sprint blends smoothly
-5. `npm run` smoke: `node scripts/smoke-arena.mjs` (arena flow)
+5. `npm run smoke` — arena Danger Room + anim-test showcase (both must pass)
+6. `npm run smoke:anim-test:all` — all 6 races textured + baked clips
 
 ## Two pipelines (know which is active)
 

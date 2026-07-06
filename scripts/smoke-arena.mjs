@@ -64,12 +64,12 @@ const humanTextured = logs.some((l) =>
   /human: applied atlas texture to \d+ material slots/i.test(l),
 );
 const humanScaled = logs.some((l) => /normalizeCharacterScale: height=/.test(l));
-/** Danger room uses Grudge6 FBX + baked Bip001 clips (not legacy hero idle bind). */
+/** Danger room uses CDN GLB + baked Bip001 clips (not legacy Mixamo remap). */
 const bakedGrudge6 = logs.some((l) =>
-  /baked-grudge6 ready:.*mesh=\/api\/assets\/models\/grudge6\/races\//.test(l),
+  /baked-grudge6 ready:.*mesh=\/cdn\/assets\/characters\//.test(l),
 );
 const playerBaked = logs.some((l) =>
-  /Human baked-grudge6 ready:.*WK_Characters\.fbx/.test(l),
+  /Human baked-grudge6 ready:.*WK_Characters\.glb/.test(l),
 );
 const bakedUnits = logs.filter((l) => /baked-grudge6 ready:/.test(l)).length;
 const fatal = errors.filter(

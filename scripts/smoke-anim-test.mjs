@@ -27,12 +27,16 @@ const panel = await page.evaluate(() => ({
   scriptSrc: [...document.querySelectorAll("script[type=module]")].map((s) => s.src),
 }));
 
+const matMatch = panel.log.match(/materials: (\d+)\/(\d+) textured/);
+const texturedCount = matMatch ? Number(matMatch[1]) : 0;
+const totalMats = matMatch ? Number(matMatch[2]) : 0;
+
 const checks = {
   viteBundle: panel.scriptSrc.some((s) => s.includes("animTest")),
   bakedPipeline: panel.log.includes("baked"),
-  textured: /materials: \d+\/\d+ textured/.test(panel.log) && !panel.log.includes("0/"),
+  textured: texturedCount > 0 && texturedCount === totalMats && totalMats >= 20,
   noFail: !panel.log.includes("FAIL:"),
-  statusOk: /textured OK|partial textures/.test(panel.status + panel.log),
+  clipsLoaded: /baked clips: \d+/.test(panel.log),
 };
 
 console.log("status:", panel.status);
