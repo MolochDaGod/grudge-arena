@@ -49,9 +49,11 @@ function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
-function lockProfile(weaponType) {
+export function lockProfile(weaponType) {
   return WEAPON_LOCK_PROFILES[weaponType] || DEFAULT_PROFILE;
 }
+
+export { zoneDimsFromArea };
 
 function zoneDimsFromArea(rectW, rectH, areaFrac) {
   const w = Math.sqrt(areaFrac) * rectW;

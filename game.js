@@ -48,6 +48,7 @@ import {
   bootstrapDangerRoom,
   teardownDangerRoom,
   getDangerTrainingTeams,
+  getDangerNeutralTeams,
   getDangerSpawnPosition,
   getDangerSpawnFacing,
   tickDangerRoomSystems,
@@ -229,12 +230,16 @@ class GrudgeArena {
 
       let TEAM_A;
       let TEAM_B;
+      let TEAM_N = [];
       if (this.dangerMode) {
         ({ TEAM_A, TEAM_B } = getDangerTrainingTeams(
           race,
           playerWeapon,
           { ...buildConfig, displayName: this._getPlayerDisplayName(buildConfig) },
         ));
+        if (isCombatSandboxMode()) {
+          TEAM_N = getDangerNeutralTeams();
+        }
       } else {
         TEAM_A = [
           {
@@ -268,9 +273,13 @@ class GrudgeArena {
           this._loadUnit(c, "B", i, TEAM_B.length, modelMod),
         ),
       );
+      setProgress(75, "Loading neutral NPCs...");
+      const teamNUnits = TEAM_N.length
+        ? await Promise.all(TEAM_N.map((c, i) => this._loadUnit(c, "N", i, TEAM_N.length, modelMod)))
+        : [];
       setProgress(90, "Initializing systems...");
 
-      this.allUnits = [...teamAUnits, ...teamBUnits];
+      this.allUnits = [...teamAUnits, ...teamBUnits, ...teamNUnits];
       this.playerUnit = this.allUnits.find((u) => u.isPlayer);
       this.playerEntity = this.playerUnit?.entity;
 
@@ -813,8 +822,9 @@ class GrudgeArena {
         .addComponent("Equipment", Components.Equipment())
         .addComponent("SkillBar", Components.SkillBar(9));
     }
-    entity.addTag(teamId === "A" ? "teamA" : "teamB");
-    this.collisionSystem.addCollider(mesh, teamId === "A" ? "ally" : "enemy", {
+    entity.addTag(teamId === "A" ? "teamA" : teamId === "N" ? "teamNeutral" : "teamB");
+    const colliderKind = teamId === "A" ? "ally" : teamId === "N" ? "neutral" : "enemy";
+    this.collisionSystem.addCollider(mesh, colliderKind, {
       entity,
       uuid,
     });

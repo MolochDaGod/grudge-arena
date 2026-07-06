@@ -48,13 +48,15 @@ function buildShell(presetName) {
       <span class="dr-mm-value" id="dr-motion-label">IDLE</span>
       <span>·</span>
       <span id="dr-weapon-label">Weapon</span>
+      ${sandbox ? `<span class="dr-focus-filter" id="dr-focus-filter">FOCUS: ALL</span>` : ""}
       <span class="dr-combo-badge" id="dr-combo-badge" hidden>Hit <span id="dr-combo-n">1</span></span>
     </div>
     <div class="dr-controls-hint">
       <div><kbd>WASD</kbd> Move <kbd>Shift</kbd> Sprint <kbd>RMB</kbd> Look/Aim</div>
       <div><kbd>Tab</kbd> Target <kbd>RMB</kbd> Attack <kbd>LMB</kbd> Fire <kbd>1-4</kbd> Skills</div>
       <div><kbd>G</kbd> Gear · <kbd>M</kbd> Menu · <kbd>Hold F</kbd> Weapons · <kbd>Tab</kbd> Target</div>
-      <div><kbd>[</kbd><kbd>]</kbd> Room preset · <kbd>Hold R</kbd> Harvest tools · <kbd>LMB</kbd> Chop/Mine</div>
+      ${sandbox ? `<div><kbd>\`</kbd> Toggle focus · <kbd>Tab</kbd> Cycle · <kbd>RMB</kbd> Hard lock</div>
+      <div><kbd>[</kbd><kbd>]</kbd> Preset · <kbd>Hold R</kbd> Harvest · <kbd>LMB</kbd> Swing</div>` : `<div><kbd>[</kbd><kbd>]</kbd> Room preset · <kbd>Hold R</kbd> Harvest tools · <kbd>LMB</kbd> Chop/Mine</div>`}
     </div>
     <button type="button" class="dr-exit-btn" id="dr-exit-btn" ${sandbox ? "hidden" : ""}>Exit Danger Room</button>
   `;
@@ -162,6 +164,11 @@ export function updateDangerHud(opts = {}) {
   if (opts.accent && rootEl) {
     rootEl.style.setProperty("--dr-accent", opts.accent);
   }
+  if (opts.focusFilter) {
+    const ff = document.getElementById("dr-focus-filter");
+    if (ff) ff.textContent = `FOCUS: ${opts.focusFilter}`;
+  }
+  const kind = opts.focusKind;
 
   const spread = opts.spread ?? getCrosshairSpread();
   if (crosshair) {
@@ -177,6 +184,9 @@ export function updateDangerHud(opts = {}) {
       crosshair.classList.toggle("dr-crosshair-hardlock", !!softLock.hardLock);
       crosshair.classList.toggle("dr-crosshair-cursor", false);
       crosshair.classList.toggle("dr-crosshair-aiming", !!softLock.aiming);
+      crosshair.classList.toggle("focus-enemy", kind === "enemy");
+      crosshair.classList.toggle("focus-neutral", kind === "neutral");
+      crosshair.classList.toggle("focus-harvest", kind === "harvestable");
       if (magnet) magnet.style.opacity = String(0.25 + (softLock.magnet || 0) * 0.55);
     } else {
       crosshair.style.left = "50%";
@@ -185,6 +195,7 @@ export function updateDangerHud(opts = {}) {
       crosshair.classList.toggle("dr-crosshair-hardlock", false);
       crosshair.classList.toggle("dr-crosshair-cursor", true);
       crosshair.classList.toggle("dr-crosshair-aiming", !!softLock?.aiming);
+      crosshair.classList.remove("focus-enemy", "focus-neutral", "focus-harvest");
       if (magnet) magnet.style.opacity = "0";
     }
     crosshair.style.transform = "translate(-50%, -50%)";
@@ -224,6 +235,9 @@ export function updateDangerHud(opts = {}) {
     softZone.style.width = `${sl.zoneW}px`;
     softZone.style.height = `${sl.zoneH}px`;
     softZone.classList.toggle("dr-softlock-hard", !!sl.hardLock);
+    softZone.classList.toggle("focus-enemy", kind === "enemy");
+    softZone.classList.toggle("focus-neutral", kind === "neutral");
+    softZone.classList.toggle("focus-harvest", kind === "harvestable");
   } else if (softZone) {
     softZone.hidden = true;
   }
@@ -232,6 +246,9 @@ export function updateDangerHud(opts = {}) {
     targetPip.hidden = false;
     targetPip.style.left = `${sl.targetX}px`;
     targetPip.style.top = `${sl.targetY}px`;
+    targetPip.classList.toggle("focus-enemy", kind === "enemy");
+    targetPip.classList.toggle("focus-neutral", kind === "neutral");
+    targetPip.classList.toggle("focus-harvest", kind === "harvestable");
   } else if (targetPip) {
     targetPip.hidden = true;
   }

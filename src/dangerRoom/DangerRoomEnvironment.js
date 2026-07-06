@@ -53,9 +53,9 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
     root.add(makeGridHelper(preset));
   }
 
-  let islandTerrain = null;
+  let islandTerrainPromise = null;
   if (isIsland) {
-    islandTerrain = buildIslandTerrain(root);
+    islandTerrainPromise = buildIslandTerrain(root);
   }
 
   const wallMat = new THREE.MeshStandardMaterial({ color: preset.wallColor, roughness: 0.85 });
@@ -200,9 +200,10 @@ export function buildDangerRoomEnvironment(scene, presetId = "holo") {
     root,
     preset,
     presetId,
-    terrainMeshes: islandTerrain?.terrainMeshes ?? [floor],
+    terrainMeshes: isIsland ? [] : [floor],
+    terrainLoadPromise: islandTerrainPromise,
     obstacleMeshes,
-    clampRadius: islandTerrain?.clampRadius ?? preset.clampRadius,
+    clampRadius: preset.clampRadius,
     colosseumRoot: null,
     showDjBooth: !isColosseum && !isIsland,
     outdoor: !!preset.outdoor,

@@ -1523,6 +1523,39 @@ body.combat-sandbox-active .panel-toggles {
   z-index: 55;
   transition: left 80ms linear, top 80ms linear, width 80ms linear, height 80ms linear;
 }
+.dr-softlock-zone.focus-enemy {
+  border-color: rgba(255, 68, 68, 0.75);
+  box-shadow: 0 0 18px rgba(255, 68, 68, 0.35);
+}
+
+.dr-softlock-zone.focus-neutral {
+  border-color: rgba(255, 204, 51, 0.8);
+  box-shadow: 0 0 18px rgba(255, 204, 51, 0.35);
+}
+
+.dr-softlock-zone.focus-harvest {
+  border-color: rgba(68, 221, 102, 0.8);
+  box-shadow: 0 0 18px rgba(68, 221, 102, 0.4);
+}
+
+.dr-target-pip.focus-enemy { background: #ff4444; box-shadow: 0 0 12px #ff4444; }
+.dr-target-pip.focus-neutral { background: #ffcc33; box-shadow: 0 0 12px #ffcc33; }
+.dr-target-pip.focus-harvest { background: #44dd66; box-shadow: 0 0 12px #44dd66; }
+
+.dr-crosshair.focus-enemy .dr-ch-dot { background: #ff4444; }
+.dr-crosshair.focus-neutral .dr-ch-dot { background: #ffcc33; }
+.dr-crosshair.focus-harvest .dr-ch-dot { background: #44dd66; }
+
+.dr-focus-filter {
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #cfe8ff;
+}
+
 .dr-softlock-zone.dr-softlock-hard {
   border-color: rgba(140, 220, 255, 0.65);
   background: rgba(79, 195, 255, 0.08);

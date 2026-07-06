@@ -22,6 +22,11 @@ import {
 } from "./harvestToolRadial.js";
 import { lerpAngle } from "../engine/tpsMath.js";
 import { isCombatSandboxUi, getDangerRoomState } from "./dangerRoomStore.js";
+import {
+  registerFocusTarget,
+  unregisterFocusTarget,
+  getLockedFocusTarget,
+} from "./FocusTargetRegistry.js";
 
 /** @typedef {object} HarvestNodeState */
 
@@ -91,6 +96,13 @@ export class HarvestSystem {
     this.nodes = spawnIslandHarvestables(this.root);
     for (const n of this.nodes) {
       this.arena._obstacleMeshes?.push(n.group);
+      registerFocusTarget({
+        id: n.id,
+        kind: "harvestable",
+        label: `${n.type} node`,
+        getWorld: (out) => out.set(n.group.position.x, n.group.position.y, n.group.position.z),
+        alive: () => !n.depleted && !n.felling,
+      });
     }
     this._ensureStashHud();
     setupHarvestRadialInput((toolId) => this.selectTool(toolId));
@@ -103,6 +115,7 @@ export class HarvestSystem {
       this.arena.scene.remove(this.root);
       this.root = null;
     }
+    for (const n of this.nodes) unregisterFocusTarget(n.id);
     this.nodes = [];
     this.activeToolId = null;
     this.pendingHit = null;
@@ -205,6 +218,7 @@ export class HarvestSystem {
       this._grantReward(node.type, bonus);
       node.depleted = true;
       node.group.visible = false;
+      unregisterFocusTarget(node.id);
       const idx = this.arena._obstacleMeshes?.indexOf(node.group);
       if (idx >= 0) this.arena._obstacleMeshes.splice(idx, 1);
     }
@@ -226,6 +240,12 @@ export class HarvestSystem {
     const tool = this.activeTool;
     const player = this.arena.playerUnit?.mesh;
     if (!tool || !player) return null;
+
+    const locked = getLockedFocusTarget();
+    if (locked?.kind === "harvestable") {
+      const node = this.nodes.find((n) => n.id === locked.id && !n.depleted && !n.felling);
+      if (node && tool.types.includes(node.type)) return node;
+    }
 
     _fwd.set(0, 0, -1).applyQuaternion(player.quaternion);
     let best = null;
@@ -280,6 +300,7 @@ export class HarvestSystem {
         node.felling = false;
         node.depleted = true;
         node.group.visible = false;
+        unregisterFocusTarget(node.id);
         const idx = this.arena._obstacleMeshes?.indexOf(node.group);
         if (idx >= 0) this.arena._obstacleMeshes.splice(idx, 1);
         continue;

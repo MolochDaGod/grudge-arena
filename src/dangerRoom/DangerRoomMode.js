@@ -54,8 +54,34 @@ import {
   teardownHarvestForArena,
   tickHarvestForArena,
 } from "./HarvestSystem.js";
+import {
+  syncUnitsToFocusRegistry,
+  clearFocusTargets,
+  toggleFocusFilter,
+  getFocusFilterLabel,
+  registerFocusTarget,
+  unregisterFocusTarget,
+  lockFocusTarget,
+  clearFocusLock,
+  getLockedFocusTarget,
+} from "./FocusTargetRegistry.js";
+import {
+  cycleFocusTabTarget,
+  updateFocusSoftLock,
+  lockedFocusWorld,
+  focusHardLockCameraAssistRate,
+  getFocusSoftLockHudState,
+} from "../engine/FocusSoftLock.js";
 
 /** Training dummies — enemy team targets that don't chase the player. */
+export function getDangerNeutralTeams() {
+  return [
+    { heroId: "human", weapon: "staff", isPlayer: false, tier: 0, displayName: "Island Forager", neutral: true },
+    { heroId: "dwarf", weapon: "mace", isPlayer: false, tier: 0, displayName: "Rock Trader", neutral: true },
+    { heroId: "elf", weapon: "bow", isPlayer: false, tier: 0, displayName: "Wood Gatherer", neutral: true },
+  ];
+}
+
 export function getDangerTrainingTeams(playerRace, playerWeapon, buildConfig) {
   const playerProfile = buildConfig || {};
   const TEAM_A = [
@@ -81,6 +107,15 @@ export function getDangerTrainingTeams(playerRace, playerWeapon, buildConfig) {
 export function getDangerSpawnPosition(teamId, slot, teamSize) {
   if (teamId === "A") {
     return new THREE.Vector3(0, 0, 5);
+  }
+  if (teamId === "N") {
+    const spots = [
+      [10, 6],
+      [-11, 4],
+      [5, -12],
+    ];
+    const s = spots[slot % spots.length];
+    return new THREE.Vector3(s[0], 0, s[1]);
   }
   const x = (slot - (teamSize - 1) / 2) * 3.5;
   return new THREE.Vector3(x, 0, -7);
@@ -146,6 +181,32 @@ export function bootstrapDangerRoom(arena) {
   const weaponName = arena.getCurrentWeapon?.()?.name || "Weapon";
   setDangerWeaponLabel(weaponName);
   mountHarvestForArena(arena);
+  if (isCombatSandboxUi()) {
+    syncUnitsToFocusRegistry(arena.allUnits);
+    arena._dangerEnv?.terrainLoadPromise?.then((island) => {
+      if (!island || !arena._dangerEnv) return;
+      arena._dangerEnv.terrainMeshes = island.terrainMeshes;
+      arena._dangerEnv.clampRadius = island.clampRadius;
+      arena._terrainMeshes = island.terrainMeshes;
+      arena._dangerClampRadius = island.clampRadius;
+      arena._groundSampler?.setTerrainMeshes?.(island.terrainMeshes);
+      for (const u of arena.allUnits || []) {
+        arena._groundSampler?.snapMesh?.(u.mesh);
+      }
+    });
+    arena._focusFilterToast = (label) => {
+      const ff = document.getElementById("dr-focus-filter");
+      if (ff) ff.textContent = `FOCUS: ${label}`;
+    };
+    arena._focusKeyHandler = (e) => {
+      if (e.code === "Backquote" && !e.repeat) {
+        e.preventDefault();
+        toggleFocusFilter();
+        arena._focusFilterToast?.(getFocusFilterLabel());
+      }
+    };
+    window.addEventListener("keydown", arena._focusKeyHandler);
+  }
 
   arena._dangerUnsub = subscribeDangerRoom(() => {
     const next = getDangerRoomState();
@@ -177,6 +238,11 @@ export function bootstrapDangerRoom(arena) {
 }
 
 export function teardownDangerRoom(arena) {
+  if (arena._focusKeyHandler) {
+    window.removeEventListener("keydown", arena._focusKeyHandler);
+    arena._focusKeyHandler = null;
+  }
+  clearFocusTargets();
   teardownHarvestForArena(arena);
   unmountDangerRoomLoadoutPanel();
   unmountDangerRoomDock();
@@ -206,12 +272,15 @@ const _toTarget = new THREE.Vector3();
 function applyCameraAssist(arena, dt, weaponType, aiming) {
   const cam = arena.orbitCamera;
   if (!cam) return;
-  const rate = hardLockCameraAssistRate(aiming, weaponType);
+  const sandbox = isCombatSandboxUi();
+  const rate = sandbox
+    ? focusHardLockCameraAssistRate(aiming, weaponType)
+    : hardLockCameraAssistRate(aiming, weaponType);
   if (rate <= 0) {
     cam.setCameraAssist(null, null, 0);
     return;
   }
-  const world = lockedTargetWorld(arena.targeting);
+  const world = sandbox ? lockedFocusWorld() : lockedTargetWorld(arena.targeting);
   if (!world) {
     cam.setCameraAssist(null, null, 0);
     return;
@@ -283,18 +352,29 @@ export function tickDangerRoomHud(arena, delta = 0.016) {
 
   const canvas = arena.renderer?.domElement;
 
+  const sandbox = isCombatSandboxUi();
   if (canvas) {
     const rect = canvas.getBoundingClientRect();
-    syncTargetLockFromTargeting(arena.targeting);
-    updateSoftLock(delta, arena.camera, rect, arena.targeting, aiming, lockWeapon);
+    if (sandbox) {
+      updateFocusSoftLock(delta, arena.camera, rect, aiming, lockWeapon);
+    } else {
+      syncTargetLockFromTargeting(arena.targeting);
+      updateSoftLock(delta, arena.camera, rect, arena.targeting, aiming, lockWeapon);
+    }
     applyCameraAssist(arena, delta, lockWeapon, aiming);
   }
 
   const crosshairBase = getDangerRoomState().crosshairBase ?? 10;
+  const focusHud = sandbox ? getFocusSoftLockHudState() : {};
+  const locked = sandbox ? getLockedFocusTarget() : null;
   updateDangerHud({
     motion,
-    weapon: weapon ? `${weapon.name} · ${feel.title}` : feel.title,
-    accent: feel.accent,
+    weapon: locked
+      ? `${locked.label} · ${locked.kind.toUpperCase()}`
+      : (weapon ? `${weapon.name} · ${feel.title}` : feel.title),
+    accent: focusHud.accent || feel.accent,
+    focusKind: focusHud.focusKind,
+    focusFilter: sandbox ? getFocusFilterLabel() : null,
     combo: getComboStage(),
     spread: crosshairBase + getCrosshairSpread(),
     hitMarker: getHitMarkerId(),
@@ -307,9 +387,20 @@ export function tickDangerRoomHud(arena, delta = 0.016) {
 /** Tab cycle with soft-lock zone (danger room). */
 export function dangerRoomCycleTarget(arena) {
   const canvas = arena.renderer?.domElement;
-  if (!canvas || !arena.targeting) return;
+  if (!canvas) return;
   const rect = canvas.getBoundingClientRect();
   const weaponType = arena._getWeaponTypeKey?.() ?? "greatsword";
+  if (isCombatSandboxUi()) {
+    const picked = cycleFocusTabTarget(arena.camera, rect, weaponType);
+    if (picked?.mesh) {
+      arena.orbitCamera?.nudgeToward?.(picked.mesh.position);
+    } else if (picked) {
+      const p = picked.getWorld(new THREE.Vector3());
+      arena.orbitCamera?.nudgeToward?.(p);
+    }
+    return;
+  }
+  if (!arena.targeting) return;
   cycleTabTarget(arena.camera, rect, arena.targeting, weaponType);
   arena.orbitCamera?.nudgeToward?.(
     arena.targeting.currentTarget?.mesh?.position ?? new THREE.Vector3(),
