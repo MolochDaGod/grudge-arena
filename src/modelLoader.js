@@ -21,7 +21,11 @@ import {
   raceModelFallbackPaths,
   raceTextureFallbackPaths,
   isValidRace,
+  auditCharacterMaterials,
+  textureHealth,
+  formatCharacterLoadError,
 } from "./characterResources.js";
+import { getD1LoadoutForRace } from "./d1LoadoutStore.js";
 import { preloadGrudge6Anims } from './Grudge6AnimLoader.js';
 import {
   loadBakedPackClips,
@@ -1929,6 +1933,8 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
   const tier = opts.tier || 1;
   const tierCfg = TierConfig[tier] || TierConfig[1];
   const resolvedWeapon = resolveWeapon(race, weaponType);
+  const requireD1 = opts.requireD1 ?? false;
+  const meshLoadout = opts.meshLoadout ?? getD1LoadoutForRace(race);
 
   const loaded = await loadModelWithFallback(raceModelFallbackPaths(race), { race });
   const sourceScene = loaded.scene;
@@ -1979,12 +1985,20 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
   resetSkeletonBindPose(scene);
   controller.director.primeLocomotion();
 
+  const isD1 = isD1ModularScene(scene);
+  if (requireD1 && !isD1) {
+    throw new CharacterLoadError(
+      `${raceConfig.name}: mesh is not a D1 modular Grudge6 GLB (no WK_/BRB_/ELF_/DWF_/ORC_/UD_ slots)`,
+      { code: "D1_REQUIRED", race, paths: [{ path: loaded.path, message: "missing D1 prefixes" }] },
+    );
+  }
+
   let equipment = null;
-  if (isD1ModularScene(scene)) {
+  if (isD1) {
     equipment = new EquipmentManager(scene);
-    equipment.applyLoadout(resolvedWeapon);
+    equipment.applyD1Loadout(resolvedWeapon, meshLoadout);
     await applyRaceTextureFix(scene, race);
-  } else {
+  } else if (!requireD1) {
     const weapon = createWeaponMesh(resolvedWeapon);
     tintWeaponMesh(weapon, raceConfig.gearTint, factionColors.emissive, tierCfg);
     attachWeaponToBone(scene, weapon, 'Bip001_R_Hand');
@@ -1997,8 +2011,16 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     }
   }
 
+  const matAudit = auditCharacterMaterials(scene);
+  const tex = textureHealth(matAudit);
+  if (!tex.ok) {
+    console.warn(
+      `[modelLoader] ${raceConfig.name} texture audit: ${tex.label} — ${tex.detail}`,
+    );
+  }
+
   console.log(
-    `[modelLoader] ${raceConfig.name} baked-grudge6 ready: pack=${packName}, clips=${clips.size}, mesh=${loaded.path}`,
+    `[modelLoader] ${raceConfig.name} baked-grudge6 ready: pack=${packName}, clips=${clips.size}, d1=${isD1}, mesh=${loaded.path}, ${tex.detail}`,
   );
 
   return {
@@ -2011,11 +2033,16 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     race,
     equipment,
     isGrudge6Fbx: loaded.format === "fbx",
+    isD1Modular: isD1,
     bakedAnims: true,
     modelPath: loaded.path,
     pipeline: "baked",
+    textureAudit: matAudit,
+    meshLoadout,
   };
 }
+
+export { formatCharacterLoadError };
 
 // ── High-level: create a fully animated arena unit ─────────────────────
 

@@ -51,7 +51,14 @@ import {
   getDangerSpawnFacing,
   tickDangerRoomHud,
   dangerRoomCycleTarget,
+  applyDangerLiveLoadout,
 } from './src/dangerRoom/DangerRoomMode.js';
+import {
+  getD1LoadoutState,
+  getD1LoadoutForRace,
+  setD1Weapon,
+} from './src/d1LoadoutStore.js';
+import { syncGearCatalog } from './src/dangerRoom/dangerRoomLoadoutPanel.js';
 import { setRawMouse } from './src/engine/SoftLockSystem.js';
 import { getWeaponFeel, skillSfxIndex } from './src/engine/WeaponFeel.js';
 import {
@@ -62,7 +69,7 @@ import {
 } from './src/engine/CombatFeedback.js';
 import { CombatPostFX } from './src/engine/CombatPostFX.js';
 import { installDangerRoomLighting } from './src/engine/DangerRoomLighting.js';
-import { syncAbilityBarFlash } from './src/dangerRoom/dangerRoomHud.js';
+import { syncAbilityBarFlash, setDangerWeaponLabel } from './src/dangerRoom/dangerRoomHud.js';
 
 const VALID_RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
 const VALID_CLASSES = ["warrior", "mage", "ranger", "worge"];
@@ -194,11 +201,12 @@ class GrudgeArena {
       this._playSFX = modelMod.playSFX;
       this._weaponSfx = modelMod.WEAPON_SFX;
 
-      const race = this.config.race || "human";
       const buildConfig = this.config.buildConfig || {};
+      const d1State = this.dangerMode ? getD1LoadoutState() : null;
+      const race = d1State?.race || this.config.race || "human";
       const playerWeapon = resolveWeapon(
         race,
-        this.config.weapon || "greatsword",
+        d1State?.weapon || this.config.weapon || "greatsword",
       );
       const playerProfile = this._derivePlayerProfile(buildConfig);
 
@@ -374,6 +382,9 @@ class GrudgeArena {
         }
         this._setupSoftLockInput();
         bootstrapDangerRoom(this);
+        if (this.playerUnit?.equipment) {
+          syncGearCatalog(this.playerUnit.equipment);
+        }
         if (this.playerController && this._dangerClampRadius) {
           this.playerController.clampRadius = this._dangerClampRadius;
         }
@@ -619,10 +630,29 @@ class GrudgeArena {
         comp.heroId ||
         "human";
       if (this.dangerMode) {
-        unitResult = await modelMod.createBakedGrudge6Unit(raceId, comp.weapon, {
-          tier: comp.tier || 1,
-        });
-      } else if (!unitResult) {
+        const d1 = getD1LoadoutForRace(raceId);
+        try {
+          unitResult = await modelMod.createBakedGrudge6Unit(raceId, comp.weapon, {
+            tier: comp.tier || 1,
+            requireD1: true,
+            meshLoadout: d1,
+          });
+        } catch (err) {
+          console.warn(
+            `[arena] baked D1 load failed for ${raceId}; retrying without D1 gate:`,
+            err.message,
+          );
+          try {
+            unitResult = await modelMod.createBakedGrudge6Unit(raceId, comp.weapon, {
+              tier: comp.tier || 1,
+              meshLoadout: d1,
+            });
+          } catch (err2) {
+            console.warn(`[arena] baked fallback failed:`, err2.message);
+          }
+        }
+      }
+      if (!unitResult) {
         unitResult = await modelMod.createAnimatedUnit(raceId, comp.weapon, {
           tier: comp.tier || 1,
         });
@@ -635,6 +665,7 @@ class GrudgeArena {
       controller,
       raceConfig,
       resolvedWeapon,
+      equipment,
     } = unitResult;
     const groundedY = mesh.position.y;
     mesh.position.copy(spawnPos);
@@ -711,13 +742,110 @@ class GrudgeArena {
       mesh,
       mixer,
       controller,
+      equipment: equipment || null,
       team: teamId,
       isPlayer: !!comp.isPlayer,
       weaponDef: actualWeaponDef,
-      race: comp.race,
+      race: unitResult.race || comp.race,
       raceConfig,
+      resolvedWeapon,
       uuid,
     };
+  }
+
+  /**
+   * Hot-reload danger room champion when race/weapon/D1 loadout changes (Gear panel).
+   */
+  async reloadDangerPlayer(opts = {}) {
+    if (!this.dangerMode || !this.playerUnit) return;
+
+    if (opts.live && this.playerUnit.equipment) {
+      applyDangerLiveLoadout(this);
+      return;
+    }
+
+    const st = getD1LoadoutState();
+    const pos = this.playerUnit.mesh.position.clone();
+    const yaw = this.playerUnit.mesh.rotation.y;
+    const weapon = st.weapon || this._getWeaponTypeKey?.() || "greatsword";
+
+    const old = this.playerUnit;
+    if (old.mixer) old.mixer.stopAllAction();
+    this.scene.remove(old.mesh);
+    old.mesh.traverse((ch) => {
+      if (ch.geometry) ch.geometry.dispose?.();
+      if (ch.material) {
+        const mats = Array.isArray(ch.material) ? ch.material : [ch.material];
+        for (const m of mats) m.dispose?.();
+      }
+    });
+    this.collisionSystem?.removeCollider?.(old.mesh);
+
+    const modelMod = await import("./src/modelLoader.js");
+    const unitResult = await modelMod.createBakedGrudge6Unit(st.race, weapon, {
+      tier: 3,
+      requireD1: true,
+      meshLoadout: getD1LoadoutForRace(st.race),
+    });
+
+    const mesh = unitResult.scene;
+    mesh.position.copy(pos);
+    mesh.rotation.y = yaw;
+    this.scene.add(mesh);
+
+    const ws = this.playerEntity?.getComponent("WeaponState");
+    if (ws) {
+      ws.primary = unitResult.resolvedWeapon;
+      ws.secondary = unitResult.resolvedWeapon;
+    }
+    const render = this.playerEntity?.getComponent("RenderMesh");
+    if (render) render.mesh = mesh;
+    const targetInfo = this.playerEntity?.getComponent("TargetInfo");
+    if (targetInfo) {
+      targetInfo.race = st.race;
+      targetInfo.weaponType = unitResult.resolvedWeapon;
+      targetInfo.displayName = `${unitResult.raceConfig.name} Champion`;
+    }
+
+    this.playerUnit = {
+      ...old,
+      mesh,
+      mixer: unitResult.mixer,
+      controller: unitResult.controller,
+      equipment: unitResult.equipment,
+      race: st.race,
+      raceConfig: unitResult.raceConfig,
+      weaponDef: WeaponDefinitions[unitResult.resolvedWeapon],
+      resolvedWeapon: unitResult.resolvedWeapon,
+    };
+    this.allUnits = this.allUnits.map((u) =>
+      u.isPlayer ? this.playerUnit : u,
+    );
+
+    if (this.playerController) {
+      this.playerController.mesh = mesh;
+      this.playerController.animCtrl = unitResult.controller;
+      this.playerController.useBakedLoco = !!unitResult.controller?.useBakedLoco;
+    }
+    this.orbitCamera?.setTarget(mesh);
+
+    this.collisionSystem?.addCollider?.(mesh, "ally", {
+      entity: this.playerEntity,
+      uuid: old.uuid,
+    });
+
+    if (unitResult.mixer) {
+      unitResult.mixer.addEventListener("finished", () => {
+        this.playerController?.send({ type: "finish" });
+      });
+    }
+
+    syncGearCatalog(unitResult.equipment);
+    setD1Weapon(unitResult.resolvedWeapon);
+    setDangerWeaponLabel(
+      WeaponDefinitions[unitResult.resolvedWeapon]?.name || weapon,
+    );
+    console.log(`[arena] Danger player reloaded — ${st.race} / ${unitResult.resolvedWeapon}`);
   }
 
   /**

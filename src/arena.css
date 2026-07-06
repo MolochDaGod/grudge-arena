@@ -1511,3 +1511,133 @@ body.danger-room-active canvas {
 .dr-exit-btn:hover {
   background: rgba(80, 20, 20, 0.85);
 }
+
+/* ── Danger Room gear panel (Grudge6 D1 loadout editor) ── */
+.dr-gear-root {
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  z-index: 58;
+  pointer-events: none;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.dr-gear-toggle {
+  pointer-events: auto;
+  padding: 8px 14px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dr-accent, #6fe0ff);
+  background: rgba(6, 14, 28, 0.88);
+  border: 1px solid rgba(79, 195, 255, 0.4);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dr-gear-toggle:hover {
+  background: rgba(20, 40, 70, 0.95);
+}
+
+.dr-gear-drawer {
+  pointer-events: auto;
+  margin-top: 8px;
+  width: min(280px, 92vw);
+  max-height: min(72vh, 640px);
+  overflow-y: auto;
+  padding: 12px;
+  background: rgba(6, 14, 28, 0.94);
+  border: 1px solid rgba(79, 195, 255, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+}
+
+.dr-gear-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+  color: var(--dr-accent, #6fe0ff);
+  font-size: 12px;
+}
+
+.dr-gear-hint {
+  font-size: 9px;
+  color: rgba(174, 224, 255, 0.45);
+}
+
+.dr-gear-section {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(79, 195, 255, 0.12);
+}
+
+.dr-gear-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(174, 224, 255, 0.55);
+  margin-bottom: 6px;
+}
+
+.dr-gear-races {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.dr-gear-race {
+  padding: 5px 4px;
+  font-size: 9px;
+  color: rgba(220, 240, 255, 0.8);
+  background: rgba(20, 40, 60, 0.5);
+  border: 1px solid rgba(79, 195, 255, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.dr-gear-race.active,
+.dr-gear-race:hover {
+  border-color: rgba(111, 224, 255, 0.65);
+  background: rgba(30, 70, 110, 0.55);
+  color: #fff;
+}
+
+.dr-gear-row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  font-size: 10px;
+  color: rgba(200, 230, 255, 0.85);
+}
+
+.dr-gear-select {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 10px;
+  font-family: inherit;
+  color: #e8f4ff;
+  background: rgba(10, 24, 42, 0.9);
+  border: 1px solid rgba(79, 195, 255, 0.25);
+  border-radius: 4px;
+}
+
+.dr-gear-apply {
+  width: 100%;
+  padding: 8px;
+  font-size: 10px;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #0a1628;
+  background: linear-gradient(180deg, #6fe0ff, #3eb8e8);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dr-gear-apply:hover {
+  filter: brightness(1.08);
+}

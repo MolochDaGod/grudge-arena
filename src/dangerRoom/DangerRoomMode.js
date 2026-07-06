@@ -18,6 +18,13 @@ import {
   updateDangerHud,
   syncAbilityBarFlash,
 } from "./dangerRoomHud.js";
+import {
+  mountDangerRoomLoadoutPanel,
+  unmountDangerRoomLoadoutPanel,
+  syncGearCatalog,
+  applyLiveD1ToEquipment,
+} from "./dangerRoomLoadoutPanel.js";
+import { getD1LoadoutState, getD1LoadoutForRace } from "../d1LoadoutStore.js";
 import { getWeaponFeel, resolveMotionLabel } from "../engine/WeaponFeel.js";
 import {
   getComboStage,
@@ -88,6 +95,12 @@ export function bootstrapDangerRoom(arena) {
   arena._terrainMeshes = arena._dangerEnv.terrainMeshes;
 
   mountDangerRoomHud();
+  mountDangerRoomLoadoutPanel({
+    onApply: (opts) => arena.reloadDangerPlayer?.(opts),
+  });
+  if (arena.playerUnit?.equipment) {
+    syncGearCatalog(arena.playerUnit.equipment);
+  }
   const weaponName = arena.getCurrentWeapon?.()?.name || "Weapon";
   setDangerWeaponLabel(weaponName);
 
@@ -104,10 +117,21 @@ export function bootstrapDangerRoom(arena) {
 }
 
 export function teardownDangerRoom(arena) {
+  unmountDangerRoomLoadoutPanel();
   unmountDangerRoomHud();
   arena._dangerUnsub?.();
   arena._dangerUnsub = null;
   setDangerMode(false);
+}
+
+/** Live D1 mesh tweak without full reload (armor / weapon variant only). */
+export function applyDangerLiveLoadout(arena) {
+  const unit = arena.playerUnit;
+  if (!unit?.equipment) return;
+  const st = getD1LoadoutState();
+  const weapon = arena._getWeaponTypeKey?.() ?? st.weapon;
+  applyLiveD1ToEquipment(unit.equipment, weapon, getD1LoadoutForRace(st.race));
+  syncGearCatalog(unit.equipment);
 }
 
 const _toTarget = new THREE.Vector3();

@@ -464,6 +464,16 @@
 
   function saveBuildToStorage() {
     try {
+      let d1Loadout = null;
+      let perRaceD1 = null;
+      try {
+        const d1raw = localStorage.getItem('grudge_arena_d1_loadout_v1');
+        if (d1raw) {
+          const d1 = JSON.parse(d1raw);
+          d1Loadout = d1.d1 || null;
+          perRaceD1 = d1.perRace || null;
+        }
+      } catch { }
       localStorage.setItem(BUILD_STORAGE_KEY, JSON.stringify({
         race: selectedRace,
         classId: selectedClass,
@@ -471,6 +481,8 @@
         ringTier: selectedRingTier,
         ringPerks: selectedRingPerks,
         attributes: attributePoints,
+        d1Loadout,
+        perRaceD1,
       }));
     } catch { }
   }

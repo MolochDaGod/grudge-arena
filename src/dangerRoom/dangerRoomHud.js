@@ -46,7 +46,7 @@ function buildShell(presetName) {
     <div class="dr-controls-hint">
       <div><kbd>W/S</kbd> Move <kbd>A/D</kbd> Turn <kbd>Q/E</kbd> Strafe</div>
       <div><kbd>RMB</kbd> Attack <kbd>1-4</kbd> Skills <kbd>Ctrl</kbd> Roll <kbd>V</kbd> Block</div>
-      <div><kbd>[</kbd><kbd>]</kbd> Room preset · <kbd>Tab</kbd> Target</div>
+      <div><kbd>G</kbd> Gear · <kbd>[</kbd><kbd>]</kbd> Room · <kbd>Tab</kbd> Target</div>
     </div>
     <button type="button" class="dr-exit-btn" id="dr-exit-btn">Exit Danger Room</button>
   `;
