@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { clone as cloneSkinnedHierarchy } from 'three/addons/utils/SkeletonUtils.js';
 import { getRaceConfig, getRaceFactionColors, resolveWeapon, TierConfig } from './engine/RaceConfig.js';
 import { EquipmentManager, isD1ModularScene } from "./EquipmentManager.js";
 import { assetUrl, charUrl, animUrl, audioUrl, modelUrl, grudge6AssetUrl, grudge6AnimUrl } from "./assetConfig.js";
@@ -32,7 +33,7 @@ import {
   validateBakedLocoClips,
   BakedAnimLoadError,
 } from "./bakedAnimLoader.js";
-import { applyCharacterScale } from "./characterScale.js";
+import { applyCharacterScale, regroundCharacter } from "./characterScale.js";
 import { createBakedController } from './BakedAnimationController.js';
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
@@ -764,21 +765,34 @@ function loadAtlasTexture(url) {
       textureLoader.load(url, resolve, undefined, () => resolve(null));
       return;
     }
-    const imgLoader = new THREE.ImageLoader();
-    imgLoader.setCrossOrigin("anonymous");
-    imgLoader.load(
+    const texLoader = new THREE.TextureLoader();
+    texLoader.setCrossOrigin("anonymous");
+    texLoader.load(
       url,
-      (img) => {
-        try {
-          resolve(
-            dataTextureFromImage(img, img.naturalWidth, img.naturalHeight),
-          );
-        } catch {
-          resolve(null);
-        }
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.flipY = false;
+        resolve(tex);
       },
       undefined,
-      () => resolve(null),
+      () => {
+        const imgLoader = new THREE.ImageLoader();
+        imgLoader.setCrossOrigin("anonymous");
+        imgLoader.load(
+          url,
+          (img) => {
+            try {
+              resolve(
+                dataTextureFromImage(img, img.naturalWidth, img.naturalHeight),
+              );
+            } catch {
+              resolve(null);
+            }
+          },
+          undefined,
+          () => resolve(null),
+        );
+      },
     );
   });
 }
@@ -1066,47 +1080,40 @@ async function loadGLTFWithFallback(paths) {
  * Three.js clone(true) breaks skinned meshes — we need to manually
  * rebind skeletons after cloning.
  */
+/**
+ * Deep-clone a rigged GLB/FBX hierarchy without breaking skinned-mesh bindings.
+ * The old hand-rolled rebind could fall back to cached-scene bones (srcBone) and
+ * produce the floating yellow limb artifacts seen in danger room.
+ */
 function cloneGLTFScene(source) {
-  const clone = source.clone(true);
-  const sourceSkins = [];
-  const cloneSkins = [];
-
-  source.traverse((node) => {
-    if (node.isSkinnedMesh) sourceSkins.push(node);
-  });
+  const clone = cloneSkinnedHierarchy(source);
   clone.traverse((node) => {
-    if (node.isSkinnedMesh) cloneSkins.push(node);
+    if (!node.isMesh && !node.isSkinnedMesh) return;
+    if (!node.material) return;
+    node.material = Array.isArray(node.material)
+      ? node.material.map((m) => m.clone())
+      : node.material.clone();
   });
-
-  for (let i = 0; i < cloneSkins.length; i++) {
-    const src = sourceSkins[i];
-    const dst = cloneSkins[i];
-    if (!src || !dst) continue;
-
-    // Find matching bones in the cloned hierarchy by name
-    const newBones = src.skeleton.bones.map((srcBone) => {
-      let found = null;
-      clone.traverse((node) => {
-        if (node.name === srcBone.name && node.isBone) found = node;
-      });
-      return found || srcBone;
-    });
-
-    dst.skeleton = new THREE.Skeleton(
-      newBones,
-      src.skeleton.boneInverses.map((m) => m.clone()),
-    );
-    dst.bind(dst.skeleton, dst.matrixWorld);
-
-    // Clone material so we don't mutate the cached original
-    if (dst.material) {
-      dst.material = Array.isArray(dst.material)
-        ? dst.material.map((m) => m.clone())
-        : dst.material.clone();
-    }
-  }
-
   return clone;
+}
+
+/** Fail fast when any skinned mesh still references bones outside its hierarchy. */
+function validateSkinnedBindings(scene, label = "character") {
+  const boneSet = new Set();
+  scene.traverse((n) => {
+    if (n.isBone) boneSet.add(n);
+  });
+  let bad = 0;
+  scene.traverse((node) => {
+    if (!node.isSkinnedMesh || !node.skeleton) return;
+    for (const bone of node.skeleton.bones) {
+      if (!boneSet.has(bone)) bad++;
+    }
+  });
+  if (bad > 0) {
+    console.warn(`[modelLoader] ${label}: ${bad} skinned bone refs outside hierarchy`);
+  }
+  return bad === 0;
 }
 
 /** Reset all skinned meshes to bind pose before applying Mixamo clips. */
@@ -1881,11 +1888,10 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     }
   });
 
-  await applyRaceTextureFix(scene, race);
-  applyFactionBodyColor(scene, race);
   const metrics = await applyCharacterScale(scene, race, {
     log: (m) => console.log(m.replace("[characterScale]", "[modelLoader]")),
   });
+  validateSkinnedBindings(scene, race);
 
   const { packName, clips } = await loadBakedPackClips(resolvedWeapon);
   try {
@@ -1914,9 +1920,6 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     clips,
   );
 
-  resetSkeletonBindPose(scene);
-  controller.director.primeLocomotion();
-
   const isD1 = isD1ModularScene(scene);
   if (requireD1 && !isD1) {
     throw new CharacterLoadError(
@@ -1929,7 +1932,6 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
   if (isD1) {
     equipment = new EquipmentManager(scene);
     equipment.applyD1Loadout(resolvedWeapon, meshLoadout);
-    await applyRaceTextureFix(scene, race);
   } else if (!requireD1) {
     const weapon = createWeaponMesh(resolvedWeapon);
     tintWeaponMesh(weapon, raceConfig.gearTint, factionColors.emissive, tierCfg);
@@ -1943,16 +1945,30 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     }
   }
 
+  const texPatched = await applyRaceTextureFix(scene, race);
+  if (texPatched === 0) applyFactionBodyColor(scene, race);
+
   const matAudit = auditCharacterMaterials(scene);
   const tex = textureHealth(matAudit);
   if (!tex.ok) {
     console.warn(
       `[modelLoader] ${raceConfig.name} texture audit: ${tex.label} — ${tex.detail}`,
     );
+    if (requireD1) {
+      throw new CharacterLoadError(
+        `${raceConfig.name}: D1 atlas not applied (${tex.detail})`,
+        { code: "TEXTURE_MISSING", race, paths: raceTextureFallbackPaths(race) },
+      );
+    }
   }
 
+  resetSkeletonBindPose(scene);
+  validateSkinnedBindings(scene, `${race}-final`);
+  controller.director.primeLocomotion();
+  controller.mixer?.update?.(0);
+
   console.log(
-    `[modelLoader] ${raceConfig.name} baked-grudge6 ready: pack=${packName}, clips=${clips.size}, d1=${isD1}, mesh=${loaded.path}, ${tex.detail}`,
+    `[modelLoader] ${raceConfig.name} baked-grudge6 ready: pack=${packName}, clips=${clips.size}, d1=${isD1}, equip=${equipment?.hasEquipment ?? false}, mesh=${loaded.path}, ${tex.detail}`,
   );
 
   return {

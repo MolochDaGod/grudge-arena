@@ -88,6 +88,8 @@ function inferSlot(lowerName) {
  * For meshes without a letter suffix (e.g. BRB_weapon_Bow) → 'DEFAULT'
  */
 function extractVariant(meshName) {
+  const weaponTag = meshName.match(/weapon_([A-Z]+_[A-Z])$/i);
+  if (weaponTag) return weaponTag[1].toUpperCase();
   const m = meshName.match(/_([A-Z])$/i);
   return m ? m[1].toUpperCase() : "DEFAULT";
 }

@@ -97,6 +97,7 @@ export function bootstrapDangerRoom(arena) {
   mountDangerRoomHud();
   mountDangerRoomLoadoutPanel({
     onApply: (opts) => arena.reloadDangerPlayer?.(opts),
+    getEquipment: () => arena.playerUnit?.equipment,
   });
   if (arena.playerUnit?.equipment) {
     syncGearCatalog(arena.playerUnit.equipment);

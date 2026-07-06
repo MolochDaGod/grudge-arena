@@ -26,7 +26,17 @@ const RACE_LABELS = {
 let panelEl = null;
 let unsub = null;
 let onApply = null;
+let getEquipment = null;
 let catalog = null;
+
+function refreshCatalog() {
+  const eq = getEquipment?.();
+  if (eq?.getCatalog) {
+    catalog = eq.getCatalog();
+    return catalog;
+  }
+  return catalog || {};
+}
 
 function slotSelect(id, label, options, value, onChange) {
   const opts = ['<option value="">—</option>']
@@ -44,7 +54,7 @@ function slotSelect(id, label, options, value, onChange) {
 }
 
 function buildPanel(state) {
-  const cat = catalog || {};
+  const cat = refreshCatalog();
   const armor = state.d1?.armor || {};
   const weapon = state.d1?.weapon || {};
 
@@ -117,7 +127,14 @@ function bindHandlers() {
 
   panelEl.querySelector("#dr-gear-toggle")?.addEventListener("click", () => {
     const drawer = panelEl.querySelector("#dr-gear-drawer");
-    if (drawer) drawer.hidden = !drawer.hidden;
+    if (drawer) {
+      const opening = drawer.hidden;
+      drawer.hidden = !opening;
+      if (opening) {
+        refreshCatalog();
+        render(getD1LoadoutState());
+      }
+    }
   });
 
   panelEl.querySelectorAll(".dr-gear-race").forEach((btn) => {
@@ -185,7 +202,14 @@ function onGearKey(e) {
   if (e.code !== "KeyG" || e.repeat) return;
   if (!panelEl) return;
   const drawer = panelEl.querySelector("#dr-gear-drawer");
-  if (drawer) drawer.hidden = !drawer.hidden;
+  if (drawer) {
+    const opening = drawer.hidden;
+    drawer.hidden = !opening;
+    if (opening) {
+      refreshCatalog();
+      render(getD1LoadoutState());
+    }
+  }
 }
 
 function render(state) {
@@ -198,10 +222,11 @@ function render(state) {
 }
 
 /**
- * @param {{ onApply?: (opts: { reason: string, live?: boolean }) => void }} opts
+ * @param {{ onApply?: (opts: { reason: string, live?: boolean }) => void, getEquipment?: () => object|null }} opts
  */
 export function mountDangerRoomLoadoutPanel(opts = {}) {
   onApply = opts.onApply || null;
+  getEquipment = opts.getEquipment || null;
   if (panelEl) return;
 
   panelEl = document.createElement("div");
@@ -227,6 +252,8 @@ export function unmountDangerRoomLoadoutPanel() {
 export function syncGearCatalog(equipmentManager) {
   if (!equipmentManager?.getCatalog) return;
   catalog = equipmentManager.getCatalog();
+  const slots = Object.keys(catalog).length;
+  console.log(`[dangerRoom] D1 gear catalog: ${slots} slots`, catalog);
   if (panelEl) render(getD1LoadoutState());
 }
 
