@@ -834,9 +834,13 @@ async function loadRaceTextureMap(race) {
 
   // Try manifest path first, then direct fallback path
   const manifest = await loadCharacterManifest();
-  const manifestPath = manifest?.races?.[race]?.textures?.[0]?.file;
+  const rawManifestPath = manifest?.races?.[race]?.textures?.[0]?.file;
+  // Manifest stores /assets/... — route through assetUrl so prod uses /cdn proxy.
+  const manifestPath = rawManifestPath
+    ? assetUrl(rawManifestPath.replace(/^\//, ""))
+    : null;
   const directPaths = RACE_TEXTURE_DIRECT[race] || [];
-  const paths = [manifestPath, ...directPaths].filter(Boolean);
+  const paths = [...directPaths, manifestPath].filter(Boolean);
 
   for (const texPath of paths) {
     const tex = await loadAtlasTexture(texPath);
