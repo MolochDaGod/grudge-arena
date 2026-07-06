@@ -5,12 +5,12 @@
 import * as THREE from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { assetUrl } from "../assetConfig.js";
+import { islandAssetUrl } from "../assetConfig.js";
 import { islandHeight } from "./IslandTerrain.js";
 import { bindVillageMaterials } from "./IslandVillageMaterials.js";
 
-const GLB_PATH = assetUrl("assets/island/village/glb/");
-const FBX_PATH = assetUrl("assets/island/village/props/");
+const GLB_PATH = islandAssetUrl("village/glb/");
+const FBX_PATH = islandAssetUrl("village/props/");
 
 const VILLAGE_LAYOUT = [
   { file: "SM_BLD_base_v01_01", x: 12, z: -8, ry: -0.35, scale: 0.012 },

@@ -80,3 +80,14 @@ export function grudge6AnimUrl(packAndFile) {
 export function mapUrl(path) {
   return assetUrl(`assets/maps/${path}`);
 }
+
+/**
+ * Island sandbox props (forest_pack, village GLB/FBX/textures).
+ * These ship with the combat-sandbox Vercel deployment — NOT on R2 /cdn.
+ * @param {string} path - relative to assets/island/, e.g. "village/glb/SM_PROP_well.glb"
+ */
+export function islandAssetUrl(path) {
+  const p = path.startsWith("/") ? path.slice(1) : path;
+  const rel = p.startsWith("assets/island/") ? p : `assets/island/${p}`;
+  return `/${rel}`;
+}

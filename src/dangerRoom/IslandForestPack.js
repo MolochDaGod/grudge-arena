@@ -4,10 +4,10 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { assetUrl } from "../assetConfig.js";
+import { islandAssetUrl } from "../assetConfig.js";
 import { islandHeight, islandEdgeFactor } from "./IslandTerrain.js";
 
-const PACK_URL = assetUrl("assets/island/forest_pack.glb");
+const PACK_URL = islandAssetUrl("forest_pack.glb");
 
 const SCATTER = [
   { template: "tree 1", count: 22, minScale: 2.8, maxScale: 4.2, minY: 0.35 },

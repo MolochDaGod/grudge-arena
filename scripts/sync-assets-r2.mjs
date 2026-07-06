@@ -31,6 +31,7 @@ const SYNC_DIRS = [
   "assets/characters",
   "assets/animations",
   "assets/danger",
+  "assets/island",
   "assets/maps",
   "audio",
   "models",

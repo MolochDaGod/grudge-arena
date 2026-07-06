@@ -4,9 +4,9 @@
  */
 
 import * as THREE from "three";
-import { assetUrl } from "../assetConfig.js";
+import { islandAssetUrl } from "../assetConfig.js";
 
-const TEX_BASE = assetUrl("assets/island/village/textures/");
+const TEX_BASE = islandAssetUrl("village/textures/");
 const loader = new THREE.TextureLoader();
 const cache = new Map();
 
@@ -14,6 +14,19 @@ const cache = new Map();
 const FILE_ALIASES = {
   T_stonebrick_02: "T_stonebrick_02_BC",
   T_stonebrick_02_png: "T_stonebrick_02_BC",
+  T_rooftiles_05: "T_rooftiles_05_BC",
+  T_rooftiles_03: "T_rooftiles_03_BC",
+};
+
+/** Tint when a PNG is missing so props are not flat grey. */
+const STEM_FALLBACK_COLORS = {
+  wood: 0x6b4423,
+  wall: 0x9a8b72,
+  stonebrick: 0x7a7a72,
+  rooftiles: 0x8b3a2a,
+  metal: 0x6a6a72,
+  rope: 0x5c4033,
+  cloth: 0x4a5a4a,
 };
 
 function basename(file) {
@@ -69,7 +82,13 @@ async function loadTextureForMaterial(materialName) {
   return null;
 }
 
-function upgradeMaterial(mat, map, normalMap = null) {
+function fallbackColorForStem(stem) {
+  if (!stem) return 0x888878;
+  const key = Object.keys(STEM_FALLBACK_COLORS).find((k) => stem.includes(k));
+  return key ? STEM_FALLBACK_COLORS[key] : 0x888878;
+}
+
+function upgradeMaterial(mat, map, normalMap = null, stem = "") {
   let out = mat;
   if (!mat?.isMeshStandardMaterial) {
     out = new THREE.MeshStandardMaterial({
@@ -80,8 +99,12 @@ function upgradeMaterial(mat, map, normalMap = null) {
       side: THREE.DoubleSide,
     });
   }
-  out.map = map;
-  out.color.set(0xffffff);
+  if (map) {
+    out.map = map;
+    out.color.set(0xffffff);
+  } else {
+    out.color.set(fallbackColorForStem(stem));
+  }
   if (normalMap) {
     out.normalMap = normalMap;
     out.normalScale.set(1, 1);
@@ -100,8 +123,11 @@ async function bindMeshMaterials(child) {
     mats.map(async (mat) => {
       if (!mat) return mat;
       const texKey = mat.name || mat.userData?.texture || child.name;
+      const stem = materialStem(texKey);
       const map = await loadTextureForMaterial(texKey);
-      if (!map) return mat;
+      if (!map) {
+        console.warn(`[island] village texture missing for material "${texKey}"`);
+      }
 
       let normalMap = null;
       const normalCandidates = candidateFiles(texKey).map((f) =>
@@ -111,7 +137,7 @@ async function bindMeshMaterials(child) {
         normalMap = await loadTextureFile(nf);
         if (normalMap) break;
       }
-      return upgradeMaterial(mat, map, normalMap);
+      return upgradeMaterial(mat, map, normalMap, stem);
     }),
   );
   child.material = isArray ? upgraded : upgraded[0];
