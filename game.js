@@ -615,9 +615,13 @@ class GrudgeArena {
             tier: comp.tier || 1,
           });
         } catch (err) {
+          const detail =
+            err?.paths?.length > 0
+              ? `${err.message} [${err.paths.map((p) => p.path).join(", ")}]`
+              : err.message;
           console.warn(
             `[arena] baked grudge6 load failed for ${raceId}; falling back to legacy:`,
-            err.message,
+            detail,
           );
         }
       }

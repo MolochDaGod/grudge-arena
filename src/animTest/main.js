@@ -9,13 +9,22 @@ import {
   createAnimatedUnit,
 } from "../modelLoader.js";
 import { WeaponToBakedPack } from "../bakedAnimLoader.js";
+import {
+  CHARACTER_RACES,
+  auditCharacterMaterials,
+  textureHealth,
+  formatCharacterLoadError,
+} from "../characterResources.js";
 
-const RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
 const WEAPONS = Object.keys(WeaponToBakedPack);
 
 const params = new URLSearchParams(location.search);
-const initialRace = RACES.includes(params.get("race")) ? params.get("race") : "human";
-const initialWeapon = WEAPONS.includes(params.get("weapon")) ? params.get("weapon") : "greatsword";
+const initialRace = CHARACTER_RACES.includes(params.get("race"))
+  ? params.get("race")
+  : "human";
+const initialWeapon = WEAPONS.includes(params.get("weapon"))
+  ? params.get("weapon")
+  : "greatsword";
 const initialPipe = params.get("pipeline") === "legacy" ? "legacy" : "baked";
 
 const logEl = document.getElementById("log");
@@ -32,7 +41,7 @@ const log = (m) => {
   logEl.scrollTop = logEl.scrollHeight;
 };
 
-for (const r of RACES) {
+for (const r of CHARACTER_RACES) {
   const opt = document.createElement("option");
   opt.value = r;
   opt.textContent = r[0].toUpperCase() + r.slice(1);
@@ -102,24 +111,9 @@ let autoCycle = false;
 function setStatus(text, ok = true) {
   statusPill.textContent = text;
   statusPill.style.color = ok ? "#5fcf7a" : "#ff6b6b";
-  statusPill.style.borderColor = ok ? "rgba(92,207,122,0.5)" : "rgba(255,107,107,0.5)";
-}
-
-function auditMaterials(mesh) {
-  let total = 0;
-  let withMap = 0;
-  let visible = 0;
-  mesh.traverse((ch) => {
-    if (!ch.isMesh && !ch.isSkinnedMesh) return;
-    if (ch.visible) visible++;
-    const mats = Array.isArray(ch.material) ? ch.material : [ch.material];
-    for (const m of mats) {
-      if (!m) continue;
-      total++;
-      if (m.map?.image) withMap++;
-    }
-  });
-  return { total, withMap, visible };
+  statusPill.style.borderColor = ok
+    ? "rgba(92,207,122,0.5)"
+    : "rgba(255,107,107,0.5)";
 }
 
 function bindStats(action) {
@@ -202,6 +196,13 @@ function disposeUnit() {
   gaitLabel.textContent = "idle";
 }
 
+function reportLoadError(err) {
+  const detail = formatCharacterLoadError(err);
+  log(`FAIL: ${detail}`);
+  console.error("[anim-test]", err);
+  setStatus(err?.code || "load error", false);
+}
+
 async function loadCharacter() {
   disposeUnit();
   const race = raceSel.value;
@@ -219,29 +220,34 @@ async function loadCharacter() {
     mesh.position.set(0, mesh.position.y, 0);
     scene.add(mesh);
 
-    const mats = auditMaterials(mesh);
-    log(`mesh: ${unit.scene?.userData?.path || "(loaded)"}`);
+    const mats = auditCharacterMaterials(mesh);
+    const health = textureHealth(mats);
+    log(`mesh: ${unit.modelPath || unit.scene?.userData?.path || "(loaded)"}`);
+    log(`pipeline: ${unit.pipeline || (baked ? "baked" : "legacy")}`);
     log(`scale: ${mesh.scale.x.toFixed(4)} · y=${mesh.position.y.toFixed(3)}`);
     log(`materials: ${mats.withMap}/${mats.total} textured · ${mats.visible} visible meshes`);
 
-    if (mats.withMap === 0) {
-      log("WARN: no textured materials — check /cdn atlas paths");
-      setStatus("textures missing", false);
-    } else if (mats.withMap < mats.total * 0.5) {
-      setStatus("partial textures", false);
+    if (!health.ok) {
+      log(`WARN: ${health.detail}`);
+      setStatus(health.label, false);
     } else {
-      setStatus(`${race} · textured OK`);
+      setStatus(`${race} · ${health.label}`);
     }
 
     populateClipList(unit.controller, baked);
 
     if (baked) {
       unit.controller.director?.primeLocomotion?.();
-      log(`baked clips: ${clipNames.length} [${clipNames.slice(0, 8).join(", ")}${clipNames.length > 8 ? "…" : ""}]`);
+      log(
+        `baked clips: ${clipNames.length} [${clipNames.slice(0, 8).join(", ")}${clipNames.length > 8 ? "…" : ""}]`,
+      );
     } else {
       const idle = unit.controller.actions?.get("idle");
       const stats = bindStats(idle);
       log(`legacy idle bind: ${stats.bound}/${stats.total} tracks`);
+      if (stats.bound < stats.total * 0.5) {
+        log("WARN: low idle bind ratio — try pipeline=baked");
+      }
       if (idle) unit.controller.play("idle");
     }
 
@@ -252,11 +258,13 @@ async function loadCharacter() {
       if (autoCycle) startCycle();
     }
 
-    history.replaceState(null, "", `?race=${race}&weapon=${weapon}&pipeline=${baked ? "baked" : "legacy"}`);
+    history.replaceState(
+      null,
+      "",
+      `?race=${race}&weapon=${weapon}&pipeline=${baked ? "baked" : "legacy"}`,
+    );
   } catch (err) {
-    log(`FAIL: ${err.message}`);
-    console.error(err);
-    setStatus("load error", false);
+    reportLoadError(err);
   }
 }
 
@@ -265,7 +273,8 @@ gaitSlider.addEventListener("input", () => {
   const v = Number(gaitSlider.value) / 100;
   unit.controller.director.gaitTarget = v;
   unit.controller.director.gait = v;
-  const label = v < 0.2 ? "idle" : v < 0.55 ? "walk" : v < 0.85 ? "run" : "sprint";
+  const label =
+    v < 0.2 ? "idle" : v < 0.55 ? "walk" : v < 0.85 ? "run" : "sprint";
   gaitLabel.textContent = label;
 });
 
@@ -299,6 +308,10 @@ document.getElementById("cycle-btn").addEventListener("click", (e) => {
   if (autoCycle) startCycle();
   else stopCycle();
   e.target.style.borderColor = autoCycle ? "#5fcf7a" : "";
+});
+
+window.addEventListener("unhandledrejection", (ev) => {
+  reportLoadError(ev.reason);
 });
 
 (function tick() {

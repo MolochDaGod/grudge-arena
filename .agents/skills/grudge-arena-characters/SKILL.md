@@ -16,6 +16,7 @@ CDN race GLB  →  race atlas PNG  →  baked Bip001 JSON clips  →  AnimationD
 ```
 
 **Runtime entry:** `createBakedGrudge6Unit(race, weapon)` in `src/modelLoader.js`
+**Resource catalog:** `src/characterResources.js` — canonical mesh/atlas paths, `CharacterLoadError`, texture audit
 **Showcase:** `https://grudge-arena.grudge-studio.com/anim-test.html?race=human&weapon=greatsword&pipeline=baked`
 
 Do **not** use `/models/{race}.glb` fallback GLBs for showcase — they are untextured 2 MB safety nets.
@@ -87,10 +88,14 @@ Baked JSON clips use the same names. Do not remap to spaced names.
 
 ## Common failures
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| Solid yellow | Atlas not applied or toneMapped on unlit mat | Hard refresh; check CDN 200 on Map__*.png |
-| Yellow spike / exploded mesh | Mixamo remap on A-pose (legacy pipeline) | Use `pipeline=baked` |
-| Character floating | Grounding used full scene bbox | body-only grounding in normalizeCharacterScale |
-| anim-test 404 / old page | Stale `public/anim-test.html` | Use root Vite `anim-test.html` |
-| baked load fails | Missing JSON on R2 | Verify `/api/assets/anims/baked/locomotion/walking.json` |
+| Symptom | Error code | Fix |
+|---------|------------|-----|
+| Solid yellow | (texture audit 0/N) | Hard refresh; check CDN 200 on Map__*.png |
+| Yellow spike / exploded mesh | legacy pipeline | Use `pipeline=baked` |
+| Character floating | — | body-only grounding in normalizeCharacterScale |
+| anim-test 404 / old page | — | Use root Vite `anim-test.html` |
+| `MODEL_NOT_FOUND` | `CharacterLoadError` | `build-character-library.mjs` + `npm run sync:assets` |
+| `BAKED_ANIM_INCOMPLETE` | missing idle/walk/run/sprint | Bake + sync `/api/assets/anims/baked/` |
+| `INVALID_RACE` | bad `?race=` param | human, barbarian, elf, dwarf, orc, undead |
+
+anim-test and arena logs print `formatCharacterLoadError()` hints with remediation steps.

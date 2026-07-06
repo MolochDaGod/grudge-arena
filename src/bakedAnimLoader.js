@@ -82,6 +82,29 @@ export const BAKED_COMBAT_EXTRAS = {
 
 const clipCache = new Map();
 
+/** Core locomotion clips required for baked pipeline. */
+export const REQUIRED_BAKED_LOCO = ["idle", "walk", "run", "sprint"];
+
+export class BakedAnimLoadError extends Error {
+  constructor(message, { weaponType, packName, missing = [] } = {}) {
+    super(message);
+    this.name = "BakedAnimLoadError";
+    this.code = "BAKED_ANIM_INCOMPLETE";
+    this.weaponType = weaponType;
+    this.packName = packName;
+    this.missing = missing;
+  }
+}
+
+export function validateBakedLocoClips(clips, weaponType, packName) {
+  const missing = REQUIRED_BAKED_LOCO.filter((name) => !clips.get(name));
+  if (missing.length === 0) return;
+  throw new BakedAnimLoadError(
+    `Baked locomotion incomplete for ${weaponType} (${packName}): missing ${missing.join(", ")}`,
+    { weaponType, packName, missing },
+  );
+}
+
 export function bakedClipUrl(rel) {
   return grudge6AssetUrl(`anims/baked/${rel}.json`);
 }
@@ -135,8 +158,19 @@ export async function loadBakedPackClips(weaponType) {
   );
 
   const clips = new Map();
+  const skipped = [];
   for (const entry of entries) {
     if (entry) clips.set(entry[0], entry[1]);
   }
-  return { packName, clips };
+  for (const [name] of rels) {
+    if (!clips.has(name) && REQUIRED_BAKED_LOCO.includes(name)) {
+      skipped.push(name);
+    }
+  }
+  if (skipped.length) {
+    console.warn(
+      `[bakedAnim] ${packName}: missing core clips [${skipped.join(", ")}] — check /api/assets/anims/baked/`,
+    );
+  }
+  return { packName, clips, skipped };
 }

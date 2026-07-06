@@ -16,9 +16,18 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { getRaceConfig, getRaceFactionColors, resolveWeapon, TierConfig } from './engine/RaceConfig.js';
 import { EquipmentManager, isD1ModularScene } from "./EquipmentManager.js";
 import { assetUrl, charUrl, animUrl, audioUrl, modelUrl, grudge6AssetUrl, grudge6AnimUrl } from "./assetConfig.js";
-import { grudge6RaceModelPath, RACE_TEXTURE_ATLAS } from './Grudge6Paths.js';
+import {
+  CharacterLoadError,
+  raceModelFallbackPaths,
+  raceTextureFallbackPaths,
+  isValidRace,
+} from "./characterResources.js";
 import { preloadGrudge6Anims } from './Grudge6AnimLoader.js';
-import { loadBakedPackClips } from './bakedAnimLoader.js';
+import {
+  loadBakedPackClips,
+  validateBakedLocoClips,
+  BakedAnimLoadError,
+} from "./bakedAnimLoader.js";
 import { createBakedController } from './BakedAnimationController.js';
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
@@ -773,27 +782,9 @@ let _characterManifestPromise = null;
 let _humanBasemeshAnimPromise = null;
 const _raceTextureCache = new Map();
 
-const RACE_CHARACTER_PATHS = {
-  human: charUrl("human/WK_Characters.glb"),
-  barbarian: charUrl("barbarian/BRB_Characters.glb"),
-  elf: charUrl("elf/ELF_Characters.glb"),
-  dwarf: charUrl("dwarf/DWF_Characters.glb"),
-  orc: charUrl("orc/ORC_Characters.glb"),
-  undead: charUrl("undead/UD_Characters.glb"),
-};
-
 const HUMAN_BASEMESH_ANIM_SOURCE = charUrl(
   "human_basemesh/HumanBaseMesh_WithEquips.glb",
 );
-
-function raceModelPaths(race) {
-  const paths = [];
-  // GLB first — grudge6 FBX often 404s on prod CDN and delays load by seconds.
-  paths.push(RACE_CHARACTER_PATHS[race], modelUrl(`${race}.glb`), `/models/${race}.glb`);
-  const g6 = grudge6RaceModelPath(race);
-  if (g6) paths.push(grudge6AssetUrl(g6));
-  return paths.filter(Boolean);
-}
 
 async function loadCharacterManifest() {
   if (_characterManifestPromise) return _characterManifestPromise;
@@ -808,16 +799,6 @@ async function loadCharacterManifest() {
     });
   return _characterManifestPromise;
 }
-
-// Direct texture paths — prefer /cdn (arena bake), then grudge6 /api/assets mirror
-const RACE_TEXTURE_DIRECT = {
-  human:     [charUrl('human/textures/Map__9.png'), grudge6AssetUrl(RACE_TEXTURE_ATLAS.human)],
-  barbarian: [charUrl('barbarian/textures/Map__9.png'), grudge6AssetUrl(RACE_TEXTURE_ATLAS.barbarian)],
-  elf:       [charUrl('elf/textures/Map__9.png'), grudge6AssetUrl(RACE_TEXTURE_ATLAS.elf)],
-  dwarf:     [charUrl('dwarf/textures/Map__12.png'), grudge6AssetUrl(RACE_TEXTURE_ATLAS.dwarf)],
-  orc:       [charUrl('orc/textures/Map__11.png'), grudge6AssetUrl(RACE_TEXTURE_ATLAS.orc)],
-  undead:    [charUrl('undead/textures/Map__11.png'), grudge6AssetUrl(RACE_TEXTURE_ATLAS.undead)],
-};
 
 /** Synty D1 GLBs ship MeshBasicMaterial (KHR_materials_unlit) — must patch these too. */
 function forEachTintableMaterial(scene, fn) {
@@ -841,9 +822,10 @@ async function loadRaceTextureMap(race) {
   const manifestPath = rawManifestPath
     ? assetUrl(rawManifestPath.replace(/^\//, ""))
     : null;
-  const directPaths = RACE_TEXTURE_DIRECT[race] || [];
+  const directPaths = raceTextureFallbackPaths(race);
   const paths = [...directPaths, manifestPath].filter(Boolean);
 
+  const texFailures = [];
   for (const texPath of paths) {
     const tex = await loadAtlasTexture(texPath);
     if (tex) {
@@ -851,9 +833,13 @@ async function loadRaceTextureMap(race) {
       console.log(`[modelLoader] ${race}: texture atlas loaded from ${texPath}`);
       return tex;
     }
+    texFailures.push(texPath);
   }
 
-  console.warn(`[modelLoader] ${race}: no texture atlas found`);
+  console.warn(
+    `[modelLoader] ${race}: no texture atlas found (tried ${texFailures.length} paths)`,
+    texFailures,
+  );
   _raceTextureCache.set(race, null);
   return null;
 }
@@ -1028,8 +1014,8 @@ async function loadFBX(path) {
   return { scene: cached, animations: cached.animations || [], path, format: 'fbx' };
 }
 
-async function loadModelWithFallback(paths) {
-  let lastError = null;
+async function loadModelWithFallback(paths, { race } = {}) {
+  const failures = [];
   for (const path of paths) {
     try {
       if (/\.fbx$/i.test(path)) {
@@ -1042,14 +1028,16 @@ async function loadModelWithFallback(paths) {
         });
         gltfCache.set(path, gltf);
       }
-      return { ...gltf, path, format: 'glb' };
+      return { ...gltf, path, format: "glb" };
     } catch (err) {
-      lastError = err;
+      const message = err?.message || String(err);
+      failures.push({ path, message });
+      console.warn(`[modelLoader] skip mesh ${path}: ${message}`);
     }
   }
-  throw (
-    lastError ||
-    new Error(`Failed to load model from paths: ${paths.join(", ")}`)
+  throw new CharacterLoadError(
+    `No mesh loaded for ${race || "unknown"} (${failures.length} paths tried)`,
+    { code: "MODEL_NOT_FOUND", race, paths: failures },
   );
 }
 
@@ -1205,8 +1193,14 @@ function hasValidTextureMap(mat) {
 }
 
 export async function loadRaceModel(race) {
-  const loaded = await loadModelWithFallback(raceModelPaths(race));
-  const isGrudge6Fbx = loaded.format === 'fbx';
+  if (!isValidRace(race)) {
+    throw new CharacterLoadError(`Unknown race "${race}"`, {
+      code: "INVALID_RACE",
+      race,
+    });
+  }
+  const loaded = await loadModelWithFallback(raceModelFallbackPaths(race), { race });
+  const isGrudge6Fbx = loaded.format === "fbx";
   const sourceScene = loaded.scene;
   const sourceAnims = loaded.animations || [];
 
@@ -1924,14 +1918,19 @@ function applyCommonClipAliases(actions) {
  * Uses AnimationDirector gait blending (idle→walk→run→sprint).
  */
 export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
+  if (!isValidRace(race)) {
+    throw new CharacterLoadError(`Unknown race "${race}"`, {
+      code: "INVALID_RACE",
+      race,
+    });
+  }
   const raceConfig = getRaceConfig(race);
   const factionColors = getRaceFactionColors(race);
   const tier = opts.tier || 1;
   const tierCfg = TierConfig[tier] || TierConfig[1];
   const resolvedWeapon = resolveWeapon(race, weaponType);
 
-  // CDN D1 GLBs (Bip001) + baked rotation clips — same mesh path as arena prod.
-  const loaded = await loadModelWithFallback(raceModelPaths(race));
+  const loaded = await loadModelWithFallback(raceModelFallbackPaths(race), { race });
   const sourceScene = loaded.scene;
   const scene = cloneGLTFScene(sourceScene);
 
@@ -1951,15 +1950,23 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
   normalizeCharacterScale(scene, 1.75);
 
   const { packName, clips } = await loadBakedPackClips(resolvedWeapon);
-  const idle = clips.get('idle');
-  const walk = clips.get('walk');
-  const run = clips.get('run');
-  const sprint = clips.get('sprint');
-  if (!idle || !walk || !run || !sprint) {
-    throw new Error(
-      `[modelLoader] baked loco incomplete for ${resolvedWeapon} (${packName})`,
-    );
+  try {
+    validateBakedLocoClips(clips, resolvedWeapon, packName);
+  } catch (err) {
+    if (err instanceof BakedAnimLoadError) {
+      throw new CharacterLoadError(err.message, {
+        code: err.code,
+        race,
+        missing: err.missing,
+        cause: err,
+      });
+    }
+    throw err;
   }
+  const idle = clips.get("idle");
+  const walk = clips.get("walk");
+  const run = clips.get("run");
+  const sprint = clips.get("sprint");
 
   const mixer = new THREE.AnimationMixer(scene);
   const controller = createBakedController(
@@ -2003,8 +2010,10 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     tier,
     race,
     equipment,
-    isGrudge6Fbx: true,
+    isGrudge6Fbx: loaded.format === "fbx",
     bakedAnims: true,
+    modelPath: loaded.path,
+    pipeline: "baked",
   };
 }
 
