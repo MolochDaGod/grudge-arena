@@ -65,22 +65,26 @@ export const WeaponToBakedPack = {
   unarmed: 'unarmed',
 };
 
-/** Directional locomotion rel paths per baked pack (4-way cardinal). */
+/**
+ * Directional locomotion rel paths per baked pack (4-way cardinal).
+ * Every path must exist on CDN — see character-viewer/public/anims/baked and
+ * lib/game-content/src/animDefaults.ts (forward-only packs use locomotion fallbacks).
+ */
 export const BAKED_DIR_RELS = {
   unarmed: {
     walkBack: 'locomotion/walking',
     runBack: 'locomotion/running',
-    strafeLeft: 'locomotion/walking',
-    strafeRight: 'locomotion/walking',
+    strafeLeft: 'locomotion/left strafe walking',
+    strafeRight: 'locomotion/right strafe walking',
   },
   magic: {
-    walkBack: 'magic/standing walk back',
-    runBack: 'magic/standing run back',
-    strafeLeft: 'magic/standing walk left',
-    strafeRight: 'magic/standing walk right',
+    walkBack: 'locomotion/walking',
+    runBack: 'locomotion/running',
+    strafeLeft: 'locomotion/left strafe walking',
+    strafeRight: 'locomotion/right strafe walking',
   },
   sword_shield: {
-    walkBack: 'sword_shield/sword and shield walk',
+    walkBack: 'locomotion/walking',
     runBack: 'sword_shield/sword and shield run',
     strafeLeft: 'sword_shield/sword and shield strafe',
     strafeRight: 'sword_shield/sword and shield strafe (2)',
@@ -101,7 +105,7 @@ export const BAKED_DIR_RELS = {
     walkBack: 'pistol/pistol walk backward',
     runBack: 'pistol/pistol run backward',
     strafeLeft: 'pistol/pistol strafe',
-    strafeRight: 'pistol/pistol strafe 2',
+    strafeRight: 'pistol/pistol strafe',
   },
 };
 
@@ -120,13 +124,13 @@ export const PACK_COMBAT_EXTRAS = {
   sword_shield: {
     fire: 'sword_shield/sword and shield attack',
     reload: 'sword_shield/sword and shield idle',
-    aimIdle: 'sword_shield/sword and shield block idle',
+    aimIdle: 'sword_shield/sword and shield idle',
   },
   longbow: {
     fire: 'longbow/standing aim recoil',
-    reload: 'longbow/standing aim idle',
-    aimIdle: 'longbow/standing aim idle',
-    draw: 'longbow/standing aim idle 02',
+    reload: 'longbow/standing idle 01',
+    aimIdle: 'longbow/standing idle 01',
+    draw: 'longbow/standing idle 01',
   },
   rifle: {
     fire: 'rifle/firing',
@@ -136,7 +140,7 @@ export const PACK_COMBAT_EXTRAS = {
   },
   pistol: {
     fire: 'pistol/gunplay',
-    reload: 'pistol/pistol reload',
+    reload: 'pistol/pistol idle',
     aimIdle: 'pistol/pistol idle',
   },
 };
@@ -152,9 +156,9 @@ export const BAKED_COMBAT_EXTRAS = {
   cast2H: 'magic/standing 2h cast spell 01',
   dodge: 'uploads/locomotion/Jump_From_Wall',
   jump: 'locomotion/jump',
-  blockIdle: 'sword_shield/sword and shield block idle',
-  aimIdle: 'longbow/standing aim idle',
-  taunt: 'unarmed/taunt',
+  blockIdle: 'sword_shield/sword and shield block',
+  aimIdle: 'longbow/standing idle 01',
+  taunt: 'unarmed/fight_idle',
 };
 
 const clipCache = new Map();
