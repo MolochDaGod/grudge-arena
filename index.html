@@ -315,8 +315,8 @@
 </div>
 
 <script type="module">
-  import { bootRouter, navigate, resolveInitialRoute, ROUTES } from './src/arenaRouter.js';
-  import { registerGameFlowHost, handleRoute, exitToDressingRoom } from './src/gameFlow.js';
+  import { bootRouter, navigate, resolveInitialRoute, ROUTES, parseRoute } from './src/arenaRouter.js';
+  import { registerGameFlowHost, handleRoute, exitToDressingRoom, resumePendingRoute } from './src/gameFlow.js';
 
   // ── Grudge Auth ───────────────────────────────────────────────
   // Auth contract: Puter SDK for identity, Phantom for wallet, Guest fallback
@@ -903,7 +903,7 @@
     }
   }
 
-  function showLoggedIn(user) {
+  async function showLoggedIn(user) {
     grudgeUser = user;
     document.getElementById('auth-gate').style.display = 'none';
     document.getElementById('race-select').classList.add('show');
@@ -918,6 +918,10 @@
       document.getElementById('ua').innerHTML = '<img src="' + user.avatarUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
     } else {
       document.getElementById('ua').textContent = (user.username || 'W')[0].toUpperCase();
+    }
+    const resumed = await resumePendingRoute();
+    if (!resumed) {
+      await handleRoute(parseRoute(location.pathname));
     }
   }
 
@@ -1188,7 +1192,7 @@
         storeAuth(incomingToken, { grudgeId: incomingGrudgeId || '', username: incomingUsername || 'Warlord' });
       }
       history.replaceState({}, '', ROUTES.DRESSING_ROOM);
-      showLoggedIn(getUser() || { username: incomingUsername || 'Warlord', grudgeId: incomingGrudgeId || '' });
+      await showLoggedIn(getUser() || { username: incomingUsername || 'Warlord', grudgeId: incomingGrudgeId || '' });
       return;
     }
 
@@ -1202,7 +1206,7 @@
           user = await fetchUserProfile(existingToken);
           if (user) storeAuth(existingToken, user);
         }
-        if (user) { showLoggedIn(user); return; }
+        if (user) { await showLoggedIn(user); return; }
       }
       clearAuth();
     }
@@ -1210,7 +1214,7 @@
     // Case 3: Existing local user data (offline session from wallet/guest)
     const localUser = getUser();
     if (localUser && (localUser.walletAddress || localUser.puterUuid || localUser.isGuest)) {
-      showLoggedIn(localUser);
+      await showLoggedIn(localUser);
       return;
     }
 
@@ -1221,7 +1225,7 @@
         if (puterUser && puterUser.uuid) {
           const user = { username: puterUser.username || 'Warlord', puterUuid: puterUser.uuid };
           storeAuth(null, user);
-          showLoggedIn(user);
+          await showLoggedIn(user);
           // Background: sync with backend
           fetch(API_BASE + '/auth/puter', {
             method: 'POST',
@@ -1237,6 +1241,7 @@
 
     // Case 5: No session — show auth gate
     showLoggedOut();
+    resolveInitialRoute();
   })();
 
   // ── Animation Test launcher ──────────────────────────
@@ -1451,7 +1456,6 @@
   window.exitToDressingRoom = exitToDressingRoom;
 
   setupCharacterBuilder();
-  resolveInitialRoute();
 </script>
 </body>
 </html>

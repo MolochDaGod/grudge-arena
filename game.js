@@ -17,7 +17,7 @@ import { getRaceConfig, resolveWeapon } from './src/engine/RaceConfig.js';
 import { ShaderLibrary, createShaderMaterial } from './src/engine/ShaderLibrary.js';
 import { ParticleSystem } from './src/engine/ParticleSystem.js';
 import { CollisionSystem } from './src/engine/CollisionSystem.js';
-import { mapUrl } from './src/assetConfig.js';
+import { mapUrl, assetUrl } from "./src/assetConfig.js";
 import { OrbitCamera } from './src/engine/OrbitCamera.js';
 import { ArenaController } from './src/engine/ArenaController.js';
 import { SpriteSystem, createSkybox } from './src/engine/SpriteSystem.js';
@@ -168,7 +168,9 @@ class GrudgeArena {
     this.hitboxManager = new HitboxManager(this.physicsWorld.world);
 
     await this._createArena();
-    createSkybox(this.scene);
+    if (!this.dangerMode) {
+      this._skybox = createSkybox(this.scene);
+    }
 
     // Loading progress helper
     const setProgress = (pct, text) => {
@@ -363,6 +365,13 @@ class GrudgeArena {
       }
 
       if (this.dangerMode) {
+        for (const u of this.allUnits) {
+          if (u.controller?.director?.primeLocomotion) {
+            u.controller.director.primeLocomotion();
+          } else if (u.controller?.play) {
+            u.controller.play("idle", { loop: true });
+          }
+        }
         this._setupSoftLockInput();
         bootstrapDangerRoom(this);
         if (this.playerController && this._dangerClampRadius) {
@@ -609,23 +618,11 @@ class GrudgeArena {
         (comp.heroId ? getHero(comp.heroId)?.race : null) ||
         comp.heroId ||
         "human";
-      if (this.dangerMode && modelMod.createBakedGrudge6Unit) {
-        try {
-          unitResult = await modelMod.createBakedGrudge6Unit(raceId, comp.weapon, {
-            tier: comp.tier || 1,
-          });
-        } catch (err) {
-          const detail =
-            err?.paths?.length > 0
-              ? `${err.message} [${err.paths.map((p) => p.path).join(", ")}]`
-              : err.message;
-          console.warn(
-            `[arena] baked grudge6 load failed for ${raceId}; falling back to legacy:`,
-            detail,
-          );
-        }
-      }
-      if (!unitResult) {
+      if (this.dangerMode) {
+        unitResult = await modelMod.createBakedGrudge6Unit(raceId, comp.weapon, {
+          tier: comp.tier || 1,
+        });
+      } else if (!unitResult) {
         unitResult = await modelMod.createAnimatedUnit(raceId, comp.weapon, {
           tier: comp.tier || 1,
         });
@@ -1640,9 +1637,7 @@ class GrudgeArena {
 
     // Real ability icons from ObjectStore abilities pack, served via R2 CDN.
     // Keys = WeaponDefinitions ability.effect strings.
-    const IS_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const ICON_BASE = IS_DEV ? '/assets/icons/abilities/' : '/cdn/assets/icons/abilities/';
-    const i = (name) => `${ICON_BASE}${name}.png`;
+    const i = (name) => assetUrl(`assets/icons/abilities/${name}.png`);
 
     const EFFECT_ICONS = {
       fireball:            i('ability_fireball'),

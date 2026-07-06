@@ -74,6 +74,13 @@ export function getDangerSpawnFacing(teamId) {
  */
 export function bootstrapDangerRoom(arena) {
   setDangerMode(true);
+  if (arena._skybox) {
+    arena.scene.remove(arena._skybox);
+    arena._skybox.geometry?.dispose?.();
+    arena._skybox.material?.map?.dispose?.();
+    arena._skybox.material?.dispose?.();
+    arena._skybox = null;
+  }
   const state = getDangerRoomState();
   arena._dangerEnv = buildDangerRoomEnvironment(arena.scene, state.presetId);
   arena._dangerClampRadius = arena._dangerEnv.clampRadius;

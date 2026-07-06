@@ -3,7 +3,29 @@
  * Works with arenaRouter slugs; index.html registers a host with build/auth hooks.
  */
 
-import { ROUTES, navigate } from "./arenaRouter.js";
+import { ROUTES, navigate, parseRoute } from "./arenaRouter.js";
+
+const PENDING_ROUTE_KEY = "grudge_pending_route";
+
+export function stashPendingRoute(path) {
+  if (path && path !== ROUTES.DRESSING_ROOM) {
+    sessionStorage.setItem(PENDING_ROUTE_KEY, path);
+  }
+}
+
+export function consumePendingRoute() {
+  const path = sessionStorage.getItem(PENDING_ROUTE_KEY);
+  if (path) sessionStorage.removeItem(PENDING_ROUTE_KEY);
+  return path;
+}
+
+/** Resume /danger-room (etc.) after guest login — call from showLoggedIn. */
+export async function resumePendingRoute() {
+  const path = consumePendingRoute();
+  if (!path) return false;
+  await handleRoute(parseRoute(path));
+  return true;
+}
 
 /** @type {import('./gameFlow.js').GameFlowHost | null} */
 let host = null;
@@ -97,6 +119,9 @@ export async function handleRoute(route) {
   if (window.__grudgeArena && route.gameMode === activeMode) return;
 
   if (!host?.isAuthed?.()) {
+    if (route.autoStart && route.gameMode) {
+      stashPendingRoute(route.path);
+    }
     host?.setAuthStatus?.("Sign in or play as Guest to enter");
     navigate(ROUTES.DRESSING_ROOM, { replace: true });
     return;

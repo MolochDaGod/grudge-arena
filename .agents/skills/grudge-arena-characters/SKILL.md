@@ -54,7 +54,7 @@ npm test && npm run build && npm run deploy:prod
 | **Baked (prod)** | `createBakedGrudge6Unit` | `/api/assets/anims/baked/*.json` rotation-only | Danger Room default |
 | **Legacy** | `createAnimatedUnit` | Mixamo GLB packs + animation-library | Fallback if baked fails |
 
-Danger Room tries baked first (`game.js` → `createBakedGrudge6Unit`), then legacy.
+Danger Room uses **baked only** (`game.js` → `createBakedGrudge6Unit`) — no legacy fallback (prevents yellow/exploded dummies).
 
 ## Texture rules (Synty D1)
 
