@@ -5,6 +5,9 @@ const logs = [];
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
+let exitCode = 1;
+
+try {
 page.on("pageerror", (e) => errors.push(`PAGE: ${e.message}`));
 page.on("console", (msg) => {
   const t = msg.type();
@@ -90,10 +93,12 @@ console.log("bakedUnits:", bakedUnits);
 console.log("arenaLogs:", logs.filter((l) => /baked-grudge6|Danger Room|Game loaded/.test(l)));
 console.log("errors:", JSON.stringify(errors.slice(0, 10), null, 2));
 
-await browser.close();
-
 const ok = Object.values(checks).every(Boolean);
 if (!ok) {
   console.error("SMOKE FAILED:", Object.entries(checks).filter(([, v]) => !v).map(([k]) => k));
 }
-process.exit(ok ? 0 : 1);
+exitCode = ok ? 0 : 1;
+} finally {
+  await browser.close().catch(() => {});
+}
+process.exit(exitCode);
