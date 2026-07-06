@@ -61,6 +61,16 @@ const CFG = {
 
   CAMERA_MIN_HEIGHT:   0.4,
   CAMERA_MAX_HEIGHT:   15,
+
+  // Combat / ADS (dangerroom.puter.site CameraRig)
+  HIP_FOV:             50,
+  ADS_FOV:             38,
+  ADS_DIST_SCALE:      0.72,
+  ADS_MIN_DIST:        2.2,
+  HIP_SHOULDER:        0.2,
+  ADS_SHOULDER:        0.55,
+  CAM_POS_SMOOTH:      15,
+  CAM_LOOK_SMOOTH:     18,
 };
 
 // Tab-target nudge
@@ -101,7 +111,30 @@ export class OrbitCamera {
     this._tabNudge    = 0;
     this._tabNudgeDir = 0;
 
+    this._aiming = false;
+    this._assistYaw = null;
+    this._assistPitch = null;
+    this._assistRate = 0;
+    this._currentFov = CFG.HIP_FOV;
+
     this._setupInput();
+  }
+
+  /** RMB hold / attack — pull in over shoulder, tighten FOV. */
+  setAiming(aiming) {
+    this._aiming = !!aiming;
+  }
+
+  /**
+   * Tab hard-lock camera assist — gently orbit toward locked target.
+   * @param {number|null} yaw
+   * @param {number|null} pitch
+   * @param {number} rate
+   */
+  setCameraAssist(yaw, pitch, rate) {
+    this._assistYaw = yaw;
+    this._assistPitch = pitch;
+    this._assistRate = rate || 0;
   }
 
   // ── Public API ───────────────────────────────────────────────────
@@ -218,6 +251,17 @@ export class OrbitCamera {
       this._tabNudge  *= Math.max(0, 1 - TAB_NUDGE_SPEED * delta);
     }
 
+    // ── 2b. Hard-lock camera assist (soft-lock tab target) ────────
+    if (this._assistRate > 0 && this._assistYaw != null && this._assistPitch != null) {
+      const k = 1 - Math.exp(-this._assistRate * delta);
+      let yd = this._assistYaw - this._targetYaw;
+      while (yd >  Math.PI) yd -= PI2;
+      while (yd < -Math.PI) yd += PI2;
+      this._targetYaw += yd * k;
+      this._targetPitch += (this._assistPitch - this._targetPitch) * k;
+      this._targetPitch = Math.max(CFG.PITCH_MIN, Math.min(CFG.PITCH_MAX, this._targetPitch));
+    }
+
     // ── 3. Smooth toward target orbit ─────────────────────────────
     const st = 1 - Math.exp(-CFG.FOLLOW_SPEED * delta);
     let yd = this._targetYaw - this.yaw;
@@ -233,11 +277,15 @@ export class OrbitCamera {
     const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
     const cy = Math.cos(this.yaw),   sy = Math.sin(this.yaw);
 
-    // ── 5. Desired camera position (spherical) ──────────────────
+    // ── 5. Desired camera position (spherical) — ADS pulls in + shoulder ──
+    const aimDist = this._aiming
+      ? Math.max(CFG.ADS_MIN_DIST, this.distance * CFG.ADS_DIST_SCALE)
+      : this.distance;
+    const shoulder = this._aiming ? CFG.ADS_SHOULDER : CFG.HIP_SHOULDER;
     const desiredPos = new THREE.Vector3(
-      this._pivotWorld.x - sy * cp * this.distance + cy * this.shoulderOffset,
-      this._pivotWorld.y + sp * this.distance,
-      this._pivotWorld.z - cy * cp * this.distance - sy * this.shoulderOffset,
+      this._pivotWorld.x - sy * cp * aimDist + cy * shoulder,
+      this._pivotWorld.y + sp * aimDist,
+      this._pivotWorld.z - cy * cp * aimDist - sy * shoulder,
     );
     desiredPos.y = Math.max(CFG.CAMERA_MIN_HEIGHT, Math.min(CFG.CAMERA_MAX_HEIGHT, desiredPos.y));
 
@@ -274,12 +322,23 @@ export class OrbitCamera {
       this._effectiveDistance = this.distance; // No collision adjustment on first frame
       this._initialized = true;
     } else {
-      const ps = isCloser ? CFG.COLLISION_PULL_IN : CFG.FOLLOW_SPEED;
-      this._currentPos.lerp(finalPos, 1 - Math.exp(-ps * delta));
-      this._currentLookAt.lerp(lookAt, 1 - Math.exp(-CFG.FOLLOW_SPEED * delta));
+      const posK = 1 - Math.exp(-(isCloser ? CFG.COLLISION_PULL_IN : CFG.CAM_POS_SMOOTH) * delta);
+      const lookK = 1 - Math.exp(-CFG.CAM_LOOK_SMOOTH * delta);
+      this._currentPos.lerp(finalPos, posK);
+      this._currentLookAt.lerp(lookAt, lookK);
     }
 
     this.camera.position.copy(this._currentPos);
     this.camera.lookAt(this._currentLookAt);
+
+    // ADS FOV zoom
+    if (this.camera.isPerspectiveCamera) {
+      const wantFov = this._aiming ? CFG.ADS_FOV : CFG.HIP_FOV;
+      this._currentFov += (wantFov - this._currentFov) * (1 - Math.exp(-10 * delta));
+      if (Math.abs(this.camera.fov - this._currentFov) > 0.05) {
+        this.camera.fov = this._currentFov;
+        this.camera.updateProjectionMatrix();
+      }
+    }
   }
 }

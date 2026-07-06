@@ -24,6 +24,14 @@ import {
   getCrosshairSpread,
   getHitMarkerId,
 } from "../engine/CombatFeedback.js";
+import {
+  updateSoftLock,
+  getSoftLockHudState,
+  hardLockCameraAssistRate,
+  lockedTargetWorld,
+  syncTargetLockFromTargeting,
+  cycleTabTarget,
+} from "../engine/SoftLockSystem.js";
 
 /** Training dummies — enemy team targets that don't chase the player. */
 export function getDangerTrainingTeams(playerRace, playerWeapon, buildConfig) {
@@ -95,37 +103,31 @@ export function teardownDangerRoom(arena) {
   setDangerMode(false);
 }
 
-const _proj = new THREE.Vector3();
+const _toTarget = new THREE.Vector3();
 
-/** Tab-target soft-lock — crosshair magnet toward enemy chest on screen. */
-function resolveSoftLockScreen(arena) {
-  const target = arena.targeting?.currentTarget;
-  const canvas = arena.renderer?.domElement;
-  if (!target?.mesh || !canvas || target.entity?.hasTag("dead")) {
-    return {
-      active: false,
-      aiming: !!(arena._autoAttackOn || arena.playerController?.holdKey?.Mouse2),
-    };
+function applyCameraAssist(arena, dt, weaponType, aiming) {
+  const cam = arena.orbitCamera;
+  if (!cam) return;
+  const rate = hardLockCameraAssistRate(aiming, weaponType);
+  if (rate <= 0) {
+    cam.setCameraAssist(null, null, 0);
+    return;
   }
-  const rect = canvas.getBoundingClientRect();
-  _proj.copy(target.mesh.position);
-  _proj.y += 1.25;
-  _proj.project(arena.camera);
-  if (_proj.z < -1 || _proj.z > 1) {
-    return { active: false, aiming: !!arena._autoAttackOn };
+  const world = lockedTargetWorld(arena.targeting);
+  if (!world) {
+    cam.setCameraAssist(null, null, 0);
+    return;
   }
-  return {
-    active: true,
-    x: rect.left + (_proj.x * 0.5 + 0.5) * rect.width,
-    y: rect.top + (-_proj.y * 0.5 + 0.5) * rect.height,
-    hardLock: !!arena._autoAttackOn,
-    aiming: !!(arena._autoAttackOn || arena.playerController?.holdKey?.Mouse2),
-    magnet: 0.55,
-  };
+  _toTarget.copy(world).sub(arena.camera.position);
+  if (_toTarget.lengthSq() < 1e-6) return;
+  _toTarget.normalize();
+  const yaw = Math.atan2(_toTarget.x, _toTarget.z);
+  const pitch = Math.asin(Math.max(-1, Math.min(1, _toTarget.y)));
+  cam.setCameraAssist(yaw, pitch, rate);
 }
 
 /** Per-frame danger room HUD updates. */
-export function tickDangerRoomHud(arena) {
+export function tickDangerRoomHud(arena, delta = 0.016) {
   if (!arena.playerController) return;
   const ctrl = arena.playerController;
   const speed = ctrl.currentSpeed || 0;
@@ -162,6 +164,17 @@ export function tickDangerRoomHud(arena) {
     }
   }
 
+  const canvas = arena.renderer?.domElement;
+  const lockWeapon = arena._getWeaponTypeKey?.() ?? weaponType;
+  const aiming = !!(arena._autoAttackOn || ctrl.holdKey?._RMB);
+
+  if (canvas) {
+    const rect = canvas.getBoundingClientRect();
+    syncTargetLockFromTargeting(arena.targeting);
+    updateSoftLock(delta, arena.camera, rect, arena.targeting, aiming, lockWeapon);
+    applyCameraAssist(arena, delta, lockWeapon, aiming);
+  }
+
   updateDangerHud({
     motion,
     weapon: weapon ? `${weapon.name} · ${feel.title}` : feel.title,
@@ -170,7 +183,19 @@ export function tickDangerRoomHud(arena) {
     spread: getCrosshairSpread(),
     hitMarker: getHitMarkerId(),
     rangeState,
-    softLock: resolveSoftLockScreen(arena),
+    softLock: getSoftLockHudState(),
   });
   syncAbilityBarFlash();
+}
+
+/** Tab cycle with soft-lock zone (danger room). */
+export function dangerRoomCycleTarget(arena) {
+  const canvas = arena.renderer?.domElement;
+  if (!canvas || !arena.targeting) return;
+  const rect = canvas.getBoundingClientRect();
+  const weaponType = arena._getWeaponTypeKey?.() ?? "greatsword";
+  cycleTabTarget(arena.camera, rect, arena.targeting, weaponType);
+  arena.orbitCamera?.nudgeToward?.(
+    arena.targeting.currentTarget?.mesh?.position ?? new THREE.Vector3(),
+  );
 }

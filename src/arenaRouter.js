@@ -2,7 +2,7 @@
  * Arena URL router — slug-based game flow (SPA, Vercel catch-all → index.html).
  *
  * Routes:
- *   /                 → redirect /dressing-room
+ *   /                 → redirect /danger-room (primary experience)
  *   /dressing-room    → auth + champion builder (lobby)
  *   /arena            → solo 3v3 skirmish
  *   /danger-room      → training chamber
@@ -50,7 +50,7 @@ export function parseRoute(pathname = location.pathname) {
     case ROUTES.ANIM_TEST:
       return { id: "anim-test", path, gameMode: null, autoStart: false, redirect: "/anim-test.html" };
     case ROUTES.HOME:
-      return { id: "home", path, gameMode: null, autoStart: false, redirect: ROUTES.DRESSING_ROOM };
+      return { id: "home", path, gameMode: null, autoStart: false, redirect: ROUTES.DANGER_ROOM };
     default:
       return { id: "not-found", path, gameMode: null, autoStart: false, redirect: ROUTES.DRESSING_ROOM };
   }

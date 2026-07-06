@@ -37,6 +37,12 @@
 import * as THREE from 'three';
 import { createCharacterFSM } from './CharacterFSM.js';
 import { ARENA_CLAMP_RADIUS } from './ProceduralArena.js';
+import {
+  DirLocoBlend,
+  computeGaitTarget,
+  resolveLocoDir,
+  defaultLocoClip,
+} from './DirLocoBlend.js';
 
 // ── Constants ────────────────────────────────
 
@@ -90,6 +96,13 @@ export class ArenaController {
 
     /** Optional override for danger room / custom arenas (defaults to ProceduralArena radius). */
     this.clampRadius = null;
+
+    /** Directional gait blend (dangerroom motion) — enabled when animCtrl exposes actions. */
+    this.useDirLoco = true;
+    this._locoBlend = null;
+    if (animCtrl?.actions) {
+      this._locoBlend = new DirLocoBlend((key) => animCtrl.actions.get(key) || null);
+    }
 
     this._setupListeners();
   }
@@ -354,14 +367,19 @@ export class ArenaController {
         // Update FSM bridge facing
         this._fsmChar.facing.set(worldDirX, worldDirZ);
 
-        // Only enter 'run' state from idle — avoids flooding XState
-        if (fsmValue === "idle") fsm.send({ type: "run" });
+        if (!this._driveDirLoco(fsmValue, fsm, ix, iz, isSprint, maxSpeed, delta)) {
+          if (fsmValue === "idle") fsm.send({ type: "run" });
+        }
       } else {
         // Decelerate
         this.currentSpeed = Math.max(0, this.currentSpeed - DECEL_RATE * delta);
         if (this.currentSpeed < 0.01) {
           this.currentSpeed = 0;
-          if (fsmValue === "run") fsm.send({ type: "stop" });
+          if (!this._driveDirLoco(fsmValue, fsm, 0, 0, false, maxSpeed, delta)) {
+            if (fsmValue === "run") fsm.send({ type: "stop" });
+          }
+        } else if (this._locoBlend && this.useDirLoco) {
+          this._driveDirLoco(fsmValue, fsm, ix, iz, isSprint, maxSpeed, delta);
         }
       }
     } else {
@@ -369,11 +387,10 @@ export class ArenaController {
       this.currentSpeed = Math.max(0, this.currentSpeed - DECEL_RATE * delta);
     }
 
-    // ── Notify camera of movement state ──
-    // OrbitCamera uses this to ramp up passive follow speed while moving
-    // (Fortnite-style snap-behind behaviour when running).
+    // ── Notify camera of movement + aim state ──
     const isActuallyMoving = hasInput || (!rmbHeld && (pressA || pressD));
     this.camera.setPlayerMoving?.(isActuallyMoving);
+    this.camera.setAiming?.(rmbHeld);
 
     // ── Smooth rotation ──
     // Lerp mesh.rotation.y toward targetYaw
@@ -392,6 +409,34 @@ export class ArenaController {
     while (this.mesh.rotation.y < -Math.PI) this.mesh.rotation.y += Math.PI * 2;
 
     // ── Animation mixer update is handled by game.js loop via animCtrl.update(delta) ──
+  }
+
+  /**
+   * Directional locomotion blend — returns true when loco handled this frame.
+   */
+  _driveDirLoco(fsmValue, fsm, ix, iz, isSprint, maxSpeed, delta) {
+    if (!this._locoBlend || !this.useDirLoco) return false;
+    const movable = fsmValue === "idle" || fsmValue === "run";
+    if (!movable) {
+      this._locoBlend.setSingle("idle", 0.12);
+      this._locoBlend.update(delta);
+      return false;
+    }
+
+    const hasInput = ix !== 0 || iz !== 0;
+    const dir = resolveLocoDir(ix, iz);
+    const speed01 = maxSpeed > 0 ? this.currentSpeed / maxSpeed : 0;
+    const gait = computeGaitTarget(speed01, isSprint, hasInput);
+    const rmbHeld = !!this.holdKey._RMB;
+
+    this._locoBlend.setBlend(dir, (band, d) => defaultLocoClip(band, d), 0.12);
+    this._locoBlend.setGaitTarget(gait);
+    this._locoBlend.setAiming(rmbHeld);
+    this._locoBlend.update(delta);
+
+    if (hasInput && fsmValue === "idle") fsm.send({ type: "run" });
+    if (!hasInput && this.currentSpeed < 0.01 && fsmValue === "run") fsm.send({ type: "stop" });
+    return true;
   }
 
   // ── Skill helper ───────────────────────────────────────────────

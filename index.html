@@ -36,7 +36,7 @@
   <div class="lobby-brand">
     <div class="lobby-logo"><img src="/grudge-logo.png" alt="Grudge"></div>
     <div class="lobby-title">GRUDGE ARENA</div>
-    <div class="lobby-sub">Dressing Room · 6 Races · 5 Weapon Classes</div>
+    <div class="lobby-sub">Danger Room · Animated Combat · 6 Races · 5 Weapons</div>
   </div>
 
   <div class="lobby-card">
@@ -872,7 +872,7 @@
     const readyEl = document.getElementById('builder-readiness');
 
     if (enterBtn) enterBtn.disabled = !ready;
-    if (dangerBtn) dangerBtn.disabled = !ready;
+    if (dangerBtn) dangerBtn.disabled = false;
     queueBtns.forEach((btn) => { btn.disabled = !ready; });
     if (readyEl) {
       readyEl.classList.toggle('ready', ready);

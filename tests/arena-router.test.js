@@ -20,9 +20,9 @@ describe("arenaRouter", () => {
     expect(r.autoStart).toBe(true);
   });
 
-  it("redirects home to dressing room", () => {
+  it("redirects home to danger room", () => {
     const r = parseRoute("/");
-    expect(r.redirect).toBe(ROUTES.DRESSING_ROOM);
+    expect(r.redirect).toBe(ROUTES.DANGER_ROOM);
   });
 
   it("aliases lobby and training", () => {

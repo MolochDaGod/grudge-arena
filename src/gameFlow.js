@@ -102,7 +102,7 @@ export async function handleRoute(route) {
     return;
   }
 
-  if (!host?.isBuildReady?.()) {
+  if (!host?.isBuildReady?.() && route.gameMode !== "danger") {
     host?.setAuthStatus?.("Spend all 160 attribute points before entering");
     navigate(ROUTES.DRESSING_ROOM, { replace: true });
     return;

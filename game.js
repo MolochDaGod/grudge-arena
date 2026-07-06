@@ -50,7 +50,9 @@ import {
   getDangerSpawnPosition,
   getDangerSpawnFacing,
   tickDangerRoomHud,
+  dangerRoomCycleTarget,
 } from './src/dangerRoom/DangerRoomMode.js';
+import { setRawMouse } from './src/engine/SoftLockSystem.js';
 import { getWeaponFeel, skillSfxIndex } from './src/engine/WeaponFeel.js';
 import {
   registerHit,
@@ -327,7 +329,11 @@ class GrudgeArena {
         // _setupInput() listener; this callback lets ArenaController's onTarget
         // also trigger it programmatically (e.g. from gamepad or custom binds).
         this.playerController.onTarget = () => {
-          this.targeting?.cycleEnemies();
+          if (this.dangerMode) {
+            dangerRoomCycleTarget(this);
+          } else {
+            this.targeting?.cycleEnemies();
+          }
         };
 
         this.playerController.onDash = () => {
@@ -357,6 +363,7 @@ class GrudgeArena {
       }
 
       if (this.dangerMode) {
+        this._setupSoftLockInput();
         bootstrapDangerRoom(this);
         if (this.playerController && this._dangerClampRadius) {
           this.playerController.clampRadius = this._dangerClampRadius;
@@ -424,6 +431,16 @@ class GrudgeArena {
       this.renderer.setSize(w, h);
       this.postFX?.setSize(w, h);
     });
+  }
+
+  _setupSoftLockInput() {
+    if (this._softLockMove) return;
+    this._softLockMove = (e) => setRawMouse(e.clientX, e.clientY);
+    window.addEventListener("mousemove", this._softLockMove, { passive: true });
+    const rect = this.renderer?.domElement?.getBoundingClientRect?.();
+    if (rect) {
+      setRawMouse(rect.left + rect.width * 0.5, rect.top + rect.height * 0.5);
+    }
   }
 
   _setupScene() {
@@ -1886,6 +1903,11 @@ class GrudgeArena {
       window.removeEventListener("keydown", this._invKeyHandler);
       this._invKeyHandler = null;
       this._invHotkeysBound = false;
+    }
+
+    if (this._softLockMove) {
+      window.removeEventListener("mousemove", this._softLockMove);
+      this._softLockMove = null;
     }
 
     // Dispose subsystems

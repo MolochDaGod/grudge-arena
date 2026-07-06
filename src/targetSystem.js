@@ -11,6 +11,7 @@
  */
 
 import * as THREE from 'three';
+import { syncTargetLockFromTargeting, clearTabTarget } from './engine/SoftLockSystem.js';
 
 const RING_SEGMENTS = 48;
 const RING_INNER = 0.6;
@@ -105,10 +106,12 @@ export class TargetSystem {
     unit.mesh.add(this._ring);
 
     this._updateTargetFrame(unit);
+    syncTargetLockFromTargeting(this);
   }
 
   deselect() {
     this._removeRing();
+    clearTabTarget();
     this.currentTarget = null;
     this._enemyIndex = -1;
     this._allyIndex = -1;
