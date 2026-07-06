@@ -29,18 +29,45 @@ function mulberry32(seed) {
   };
 }
 
+function fixMaterialMaps(mat) {
+  if (!mat) return mat;
+  const next = mat.clone();
+  if (mat.map) {
+    next.map = mat.map;
+    next.map.colorSpace = THREE.SRGBColorSpace;
+    next.map.needsUpdate = true;
+  }
+  next.color.set(0xffffff);
+  next.side = THREE.DoubleSide;
+  next.needsUpdate = true;
+  return next;
+}
+
 function enhanceMesh(obj) {
   obj.traverse((child) => {
     if (!child.isMesh) return;
     child.castShadow = true;
     child.receiveShadow = true;
-    const mats = Array.isArray(child.material) ? child.material : [child.material];
-    for (const mat of mats) {
-      if (!mat) continue;
-      if (mat.map) mat.map.colorSpace = THREE.SRGBColorSpace;
-      mat.side = THREE.DoubleSide;
+    if (Array.isArray(child.material)) {
+      child.material = child.material.map(fixMaterialMaps);
+    } else if (child.material) {
+      child.material = fixMaterialMaps(child.material);
     }
   });
+}
+
+/** Deep clone that keeps embedded GLB texture references on unique materials. */
+function cloneForestInstance(template) {
+  const inst = template.clone(true);
+  inst.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    if (Array.isArray(child.material)) {
+      child.material = child.material.map((m) => fixMaterialMaps(m));
+    } else {
+      child.material = fixMaterialMaps(child.material);
+    }
+  });
+  return inst;
 }
 
 function normalizeTemplate(group, targetHeight = 3.5) {
@@ -107,7 +134,7 @@ export async function scatterForestPack(root) {
       if (y < spec.minY || islandEdgeFactor(x, z) > 0.62) continue;
       if (!isClearOfHub(x, z)) continue;
 
-      const inst = template.clone(true);
+      const inst = cloneForestInstance(template);
       const scale = spec.minScale + rand() * (spec.maxScale - spec.minScale);
       inst.scale.multiplyScalar(scale / (spec.template.startsWith("tree") ? 3.6 : 1));
       inst.position.set(x, y, z);

@@ -43,6 +43,19 @@ export async function loadTerrainPBR(basePath, prefix, opts = {}) {
 }
 
 export function makeTerrainMaterial(maps, overrides = {}) {
+  const useVertexColors = !!overrides.vertexColors;
+  if (!useVertexColors) {
+    return new THREE.MeshStandardMaterial({
+      map: maps.map,
+      normalMap: maps.normalMap,
+      roughnessMap: maps.roughnessMap,
+      aoMap: maps.aoMap ?? null,
+      roughness: 1,
+      metalness: 0,
+      ...overrides,
+    });
+  }
+
   return new THREE.MeshStandardMaterial({
     map: maps.map,
     normalMap: maps.normalMap,
@@ -50,6 +63,7 @@ export function makeTerrainMaterial(maps, overrides = {}) {
     aoMap: maps.aoMap ?? null,
     roughness: 1,
     metalness: 0,
+    vertexColors: true,
     ...overrides,
   });
 }

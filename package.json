@@ -17,7 +17,8 @@
     "smoke:arena": "node scripts/smoke-arena.mjs",
     "smoke:anim-test": "node scripts/smoke-anim-test.mjs",
     "smoke:anim-test:all": "node scripts/smoke-anim-test-all-races.mjs",
-    "smoke": "node scripts/smoke-arena.mjs && node scripts/smoke-anim-test.mjs"
+    "smoke": "node scripts/smoke-arena.mjs && node scripts/smoke-anim-test.mjs",
+    "convert:island-village": "node scripts/convert-island-village.mjs"
   },
   "devDependencies": {
     "fbx2gltf": "^0.9.7-p1",
