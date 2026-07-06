@@ -79,6 +79,8 @@ import { CombatPostFX } from './src/engine/CombatPostFX.js';
 import { installDangerRoomLighting } from './src/engine/DangerRoomLighting.js';
 import { GroundSampler } from './src/engine/GroundSampler.js';
 import { syncAbilityBarFlash, setDangerWeaponLabel } from './src/dangerRoom/dangerRoomHud.js';
+import { getAnimOverdrive } from './src/dangerRoom/dangerRoomStore.js';
+import { isCombatSandboxMode } from './src/combatSandbox.js';
 
 const VALID_RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
 const VALID_CLASSES = ["warrior", "mage", "ranger", "worge"];
@@ -152,6 +154,8 @@ class GrudgeArena {
     this._bowDrawTimer = 0;
     this._sabreSlashIndex = 0;
     this._casting = false;
+    this._activeSkillLabel = null;
+    this._reloading = false;
     this._playSFX = null;
     this._weaponSfx = null;
 
@@ -161,7 +165,7 @@ class GrudgeArena {
     this._terrainMeshes = [];     // ground meshes registered for indicator terrain snap
 
     /** Danger Room training mode (from dangerroom.puter.site controller outline). */
-    this.dangerMode = config.mode === 'danger';
+    this.dangerMode = config.mode === 'danger' || isCombatSandboxMode();
     this._dangerEnv = null;
     this._dangerUnsub = null;
     this._dangerClampRadius = ARENA_CLAMP_RADIUS;
@@ -1292,7 +1296,11 @@ class GrudgeArena {
 
     const weaponType = this._getWeaponTypeKey();
     const feel = getWeaponFeel(weaponType);
-    const animSpeed = (feel.skillAnimSpeed ?? 1.0) * timing.haste;
+    const animSpeed = (feel.skillAnimSpeed ?? 1.0) * timing.haste * getAnimOverdrive();
+    this._activeSkillLabel = ability.name;
+    this.gameTimers.add(Math.max(0.4, (ability.cooldown || 1) * 0.35), () => {
+      if (this._activeSkillLabel === ability.name) this._activeSkillLabel = null;
+    });
     const ctrl = this.playerUnit.controller;
 
     flashAbilityUsed(key);
@@ -1672,7 +1680,7 @@ class GrudgeArena {
     const weaponType = this._getWeaponTypeKey();
     const feel = getWeaponFeel(weaponType);
     const timing = this._getCombatTiming();
-    const animSpeed = (feel.attackAnimSpeed ?? 1.2) * timing.haste;
+    const animSpeed = (feel.attackAnimSpeed ?? 1.2) * timing.haste * getAnimOverdrive();
     const profile = this.playerEntity?.getComponent("BuildProfile");
     const dmgMult = profile?.damageMult ?? 1;
 

@@ -10,6 +10,7 @@ import {
 } from './engine/DirLocoBlend.js';
 import { classifyDir, gaitTargetWhileAiming } from './engine/tpsMath.js';
 import { resolveBakedLocoClipKey } from './bakedAnimLoader.js';
+import { getAnimOverdrive } from './dangerRoom/dangerRoomStore.js';
 
 const LOCO_STATES = new Set(['idle', 'walk', 'run', 'sprint', 'running', 'walking']);
 
@@ -115,15 +116,22 @@ export class BakedAnimationController {
     );
     this._locoBlend.setGaitTarget(gait);
     this._locoBlend.setAiming(aiming);
+    const od = getAnimOverdrive();
     if (moving) {
       const s = Math.min(1, Math.max(0, speed01));
       this._locoBlend.setBandTimeScales({
-        walk: 0.72 + s * 0.45,
-        run: 0.88 + s * 0.42,
-        sprint: 1.05 + s * 0.2,
+        idle: od,
+        walk: (0.72 + s * 0.45) * od,
+        run: (0.88 + s * 0.42) * od,
+        sprint: (1.05 + s * 0.2) * od,
       });
     } else {
-      this._locoBlend.setBandTimeScales({ idle: 1, walk: 1, run: 1, sprint: 1 });
+      this._locoBlend.setBandTimeScales({
+        idle: od,
+        walk: od,
+        run: od,
+        sprint: od,
+      });
     }
   }
 
@@ -159,7 +167,7 @@ export class BakedAnimationController {
 
     const shotOpts = {
       fade,
-      timeScale: opts.speed ?? 1,
+      timeScale: (opts.speed ?? 1) * getAnimOverdrive(),
       onEnd: () => {
         if (this._onFinish) this._onFinish();
       },

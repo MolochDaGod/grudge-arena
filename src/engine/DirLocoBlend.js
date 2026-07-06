@@ -67,7 +67,7 @@ export class DirLocoBlend {
     for (const { band } of BANDS) {
       const ts = scales[band];
       if (typeof ts !== "number" || !Number.isFinite(ts)) continue;
-      this.bandTimeScale[band] = Math.min(1.6, Math.max(0.55, ts));
+      this.bandTimeScale[band] = Math.min(3.2, Math.max(0.55, ts));
       const action = this.bandActions[band];
       if (action) action.timeScale = this.bandTimeScale[band];
     }

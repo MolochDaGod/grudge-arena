@@ -1312,6 +1312,46 @@ body.danger-room-active canvas {
   cursor: none;
 }
 
+/* Combat sandbox — full danger-room HUD + main panels + ability bar */
+body.combat-sandbox-active #gameUI.combat-sandbox-hud {
+  display: block !important;
+  pointer-events: none;
+}
+
+body.combat-sandbox-active #gameUI.combat-sandbox-hud .hud-bars,
+body.combat-sandbox-active #gameUI.combat-sandbox-hud #abilityBar,
+body.combat-sandbox-active #gameUI.combat-sandbox-hud .panel-toggles,
+body.combat-sandbox-active #gameUI.combat-sandbox-hud .float-panel,
+body.combat-sandbox-active #gameUI.combat-sandbox-hud .fkey-hints {
+  pointer-events: auto;
+}
+
+body.combat-sandbox-active .dr-mm-panel {
+  bottom: 168px;
+}
+
+body.combat-sandbox-active .dr-controls-hint {
+  bottom: 88px;
+  left: auto;
+  right: 16px;
+  text-align: right;
+}
+
+body.combat-sandbox-active #abilityBar {
+  bottom: 20px;
+  z-index: 52;
+}
+
+body.combat-sandbox-active .hud-bars {
+  bottom: 92px;
+  z-index: 51;
+}
+
+body.combat-sandbox-active .panel-toggles {
+  top: 52px;
+  z-index: 54;
+}
+
 .dr-hud-root {
   --dr-accent: #6fe0ff;
   --dr-panel: rgba(6, 14, 28, 0.82);

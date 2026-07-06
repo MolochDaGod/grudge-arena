@@ -4,6 +4,7 @@
  */
 
 import { ROUTES, navigate, parseRoute } from "./arenaRouter.js";
+import { isCombatSandboxMode, COMBAT_SANDBOX_PRESET } from "./combatSandbox.js";
 
 const PENDING_ROUTE_KEY = "grudge_pending_route";
 
@@ -83,10 +84,16 @@ export async function exitToDressingRoom() {
   navigate(ROUTES.DRESSING_ROOM, { replace: true });
 }
 
-async function applyDangerPresetFromUrl() {
+async function applyDangerPresetFromUrl(route) {
+  const { setRoomPreset, setAnimOverdrive, setCombatSandboxUi } = await import("./dangerRoom/dangerRoomStore.js");
+  if (route?.combatSandbox || isCombatSandboxMode()) {
+    setCombatSandboxUi(true);
+    setRoomPreset(COMBAT_SANDBOX_PRESET);
+    setAnimOverdrive(2);
+    return;
+  }
   const preset = new URLSearchParams(location.search).get("preset");
   if (!preset) return;
-  const { setRoomPreset } = await import("./dangerRoom/dangerRoomStore.js");
   setRoomPreset(preset);
 }
 
@@ -118,7 +125,8 @@ export async function handleRoute(route) {
   const activeMode = window.__grudgeArena?.dangerMode ? "danger" : "arena";
   if (window.__grudgeArena && route.gameMode === activeMode) return;
 
-  if (!host?.isAuthed?.()) {
+  const sandbox = route.combatSandbox || isCombatSandboxMode();
+  if (!host?.isAuthed?.() && !sandbox) {
     if (route.autoStart && route.gameMode) {
       stashPendingRoute(route.path);
     }
@@ -147,7 +155,7 @@ export async function handleRoute(route) {
   }
 
   if (route.gameMode === "danger") {
-    await applyDangerPresetFromUrl();
+    await applyDangerPresetFromUrl(route);
   }
 
   await stopActiveGame();

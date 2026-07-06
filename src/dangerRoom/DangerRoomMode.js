@@ -10,6 +10,7 @@ import {
   getDangerRoomState,
   subscribeDangerRoom,
   setDangerMode,
+  isCombatSandboxUi,
 } from "./dangerRoomStore.js";
 import {
   mountDangerRoomHud,
@@ -31,7 +32,7 @@ import {
   setupWeaponRadialInput,
   teardownWeaponRadialInput,
 } from "./weaponRadial.js";
-import { updateShooter, resetShooterAmmo } from "./ShooterSystem.js";
+import { updateShooter, resetShooterAmmo, isReloading } from "./ShooterSystem.js";
 import { setD1Weapon } from "../d1LoadoutStore.js";
 import { getD1LoadoutState, getD1LoadoutForRace } from "../d1LoadoutStore.js";
 import { getWeaponFeel, resolveMotionLabel } from "../engine/WeaponFeel.js";
@@ -90,6 +91,9 @@ export function getDangerSpawnFacing(teamId) {
  */
 export function bootstrapDangerRoom(arena) {
   setDangerMode(true);
+  if (isCombatSandboxUi()) {
+    document.body.classList.add("combat-sandbox-active");
+  }
   if (arena._skybox) {
     arena.scene.remove(arena._skybox);
     arena._skybox.geometry?.dispose?.();
@@ -172,6 +176,7 @@ export function teardownDangerRoom(arena) {
   arena._dangerUnsub?.();
   arena._dangerUnsub = null;
   setDangerMode(false);
+  document.body.classList.remove("combat-sandbox-active");
 }
 
 /** Live D1 mesh tweak without full reload (armor / weapon variant only). */
@@ -232,8 +237,14 @@ export function tickDangerRoomHud(arena, delta = 0.016) {
     : "greatsword";
   const feel = getWeaponFeel(weaponType);
   const weapon = arena.getCurrentWeapon?.();
+  const lockWeapon = arena._getWeaponTypeKey?.() ?? weaponType;
+  const aiming = !!(arena._autoAttackOn || ctrl.holdKey?._RMB);
 
+  arena._reloading = isReloading(lockWeapon);
   const motion = resolveMotionLabel(feel, {
+    skillName: arena._activeSkillLabel,
+    reloading: arena._reloading,
+    aiming: aiming && weapon?.range > 5,
     casting: arena._casting,
     dashing: stateStr.includes("dash"),
     blocking: stateStr.includes("block"),
@@ -255,8 +266,6 @@ export function tickDangerRoomHud(arena, delta = 0.016) {
   }
 
   const canvas = arena.renderer?.domElement;
-  const lockWeapon = arena._getWeaponTypeKey?.() ?? weaponType;
-  const aiming = !!(arena._autoAttackOn || ctrl.holdKey?._RMB);
 
   if (canvas) {
     const rect = canvas.getBoundingClientRect();
@@ -265,12 +274,13 @@ export function tickDangerRoomHud(arena, delta = 0.016) {
     applyCameraAssist(arena, delta, lockWeapon, aiming);
   }
 
+  const crosshairBase = getDangerRoomState().crosshairBase ?? 10;
   updateDangerHud({
     motion,
     weapon: weapon ? `${weapon.name} · ${feel.title}` : feel.title,
     accent: feel.accent,
     combo: getComboStage(),
-    spread: getCrosshairSpread(),
+    spread: crosshairBase + getCrosshairSpread(),
     hitMarker: getHitMarkerId(),
     rangeState,
     softLock: getSoftLockHudState(),

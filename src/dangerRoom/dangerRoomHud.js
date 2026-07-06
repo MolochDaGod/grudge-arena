@@ -6,6 +6,7 @@ import {
   getDangerRoomState,
   subscribeDangerRoom,
   cycleRoomPreset,
+  isCombatSandboxUi,
 } from "./dangerRoomStore.js";
 import { ROOM_PRESETS } from "./roomPresets.js";
 import {
@@ -22,8 +23,12 @@ let unsub = null;
 let lastPresetId = null;
 
 function buildShell(presetName) {
+  const sandbox = isCombatSandboxUi();
+  const badge = sandbox
+    ? `⚔ Combat Sandbox · ${presetName}`
+    : `⚡ Danger Room · ${presetName}`;
   return `
-    <div class="dr-mode-badge">⚡ Danger Room · ${presetName}</div>
+    <div class="dr-mode-badge">${badge}</div>
     <div class="dr-aim-layer" aria-hidden="true">
       <div class="dr-softlock-zone" id="dr-softlock-zone" hidden></div>
       <div class="dr-target-pip" id="dr-target-pip" hidden></div>
@@ -51,7 +56,7 @@ function buildShell(presetName) {
       <div><kbd>G</kbd> Gear · <kbd>M</kbd> Menu · <kbd>Hold F</kbd> Weapons · <kbd>Tab</kbd> Target</div>
       <div><kbd>[</kbd><kbd>]</kbd> Room preset · <kbd>R</kbd> Reload (bow/rifle)</div>
     </div>
-    <button type="button" class="dr-exit-btn" id="dr-exit-btn">Exit Danger Room</button>
+    <button type="button" class="dr-exit-btn" id="dr-exit-btn" ${sandbox ? "hidden" : ""}>Exit Danger Room</button>
   `;
 }
 
@@ -70,18 +75,33 @@ export function mountDangerRoomHud() {
   if (mounted) return;
   mounted = true;
 
+  const sandbox = isCombatSandboxUi();
   document.body.classList.add("danger-room-active");
+  if (sandbox) document.body.classList.add("combat-sandbox-active");
   const gameUI = document.getElementById("gameUI");
-  if (gameUI) gameUI.classList.add("danger-room-hud");
+  if (gameUI) {
+    gameUI.classList.add("danger-room-hud");
+    if (sandbox) gameUI.classList.add("combat-sandbox-hud");
+  }
 
-  for (const id of ["match-timer", "team-a-frames", "team-b-frames", "countdown-overlay"]) {
+  const hideInDanger = ["match-timer", "team-a-frames", "team-b-frames", "countdown-overlay"];
+  if (!sandbox) hideInDanger.push("hud-weapons");
+  for (const id of hideInDanger) {
     const el = document.getElementById(id);
     if (el) el.style.display = "none";
   }
   const targetFrame = document.getElementById("target-frame");
   if (targetFrame) targetFrame.classList.add("dr-target-frame");
   const hints = document.querySelector(".fkey-hints");
-  if (hints) hints.style.display = "none";
+  if (hints) hints.style.display = sandbox ? "flex" : "none";
+  if (sandbox) {
+    const bars = document.querySelector(".hud-bars");
+    const toggles = document.querySelector(".panel-toggles");
+    const bar = document.getElementById("abilityBar");
+    if (bars) bars.style.display = "flex";
+    if (toggles) toggles.style.display = "flex";
+    if (bar) bar.style.display = "flex";
+  }
 
   rootEl = document.createElement("div");
   rootEl.id = "danger-room-hud";
@@ -108,8 +128,9 @@ export function unmountDangerRoomHud() {
   rootEl?.remove();
   rootEl = null;
   lastPresetId = null;
-  document.body.classList.remove("danger-room-active");
-  document.getElementById("gameUI")?.classList.remove("danger-room-hud");
+  document.body.classList.remove("danger-room-active", "combat-sandbox-active");
+  const gameUI = document.getElementById("gameUI");
+  gameUI?.classList.remove("danger-room-hud", "combat-sandbox-hud");
 }
 
 function onPresetKey(e) {

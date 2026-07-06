@@ -8,6 +8,9 @@ import {
   setRoomPreset,
   setMusicEnabled,
   setMusicVolume,
+  setAnimOverdrive,
+  setAdsShoulder,
+  setCrosshairBase,
 } from "./dangerRoomStore.js";
 import { ROOM_PRESET_LIST } from "./roomPresets.js";
 import { ARENA_WEAPONS } from "../d1LoadoutStore.js";
@@ -59,6 +62,18 @@ function render() {
   rootEl.querySelectorAll("[data-weapon-pick]").forEach((btn) => {
     btn.addEventListener("click", () => onWeaponPick?.(btn.dataset.weaponPick));
   });
+  rootEl.querySelector("#dr-anim-overdrive")?.addEventListener("input", (e) => {
+    const mult = Number(e.target.value) / 100;
+    setAnimOverdrive(mult);
+    const val = rootEl.querySelector("#dr-anim-overdrive-val");
+    if (val) val.textContent = `${mult.toFixed(1)}×`;
+  });
+  rootEl.querySelector("#dr-ads-shoulder")?.addEventListener("input", (e) => {
+    setAdsShoulder(Number(e.target.value) / 100);
+  });
+  rootEl.querySelector("#dr-cross-spread")?.addEventListener("input", (e) => {
+    setCrosshairBase(Number(e.target.value));
+  });
 }
 
 function dangerPanel(st) {
@@ -80,6 +95,7 @@ function dangerPanel(st) {
 function tunePanel(st) {
   return `
     <p class="dr-dock-blurb">Camera + feel tuning (persisted locally).</p>
+    <label class="dr-dock-row">Anim overdrive <input type="range" id="dr-anim-overdrive" min="50" max="300" value="${Math.round((st.animOverdrive ?? 1) * 100)}"/> <span id="dr-anim-overdrive-val">${(st.animOverdrive ?? 1).toFixed(1)}×</span></label>
     <label class="dr-dock-row">ADS shoulder <input type="range" id="dr-ads-shoulder" min="0" max="200" value="${Math.round((st.adsShoulder ?? 0.8) * 100)}"/></label>
     <label class="dr-dock-row">Crosshair spread <input type="range" id="dr-cross-spread" min="4" max="24" value="${st.crosshairBase ?? 10}"/></label>
     <p class="dr-dock-hint">Hold <kbd>F</kbd> for weapon radial · <kbd>G</kbd> for D1 gear</p>

@@ -1,6 +1,11 @@
 /** Danger Room mode state — persisted preset + mode flag. */
 
 import { DEFAULT_PRESET_ID, ROOM_PRESETS } from "./roomPresets.js";
+import {
+  isCombatSandboxMode,
+  COMBAT_SANDBOX_ANIM_OVERDRIVE,
+  COMBAT_SANDBOX_PRESET,
+} from "../combatSandbox.js";
 
 const STORAGE_KEY = "grudge_arena_danger_room_v1";
 
@@ -15,7 +20,14 @@ function load() {
     musicVolume: 0.65,
     adsShoulder: 0.8,
     crosshairBase: 10,
+    animOverdrive: 1,
+    combatSandbox: false,
   };
+  if (isCombatSandboxMode()) {
+    base.presetId = COMBAT_SANDBOX_PRESET;
+    base.animOverdrive = COMBAT_SANDBOX_ANIM_OVERDRIVE;
+    base.combatSandbox = true;
+  }
   if (typeof localStorage === "undefined") return { ...base };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -28,6 +40,8 @@ function load() {
       musicVolume: typeof saved.musicVolume === "number" ? saved.musicVolume : 0.65,
       adsShoulder: typeof saved.adsShoulder === "number" ? saved.adsShoulder : 0.8,
       crosshairBase: typeof saved.crosshairBase === "number" ? saved.crosshairBase : 10,
+      animOverdrive: typeof saved.animOverdrive === "number" ? saved.animOverdrive : 1,
+      combatSandbox: !!saved.combatSandbox,
     };
   } catch {
     return { ...base };
@@ -87,4 +101,34 @@ export function setMusicEnabled(on) {
 export function setMusicVolume(v) {
   state = { ...state, musicVolume: Math.max(0, Math.min(1, v)) };
   emit();
+}
+
+/** Playback speed multiplier for locomotion + combat anims (combat sandbox = 2×). */
+export function getAnimOverdrive() {
+  const v = state.animOverdrive;
+  return typeof v === "number" && v > 0 ? v : 1;
+}
+
+export function setAnimOverdrive(mult) {
+  state = { ...state, animOverdrive: Math.max(0.5, Math.min(3, mult)) };
+  emit();
+}
+
+export function setAdsShoulder(v) {
+  state = { ...state, adsShoulder: Math.max(0, Math.min(2, v)) };
+  emit();
+}
+
+export function setCrosshairBase(v) {
+  state = { ...state, crosshairBase: Math.max(4, Math.min(24, Math.round(v))) };
+  emit();
+}
+
+export function setCombatSandboxUi(on) {
+  state = { ...state, combatSandbox: !!on };
+  emit();
+}
+
+export function isCombatSandboxUi() {
+  return !!state.combatSandbox || isCombatSandboxMode();
 }

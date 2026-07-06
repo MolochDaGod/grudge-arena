@@ -25,6 +25,14 @@ describe("arenaRouter", () => {
     expect(r.redirect).toBe(ROUTES.DANGER_ROOM);
   });
 
+  it("maps combat sandbox route", () => {
+    const r = parseRoute("/combat-sandbox");
+    expect(r.id).toBe("combat-sandbox");
+    expect(r.gameMode).toBe("danger");
+    expect(r.autoStart).toBe(true);
+    expect(r.combatSandbox).toBe(true);
+  });
+
   it("aliases lobby and training", () => {
     expect(parseRoute("/lobby").id).toBe("dressing-room");
     expect(parseRoute("/training").gameMode).toBe("danger");

@@ -151,6 +151,9 @@ export function skillSfxIndex(slotKey) {
 /** Motion label for HUD (danger room MM panel + arena). */
 export function resolveMotionLabel(feel, ctx) {
   if (!feel) return "IDLE";
+  if (ctx.skillName) return String(ctx.skillName).toUpperCase().slice(0, 18);
+  if (ctx.reloading) return "RELOAD";
+  if (ctx.aiming && !ctx.moving) return feel.motion.attack === "DRAW" ? "ADS" : "AIM";
   if (ctx.casting) return feel.motion.skill;
   if (ctx.dashing) return "ROLL";
   if (ctx.blocking) return "BLOCK";

@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Grudge Arena — PvP Combat</title>
   <meta name="description" content="Grudge Arena — 3D PvP combat arena with 6 playable races, 5 weapon classes, and real-time multiplayer. Built on Grudge Studio.">
+  <script>
+    if (/island-crusade-combat-sandbox/i.test(location.hostname)) {
+      document.title = 'Grudge Warlords: Combat Sandbox';
+      const desc = document.querySelector('meta[name="description"]');
+      if (desc) desc.content = 'Island Crusade combat sandbox — TPS movement, weapon skills, full HUD and panels.';
+    }
+  </script>
   <meta name="theme-color" content="#07070f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -317,6 +324,9 @@
 <script type="module">
   import { bootRouter, navigate, resolveInitialRoute, ROUTES, parseRoute } from './src/arenaRouter.js';
   import { registerGameFlowHost, handleRoute, exitToDressingRoom, resumePendingRoute } from './src/gameFlow.js';
+  import { isCombatSandboxMode } from './src/combatSandbox.js';
+
+  const COMBAT_SANDBOX_HOST = isCombatSandboxMode();
 
   // ── Grudge Auth ───────────────────────────────────────────────
   // Auth contract: Puter SDK for identity, Phantom for wallet, Guest fallback
@@ -1251,7 +1261,21 @@
       }
     } catch { /* Puter SDK not ready or not signed in */ }
 
-    // Case 5: No session — show auth gate
+    // Case 5: Combat sandbox — auto guest, skip auth gate
+    if (COMBAT_SANDBOX_HOST) {
+      const deviceId = getDeviceId();
+      const guestUser = {
+        username: 'Guest',
+        displayName: 'Guest',
+        isGuest: true,
+        deviceId,
+      };
+      storeAuth(null, guestUser);
+      await showLoggedIn(guestUser);
+      return;
+    }
+
+    // Case 6: No session — show auth gate
     showLoggedOut();
     resolveInitialRoute();
   })();
