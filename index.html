@@ -36,7 +36,7 @@
   <div class="lobby-brand">
     <div class="lobby-logo"><img src="/grudge-logo.png" alt="Grudge"></div>
     <div class="lobby-title">GRUDGE ARENA</div>
-    <div class="lobby-sub">3D PvP Combat · 6 Races · 5 Weapon Classes</div>
+    <div class="lobby-sub">Dressing Room · 6 Races · 5 Weapon Classes</div>
   </div>
 
   <div class="lobby-card">
@@ -72,7 +72,7 @@
         </div>
       </div>
 
-      <div class="race-title">Create Arena Champion</div>
+      <div class="race-title">Dressing Room — Create Arena Champion</div>
       <div class="selection-spotlight" id="selection-spotlight">
         <div class="spotlight-icon" id="spotlight-icon">🛡️</div>
         <div class="spotlight-copy">
@@ -190,6 +190,12 @@
       <button class="queue-btn danger-room-btn" id="danger-room-btn" onclick="enterDangerRoom()">⚡ Danger Room Training</button>
       <button class="queue-btn" onclick="joinQueue()">🔍 Find PvP Match</button>
       <div class="builder-readiness" id="builder-readiness">Allocate all 160 points to unlock Enter Arena.</div>
+      <nav class="room-slugs" aria-label="Arena rooms">
+        <a class="room-slug room-slug--active" href="/dressing-room">/dressing-room</a>
+        <a class="room-slug" href="/arena">/arena</a>
+        <a class="room-slug" href="/danger-room">/danger-room</a>
+        <a class="room-slug" href="/queue">/queue</a>
+      </nav>
       <a class="back-link" href="https://grudge-studio.com">← Back to The Engine</a>
     </div>
   </div>
@@ -309,6 +315,9 @@
 </div>
 
 <script type="module">
+  import { bootRouter, navigate, resolveInitialRoute, ROUTES } from './src/arenaRouter.js';
+  import { registerGameFlowHost, handleRoute, exitToDressingRoom } from './src/gameFlow.js';
+
   // ── Grudge Auth ───────────────────────────────────────────────
   // Auth contract: Puter SDK for identity, Phantom for wallet, Guest fallback
   // Token key: grudge_auth_token (shared across all Grudge apps for SSO)
@@ -1178,7 +1187,7 @@
       } else {
         storeAuth(incomingToken, { grudgeId: incomingGrudgeId || '', username: incomingUsername || 'Warlord' });
       }
-      history.replaceState({}, '', location.pathname);
+      history.replaceState({}, '', ROUTES.DRESSING_ROOM);
       showLoggedIn(getUser() || { username: incomingUsername || 'Warlord', grudgeId: incomingGrudgeId || '' });
       return;
     }
@@ -1232,10 +1241,7 @@
 
   // ── Animation Test launcher ──────────────────────────
   window.launchAnimTest = function () {
-    const race = (typeof selectedRace === 'string' && selectedRace) ? selectedRace : 'human';
-    const weapon = (typeof selectedWeapon === 'string' && selectedWeapon) ? selectedWeapon : '';
-    const url = '/anim-test.html?race=' + encodeURIComponent(race) + (weapon ? '&weapon=' + encodeURIComponent(weapon) : '');
-    window.open(url, '_blank', 'noopener');
+    navigate(ROUTES.ANIM_TEST);
   };
 
   // ── Race Selection ───────────────────────────────────
@@ -1278,57 +1284,44 @@
   // ── Danger Room (solo training — dangerroom.puter.site controller outline) ──
   window.enterDangerRoom = function () {
     sanitizeSelectionState();
-    const build = normalizeBuildConfig(getCurrentBuildConfig());
-    selectedRace = build.race;
-    selectedClass = build.classId;
-    selectedWeapon = build.weapon;
-    attributePoints = { ...build.attributes };
-
+    syncBuilderFromState();
     if (getPointsSpent() !== ATTRIBUTE_TOTAL) {
       setAuthStatus(`Spend all ${ATTRIBUTE_TOTAL} points before entering Danger Room`);
       return;
     }
     saveBuildToStorage();
-    document.getElementById('lobby-overlay').classList.add('hidden');
-    document.getElementById('loading-overlay').classList.add('active');
-    loadArenaGame(build.race, null, build, 'danger');
+    navigate(ROUTES.DANGER_ROOM);
   };
 
   // ── Enter Arena ──────────────────────────────
   window.enterArena = function () {
     sanitizeSelectionState();
-    const build = normalizeBuildConfig(getCurrentBuildConfig());
-    selectedRace = build.race;
-    selectedClass = build.classId;
-    selectedWeapon = build.weapon;
-    attributePoints = { ...build.attributes };
-
+    syncBuilderFromState();
     if (getPointsSpent() !== ATTRIBUTE_TOTAL) {
       setAuthStatus(`Spend all ${ATTRIBUTE_TOTAL} points before entering arena`);
       return;
     }
     saveBuildToStorage();
-    document.getElementById('lobby-overlay').classList.add('hidden');
-    document.getElementById('loading-overlay').classList.add('active');
-    loadArenaGame(build.race, null, build, 'arena');
+    navigate(ROUTES.ARENA);
   };
 
   // ── PvP Queue ────────────────────────────────────────
-  window.joinQueue = async function () {
+  window.joinQueue = function () {
     sanitizeSelectionState();
-    const build = normalizeBuildConfig(getCurrentBuildConfig());
-    selectedRace = build.race;
-    selectedClass = build.classId;
-    selectedWeapon = build.weapon;
-    attributePoints = { ...build.attributes };
-
+    syncBuilderFromState();
     if (getPointsSpent() !== ATTRIBUTE_TOTAL) {
       setAuthStatus(`Spend all ${ATTRIBUTE_TOTAL} points before queueing`);
       return;
     }
+    saveBuildToStorage();
+    navigate(ROUTES.QUEUE, { replace: true });
+  };
+
+  async function runQueueMatchmaking() {
     const token = getToken();
     if (!token && !grudgeUser) return;
-    const btn = document.querySelector('.queue-btn');
+    const build = normalizeBuildConfig(getCurrentBuildConfig());
+    const btn = document.querySelector('.queue-btn:not(.danger-room-btn)');
     btn.textContent = '🔍 Searching for opponent...';
     btn.disabled = true;
 
@@ -1345,8 +1338,9 @@
         console.log('[arena] Match found!', data);
         btn.textContent = '⚔ MATCH FOUND!';
         setTimeout(() => {
-          document.getElementById('lobby-overlay').classList.add('hidden');
-          document.getElementById('game-root').classList.add('active');
+          history.replaceState({ route: 'arena' }, '', ROUTES.ARENA);
+          document.getElementById('lobby-overlay')?.classList.add('hidden');
+          document.getElementById('loading-overlay')?.classList.add('active');
           loadArenaGame(build.race, data, build, 'arena');
         }, 1500);
       });
@@ -1416,18 +1410,48 @@
         document.getElementById('loading-overlay').classList.remove('active');
       }, 300);
 
+      window.__grudgeArena = arena;
       console.log('[arena] Game loaded —', raceName);
     } catch (err) {
       console.error('[arena] Failed to load game engine:', err);
       setLoadingProgress(100, 'Loading failed — ' + (err.message || 'unknown error'));
       setTimeout(() => {
-        document.getElementById('loading-overlay').classList.remove('active');
-        document.getElementById('lobby-overlay').classList.remove('hidden');
+        navigate(ROUTES.DRESSING_ROOM, { replace: true });
       }, 3000);
     }
   }
 
+  function syncBuilderFromState() {
+    const build = normalizeBuildConfig(getCurrentBuildConfig());
+    selectedRace = build.race;
+    selectedClass = build.classId;
+    selectedWeapon = build.weapon;
+    attributePoints = { ...build.attributes };
+  }
+
+  function isUserAuthed() {
+    return document.getElementById('race-select')?.classList.contains('show') ?? false;
+  }
+
+  registerGameFlowHost({
+    isAuthed: isUserAuthed,
+    isBuildReady: () => getPointsSpent() === ATTRIBUTE_TOTAL,
+    setAuthStatus,
+    getBuildConfig: () => normalizeBuildConfig(getCurrentBuildConfig()),
+    loadArenaGame,
+    joinQueue: runQueueMatchmaking,
+    openAnimTest(race, weapon) {
+      const url = '/anim-test.html?race=' + encodeURIComponent(race || 'human') +
+        (weapon ? '&weapon=' + encodeURIComponent(weapon) : '');
+      window.open(url, '_blank', 'noopener');
+    },
+  });
+
+  bootRouter(handleRoute);
+  window.exitToDressingRoom = exitToDressingRoom;
+
   setupCharacterBuilder();
+  resolveInitialRoute();
 </script>
 </body>
 </html>

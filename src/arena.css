@@ -1237,6 +1237,35 @@ body { background: var(--void); color: var(--text); font-family: var(--font-ui);
   background: rgba(79, 195, 255, 0.2) !important;
 }
 
+.room-slugs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 12px 0 4px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+}
+
+.room-slug {
+  color: rgba(174, 224, 255, 0.45);
+  text-decoration: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+.room-slug:hover {
+  color: var(--dr-accent, #6fe0ff);
+  border-color: rgba(79, 195, 255, 0.25);
+}
+
+.room-slug--active {
+  color: var(--dr-accent, #6fe0ff);
+  border-color: rgba(79, 195, 255, 0.35);
+  background: rgba(79, 195, 255, 0.08);
+}
+
 body.danger-room-active,
 body.danger-room-active canvas {
   cursor: none;

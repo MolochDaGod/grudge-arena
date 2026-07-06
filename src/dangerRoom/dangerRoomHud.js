@@ -59,7 +59,7 @@ function ensureShell(presetName) {
   lastPresetId = presetId;
   rootEl.innerHTML = buildShell(presetName);
   rootEl.querySelector("#dr-exit-btn")?.addEventListener("click", () => {
-    window.location.reload();
+    window.exitToDressingRoom?.();
   });
 }
 
