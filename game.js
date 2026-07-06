@@ -584,7 +584,7 @@ class GrudgeArena {
     // If hero asset loading fails (e.g. 404 in production), fall through to the
     // generic race model instead of letting the whole team load reject.
     let unitResult;
-    if (comp.heroId) {
+    if (comp.heroId && !this.dangerMode) {
       const hero = getHero(comp.heroId);
       if (hero) {
         try {
@@ -604,13 +604,28 @@ class GrudgeArena {
       }
     }
     if (!unitResult) {
-      unitResult = await modelMod.createAnimatedUnit(
+      const raceId =
         comp.race ||
-          (comp.heroId ? getHero(comp.heroId)?.race : null) ||
-          "human",
-        comp.weapon,
-        { tier: comp.tier || 1 },
-      );
+        (comp.heroId ? getHero(comp.heroId)?.race : null) ||
+        comp.heroId ||
+        "human";
+      if (this.dangerMode && modelMod.createBakedGrudge6Unit) {
+        try {
+          unitResult = await modelMod.createBakedGrudge6Unit(raceId, comp.weapon, {
+            tier: comp.tier || 1,
+          });
+        } catch (err) {
+          console.warn(
+            `[arena] baked grudge6 load failed for ${raceId}; falling back to legacy:`,
+            err.message,
+          );
+        }
+      }
+      if (!unitResult) {
+        unitResult = await modelMod.createAnimatedUnit(raceId, comp.weapon, {
+          tier: comp.tier || 1,
+        });
+      }
     }
 
     const {

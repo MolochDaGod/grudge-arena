@@ -18,6 +18,8 @@ import { EquipmentManager, isD1ModularScene } from "./EquipmentManager.js";
 import { assetUrl, charUrl, animUrl, audioUrl, modelUrl, grudge6AssetUrl, grudge6AnimUrl } from "./assetConfig.js";
 import { grudge6RaceModelPath, RACE_TEXTURE_ATLAS } from './Grudge6Paths.js';
 import { preloadGrudge6Anims } from './Grudge6AnimLoader.js';
+import { loadBakedPackClips } from './bakedAnimLoader.js';
+import { createBakedController } from './BakedAnimationController.js';
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
 
@@ -791,6 +793,12 @@ function raceModelPaths(race) {
   const g6 = grudge6RaceModelPath(race);
   if (g6) paths.push(grudge6AssetUrl(g6));
   return paths.filter(Boolean);
+}
+
+/** Grudge6 Bip001 FBX only — canonical race meshes for baked animation. */
+function grudge6RaceModelPaths(race) {
+  const g6 = grudge6RaceModelPath(race);
+  return g6 ? [grudge6AssetUrl(g6)] : raceModelPaths(race);
 }
 
 async function loadCharacterManifest() {
@@ -1913,6 +1921,96 @@ function applyCommonClipAliases(actions) {
       }
     }
   }
+}
+
+// ── Grudge6 + baked Bip001 pipeline (danger room / world parity) ─────────
+
+/**
+ * Load a Grudge6 race FBX with rotation-only baked Bip001 clips.
+ * Uses AnimationDirector gait blending (idle→walk→run→sprint).
+ */
+export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
+  const raceConfig = getRaceConfig(race);
+  const factionColors = getRaceFactionColors(race);
+  const tier = opts.tier || 1;
+  const tierCfg = TierConfig[tier] || TierConfig[1];
+  const resolvedWeapon = resolveWeapon(race, weaponType);
+
+  const loaded = await loadModelWithFallback(grudge6RaceModelPaths(race));
+  const sourceScene = loaded.scene;
+  const scene = cloneGLTFScene(sourceScene);
+
+  scene.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+      child.frustumCulled = false;
+      if (child.material?.metalness !== undefined) {
+        child.material.metalness = Math.min(child.material.metalness, 0.6);
+      }
+    }
+  });
+
+  await applyRaceTextureFix(scene, race);
+  applyFactionBodyColor(scene, race);
+  normalizeCharacterScale(scene, 1.75);
+
+  const { packName, clips } = await loadBakedPackClips(resolvedWeapon);
+  const idle = clips.get('idle');
+  const walk = clips.get('walk');
+  const run = clips.get('run');
+  const sprint = clips.get('sprint');
+  if (!idle || !walk || !run || !sprint) {
+    throw new Error(
+      `[modelLoader] baked loco incomplete for ${resolvedWeapon} (${packName})`,
+    );
+  }
+
+  const mixer = new THREE.AnimationMixer(scene);
+  const controller = createBakedController(
+    mixer,
+    scene,
+    { idle, walk, run, sprint },
+    clips,
+  );
+
+  resetSkeletonBindPose(scene);
+  controller.director.primeLocomotion();
+
+  let equipment = null;
+  if (isD1ModularScene(scene)) {
+    equipment = new EquipmentManager(scene);
+    equipment.applyLoadout(resolvedWeapon);
+    await applyRaceTextureFix(scene, race);
+  } else {
+    const weapon = createWeaponMesh(resolvedWeapon);
+    tintWeaponMesh(weapon, raceConfig.gearTint, factionColors.emissive, tierCfg);
+    attachWeaponToBone(scene, weapon, 'Bip001_R_Hand');
+    const shieldWeapons = ['sabres', 'runeblade'];
+    if (shieldWeapons.includes(resolvedWeapon)) {
+      const shield = createShieldMesh();
+      tintWeaponMesh(shield, raceConfig.gearTint, factionColors.emissive, tierCfg);
+      shield.rotation.set(-Math.PI / 2, 0, Math.PI);
+      attachWeaponToBone(scene, shield, 'Bip001_L_Hand');
+    }
+  }
+
+  console.log(
+    `[modelLoader] ${raceConfig.name} baked-grudge6 ready: pack=${packName}, clips=${clips.size}, mesh=${loaded.path}`,
+  );
+
+  return {
+    scene,
+    mixer,
+    controller,
+    raceConfig,
+    resolvedWeapon,
+    tier,
+    race,
+    equipment,
+    isGrudge6Fbx: true,
+    bakedAnims: true,
+  };
 }
 
 // ── High-level: create a fully animated arena unit ─────────────────────

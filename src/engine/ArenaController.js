@@ -97,10 +97,12 @@ export class ArenaController {
     /** Optional override for danger room / custom arenas (defaults to ProceduralArena radius). */
     this.clampRadius = null;
 
-    /** Directional gait blend (dangerroom motion) — enabled when animCtrl exposes actions. */
-    this.useDirLoco = true;
+    /** Baked Bip001 gait (AnimationDirector) — danger room Grudge6 pipeline. */
+    this.useBakedLoco = !!animCtrl?.useBakedLoco;
+    /** Directional gait blend (legacy GLB/FBX packs). */
+    this.useDirLoco = !this.useBakedLoco;
     this._locoBlend = null;
-    if (animCtrl?.actions) {
+    if (!this.useBakedLoco && animCtrl?.actions) {
       this._locoBlend = new DirLocoBlend((key) => animCtrl.actions.get(key) || null);
     }
 
@@ -367,7 +369,7 @@ export class ArenaController {
         // Update FSM bridge facing
         this._fsmChar.facing.set(worldDirX, worldDirZ);
 
-        if (!this._driveDirLoco(fsmValue, fsm, ix, iz, isSprint, maxSpeed, delta)) {
+        if (!this._driveLocomotion(fsmValue, fsm, ix, iz, isSprint, maxSpeed, delta, hasInput)) {
           if (fsmValue === "idle") fsm.send({ type: "run" });
         }
       } else {
@@ -375,11 +377,11 @@ export class ArenaController {
         this.currentSpeed = Math.max(0, this.currentSpeed - DECEL_RATE * delta);
         if (this.currentSpeed < 0.01) {
           this.currentSpeed = 0;
-          if (!this._driveDirLoco(fsmValue, fsm, 0, 0, false, maxSpeed, delta)) {
+          if (!this._driveLocomotion(fsmValue, fsm, 0, 0, false, maxSpeed, delta, false)) {
             if (fsmValue === "run") fsm.send({ type: "stop" });
           }
-        } else if (this._locoBlend && this.useDirLoco) {
-          this._driveDirLoco(fsmValue, fsm, ix, iz, isSprint, maxSpeed, delta);
+        } else if (this.useBakedLoco || (this._locoBlend && this.useDirLoco)) {
+          this._driveLocomotion(fsmValue, fsm, ix, iz, isSprint, maxSpeed, delta, false);
         }
       }
     } else {
@@ -409,6 +411,26 @@ export class ArenaController {
     while (this.mesh.rotation.y < -Math.PI) this.mesh.rotation.y += Math.PI * 2;
 
     // ── Animation mixer update is handled by game.js loop via animCtrl.update(delta) ──
+  }
+
+  /**
+   * Locomotion driver — baked gait (Grudge6) or directional blend (legacy).
+   * Returns true when locomotion was handled this frame.
+   */
+  _driveLocomotion(fsmValue, fsm, ix, iz, isSprint, maxSpeed, delta, hasInput) {
+    if (this.useBakedLoco && this.animCtrl?.setGaitTarget) {
+      const movable = fsmValue === 'idle' || fsmValue === 'run';
+      if (!movable) {
+        this.animCtrl.setGaitTarget(false, false);
+        return false;
+      }
+      const moving = hasInput || this.currentSpeed > 0.05;
+      this.animCtrl.setGaitTarget(moving, isSprint && moving);
+      if (hasInput && fsmValue === 'idle') fsm.send({ type: 'run' });
+      if (!hasInput && this.currentSpeed < 0.01 && fsmValue === 'run') fsm.send({ type: 'stop' });
+      return true;
+    }
+    return this._driveDirLoco(fsmValue, fsm, ix, iz, isSprint, maxSpeed, delta);
   }
 
   /**
