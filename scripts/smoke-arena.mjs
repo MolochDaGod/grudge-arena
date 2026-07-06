@@ -15,7 +15,8 @@ page.on("console", (msg) => {
   if (text.includes("[arena]") || text.includes("[modelLoader]")) logs.push(text);
 });
 
-await page.goto("https://grudge-arena.grudge-studio.com/", {
+const BASE = process.env.ARENA_URL || "https://grudge-arena.grudge-studio.com";
+await page.goto(`${BASE}/danger-room`, {
   waitUntil: "domcontentloaded",
   timeout: 60000,
 });
@@ -60,12 +61,17 @@ const gameReady =
   (loadingText || "").includes("Ready") ||
   logs.some((l) => l.includes("[arena] Game loaded"));
 const humanTextured = logs.some((l) =>
-  /human: applied atlas texture to \d+ material slots/.test(l),
+  /human: applied atlas texture to \d+ material slots/i.test(l),
 );
 const humanScaled = logs.some((l) => /normalizeCharacterScale: height=/.test(l));
-const idleBound = logs.some(
-  (l) => /Hero human: idle bound=\d+\/\d+ tracks/.test(l) && !/idle bound=0\//.test(l),
+/** Danger room uses Grudge6 FBX + baked Bip001 clips (not legacy hero idle bind). */
+const bakedGrudge6 = logs.some((l) =>
+  /baked-grudge6 ready:.*mesh=\/api\/assets\/models\/grudge6\/races\//.test(l),
 );
+const playerBaked = logs.some((l) =>
+  /Human baked-grudge6 ready:.*WK_Characters\.fbx/.test(l),
+);
+const bakedUnits = logs.filter((l) => /baked-grudge6 ready:/.test(l)).length;
 const fatal = errors.filter(
   (e) => e.startsWith("PAGE:") || /Failed to load arena|Engine load failed/i.test(e),
 );
@@ -74,7 +80,9 @@ const checks = {
   gameReady,
   humanTextured,
   humanScaled: humanScaled || logs.some((l) => /normalizeCharacterScale/.test(l)),
-  idleBound,
+  bakedGrudge6,
+  playerBaked,
+  bakedUnitsMin3: bakedUnits >= 3,
   noOverlay: overlayActive === 0,
   noFatalErrors: fatal.length === 0,
 };
@@ -82,7 +90,8 @@ const checks = {
 console.log("overlayActive:", overlayActive);
 console.log("loadingText:", loadingText?.trim());
 console.log("checks:", checks);
-console.log("arenaLogs:", logs.slice(-15));
+console.log("bakedUnits:", bakedUnits);
+console.log("arenaLogs:", logs.filter((l) => /baked-grudge6|Danger Room|Game loaded/.test(l)));
 console.log("errors:", JSON.stringify(errors.slice(0, 10), null, 2));
 
 await browser.close();
