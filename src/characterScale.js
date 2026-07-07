@@ -127,16 +127,37 @@ function footMidpointY(scene) {
   return ys.reduce((a, b) => a + b, 0) / ys.length;
 }
 
-function groundCharacter(scene) {
+/**
+ * World Y of the lowest body contact point (boot sole), else foot-bone midpoint.
+ */
+export function measureFootContactY(scene) {
+  scene.updateMatrixWorld(true);
+  const { bodyBox, bodyMeshes } = measureBodyBoundingBox(scene);
   const footY = footMidpointY(scene);
-  if (footY !== null && Math.abs(footY) > 0.0005) {
-    scene.position.y -= footY;
+  if (bodyMeshes > 0) {
+    const soleY = bodyBox.min.y;
+    if (footY === null) return soleY;
+    return Math.min(soleY, footY);
+  }
+  return footY;
+}
+
+function groundCharacter(scene) {
+  const contactY = measureFootContactY(scene);
+  if (contactY !== null && Math.abs(contactY) > 0.0005) {
+    scene.position.y -= contactY;
     return 0;
   }
-  const { bodyBox, bodyMeshes } = measureBodyBoundingBox(scene);
-  const grounded = bodyMeshes > 0 ? bodyBox : new THREE.Box3().setFromObject(scene);
+  const grounded = new THREE.Box3().setFromObject(scene);
   scene.position.y = -grounded.min.y;
   return 0;
+}
+
+/** Place character at XZ and re-ground soles to Y=0 (never wipe loader Y offset). */
+export function placeCharacterOnGround(scene, x = 0, z = 0, race = null) {
+  scene.position.x = x;
+  scene.position.z = z;
+  return regroundCharacter(scene, race);
 }
 
 /**

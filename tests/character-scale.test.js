@@ -5,6 +5,8 @@ import {
   physicsSizeFromMetrics,
   isBodyMeasureMesh,
   measureCharacterHeight,
+  placeCharacterOnGround,
+  measureFootContactY,
 } from "../src/characterScale.js";
 
 function makeBoneScene({ boneH = 1.75, bboxH = 7.5 } = {}) {
@@ -82,6 +84,15 @@ describe("characterScale", () => {
     expect(m.method).toBe("bones");
     expect(m.height).toBeCloseTo(1.75, 1);
     expect(m.bboxH).toBeGreaterThan(5);
+  });
+
+  it("placeCharacterOnGround zeros sole contact without resetting loader Y offset", () => {
+    const scene = makeBoneScene({ boneH: 1.75, bboxH: 1.75 });
+    scene.position.y = 1.2;
+    const beforeY = scene.position.y;
+    placeCharacterOnGround(scene, 0, 0, "human");
+    expect(measureFootContactY(scene)).toBeCloseTo(0, 2);
+    expect(scene.position.y).not.toBe(beforeY);
   });
 
   it("physicsSizeFromMetrics clamps inflated bbox to target height", () => {

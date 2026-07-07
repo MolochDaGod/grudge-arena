@@ -8,7 +8,11 @@ import {
   createBakedGrudge6Unit,
   createAnimatedUnit,
 } from "../modelLoader.js";
-import { regroundCharacter } from "../characterScale.js";
+import {
+  regroundCharacter,
+  placeCharacterOnGround,
+  measureFootContactY,
+} from "../characterScale.js";
 import { WeaponToBakedPack } from "../bakedAnimLoader.js";
 import {
   CHARACTER_RACES,
@@ -392,7 +396,7 @@ async function loadCharacter() {
       : await createAnimatedUnit(race, weapon);
 
     const mesh = unit.scene;
-    mesh.position.set(0, 0, 0);
+    placeCharacterOnGround(mesh, 0, 0, race);
     scene.add(mesh);
     if (unit.equipment || baked) {
       applyWeaponCarryTuning(mesh, weapon);
@@ -417,7 +421,7 @@ async function loadCharacter() {
       log(
         `scale: target=${m.targetHeight.toFixed(2)}m measured=${m.measuredHeight.toFixed(2)}m ` +
           `bones=${(m.boneHeight ?? 0).toFixed(2)} bbox=${(m.bboxHeight ?? 0).toFixed(2)} ` +
-          `world=${m.worldScale.toFixed(4)} (${m.source}/${m.measureMethod ?? "?"}) · rootY=${mesh.position.y.toFixed(3)} (feet-mid@0)`,
+          `world=${m.worldScale.toFixed(4)} (${m.source}/${m.measureMethod ?? "?"}) · rootY=${mesh.position.y.toFixed(3)} · soleY=${measureFootContactY(mesh).toFixed(3)} (feet@0)`,
       );
     } else {
       log(`scale: ${mesh.scale.x.toFixed(4)} · y=${mesh.position.y.toFixed(3)}`);
@@ -435,6 +439,8 @@ async function loadCharacter() {
     populateClipList(unit.controller, baked);
     if (baked) {
       unit.controller.director?.primeLocomotion?.();
+      unit.controller.mixer?.update?.(0);
+      regroundCharacter(mesh, race);
       logClipCatalog(unit.controller);
     } else {
       const idle = unit.controller.actions?.get("idle");
@@ -454,6 +460,8 @@ async function loadCharacter() {
       cycleIdx = 0;
       playClip(clipNames[0]);
       animSel.value = clipNames[0];
+      unit.controller.mixer?.update?.(0);
+      regroundCharacter(mesh, race);
       if (autoCycle) startCycle();
     }
 
