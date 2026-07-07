@@ -1,5 +1,6 @@
 /**
  * Combat sandbox focus soft-lock — enemies / neutrals / harvestables with color recognition.
+ * Circular radial aim zone (no rectangular soft-lock box).
  */
 
 import * as THREE from "three";
@@ -18,7 +19,7 @@ import {
   targetLock,
   clearTabTarget,
   lockProfile,
-  zoneDimsFromArea,
+  zoneRadiusFromArea,
 } from "./SoftLockSystem.js";
 
 const _world = new THREE.Vector3();
@@ -41,17 +42,23 @@ function projectToClient(camera, world, rect) {
   };
 }
 
-function isInsideZone(px, py) {
-  return (
-    px >= softLock.zoneX + ZONE_PADDING &&
-    px <= softLock.zoneX + softLock.zoneW - ZONE_PADDING &&
-    py >= softLock.zoneY + ZONE_PADDING &&
-    py <= softLock.zoneY + softLock.zoneH - ZONE_PADDING
-  );
+function isInsideRadialZone(px, py) {
+  const r = Math.max(8, softLock.zoneRadius - ZONE_PADDING);
+  return Math.hypot(px - softLock.zoneCx, py - softLock.zoneCy) <= r;
+}
+
+function clampToRadialZone(px, py) {
+  const dx = px - softLock.zoneCx;
+  const dy = py - softLock.zoneCy;
+  const dist = Math.hypot(dx, dy);
+  const maxR = Math.max(8, softLock.zoneRadius - ZONE_PADDING);
+  if (dist <= maxR) return { x: px, y: py };
+  const s = maxR / dist;
+  return { x: softLock.zoneCx + dx * s, y: softLock.zoneCy + dy * s };
 }
 
 function applyMagnet(desiredX, desiredY, targetX, targetY, mouseX, mouseY, prof, hard) {
-  if (!isInsideZone(mouseX, mouseY)) {
+  if (!isInsideRadialZone(mouseX, mouseY)) {
     return { x: desiredX, y: desiredY, strength: 0 };
   }
   const dx = targetX - desiredX;
@@ -71,7 +78,7 @@ export function cycleFocusTabTarget(camera, rect, weaponType) {
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
   const prof = lockProfile(weaponType);
-  const { w, h } = zoneDimsFromArea(rect.width, rect.height, prof.softAreaFrac);
+  const zoneR = zoneRadiusFromArea(rect.width, rect.height, prof.softAreaFrac);
 
   for (const t of listFocusCandidates()) {
     const world = aimWorldForTarget(t);
@@ -98,14 +105,12 @@ export function cycleFocusTabTarget(camera, rect, weaponType) {
   lockFocusTarget(next.id);
   targetLock.id = next.id;
 
-  const left = clamp(next.x - w / 2, rect.left, rect.left + rect.width - w);
-  const top = clamp(next.y - h / 2, rect.top, rect.top + rect.height - h);
-  softLock.zoneX = left;
-  softLock.zoneY = top;
-  softLock.zoneW = w;
-  softLock.zoneH = h;
-  softLock.crosshairX = clamp(softLock.mouseX, left, left + w);
-  softLock.crosshairY = clamp(softLock.mouseY, top, top + h);
+  softLock.zoneCx = clamp(next.x, rect.left + zoneR, rect.left + rect.width - zoneR);
+  softLock.zoneCy = clamp(next.y, rect.top + zoneR, rect.top + rect.height - zoneR);
+  softLock.zoneRadius = zoneR;
+  const clamped = clampToRadialZone(softLock.mouseX, softLock.mouseY);
+  softLock.crosshairX = clamped.x;
+  softLock.crosshairY = clamped.y;
   softLock.accuracy = prof.accuracy;
   softLock.active = true;
   softLock.hardLock = false;
@@ -141,37 +146,34 @@ export function updateFocusSoftLock(dt, camera, rect, aiming, weaponType) {
   softLock.targetVisible = visible;
 
   const areaFrac = hard ? prof.hardAreaFrac : prof.softAreaFrac;
-  const targetDims = zoneDimsFromArea(rect.width, rect.height, areaFrac);
-  const desiredLeft = clamp(screenX - targetDims.w / 2, rect.left, rect.left + rect.width - targetDims.w);
-  const desiredTop = clamp(screenY - targetDims.h / 2, rect.top, rect.top + rect.height - targetDims.h);
+  const targetR = zoneRadiusFromArea(rect.width, rect.height, areaFrac);
+  const desiredCx = clamp(screenX, rect.left + targetR, rect.left + rect.width - targetR);
+  const desiredCy = clamp(screenY, rect.top + targetR, rect.top + rect.height - targetR);
 
   const zoneK = 1 - Math.exp(-ZONE_FOLLOW_RATE * dt);
   if (!softLock.active) {
-    softLock.zoneX = desiredLeft;
-    softLock.zoneY = desiredTop;
-    softLock.zoneW = targetDims.w;
-    softLock.zoneH = targetDims.h;
+    softLock.zoneCx = desiredCx;
+    softLock.zoneCy = desiredCy;
+    softLock.zoneRadius = targetR;
     softLock.crosshairX = screenX;
     softLock.crosshairY = screenY;
   } else {
-    const nextW = softLock.zoneW + (targetDims.w - softLock.zoneW) * zoneK;
-    const nextH = softLock.zoneH + (targetDims.h - softLock.zoneH) * zoneK;
-    softLock.zoneX = clamp(
-      softLock.zoneX + (desiredLeft - softLock.zoneX) * zoneK,
-      rect.left,
-      rect.left + rect.width - nextW,
+    softLock.zoneCx = clamp(
+      softLock.zoneCx + (desiredCx - softLock.zoneCx) * zoneK,
+      rect.left + targetR,
+      rect.left + rect.width - targetR,
     );
-    softLock.zoneY = clamp(
-      softLock.zoneY + (desiredTop - softLock.zoneY) * zoneK,
-      rect.top,
-      rect.top + rect.height - nextH,
+    softLock.zoneCy = clamp(
+      softLock.zoneCy + (desiredCy - softLock.zoneCy) * zoneK,
+      rect.top + targetR,
+      rect.top + rect.height - targetR,
     );
-    softLock.zoneW = nextW;
-    softLock.zoneH = nextH;
+    softLock.zoneRadius += (targetR - softLock.zoneRadius) * zoneK;
   }
 
-  let desiredX = clamp(softLock.mouseX, softLock.zoneX, softLock.zoneX + softLock.zoneW);
-  let desiredY = clamp(softLock.mouseY, softLock.zoneY, softLock.zoneY + softLock.zoneH);
+  const mouseClamped = clampToRadialZone(softLock.mouseX, softLock.mouseY);
+  let desiredX = mouseClamped.x;
+  let desiredY = mouseClamped.y;
 
   const magnet = applyMagnet(
     desiredX, desiredY, screenX, screenY,
@@ -191,8 +193,9 @@ export function updateFocusSoftLock(dt, camera, rect, aiming, weaponType) {
   const chK = 1 - Math.exp(-CROSSHAIR_RATE * dt);
   softLock.crosshairX += (desiredX - softLock.crosshairX) * chK;
   softLock.crosshairY += (desiredY - softLock.crosshairY) * chK;
-  softLock.crosshairX = clamp(softLock.crosshairX, softLock.zoneX, softLock.zoneX + softLock.zoneW);
-  softLock.crosshairY = clamp(softLock.crosshairY, softLock.zoneY, softLock.zoneY + softLock.zoneH);
+  const chClamped = clampToRadialZone(softLock.crosshairX, softLock.crosshairY);
+  softLock.crosshairX = chClamped.x;
+  softLock.crosshairY = chClamped.y;
   softLock.active = true;
 }
 

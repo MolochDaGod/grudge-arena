@@ -9,7 +9,7 @@ import {
   computeGaitTarget,
 } from './engine/DirLocoBlend.js';
 import { classifyDir, gaitTargetWhileAiming } from './engine/tpsMath.js';
-import { resolveBakedLocoClipKey } from './bakedAnimLoader.js';
+import { resolveBakedLocoClipKey, SPRINT_LOCO_MULT } from './bakedAnimLoader.js';
 import { getAnimOverdrive } from './dangerRoom/dangerRoomStore.js';
 
 const LOCO_STATES = new Set(['idle', 'walk', 'run', 'sprint', 'running', 'walking']);
@@ -22,8 +22,19 @@ const LOOP_STATES = new Set([
 
 const PLAY_FALLBACKS = {
   heavy: ['combo1', 'attack1', 'attack'],
-  dodge: ['dodge', 'jump'],
-  fall: ['jump', 'idle'],
+  dodge: ['dodge', 'dodgeBack', 'roll', 'jump'],
+  dodgeBack: ['dodge', 'roll', 'jump'],
+  roll: ['dodge', 'dodgeBack', 'jump'],
+  climb: ['jump', 'idle'],
+  sneak: ['walk', 'crouch', 'idle'],
+  fall: ['fallLoop', 'jump', 'idle'],
+  fallLoop: ['fall', 'jump', 'idle'],
+  landHard: ['jumpLand', 'jump', 'idle'],
+  jumpLand: ['landHard', 'idle'],
+  descendSlope: ['walk', 'idle'],
+  runSlide: ['run', 'sprint'],
+  turnLeft: ['walk', 'idle'],
+  turnRight: ['walk', 'idle'],
   swing: ['attack1', 'attack'],
   combo3: ['combo2', 'combo1', 'attack1'],
   combo2: ['combo1', 'attack1'],
@@ -47,11 +58,13 @@ export class BakedAnimationController {
    * @param {AnimationDirector} director
    * @param {Map<string, THREE.AnimationClip>} clips
    */
-  constructor(mixer, root, director, clips) {
+  constructor(mixer, root, director, clips, opts = {}) {
     this.mixer = mixer;
     this.root = root;
     this.director = director;
     this.clips = clips;
+    /** @type {Map<string, string>} registry key → baked JSON rel path */
+    this.clipSources = opts?.clipSources || new Map();
     this.useBakedLoco = true;
     this.currentState = 'idle';
     this.currentAction = null;
@@ -80,12 +93,12 @@ export class BakedAnimationController {
   }
 
   setGaitTarget(moving, sprinting) {
-    this.setDirLocomotion(0, moving ? -1 : 0, moving ? 0.7 : 0, sprinting, false);
+    this.setDirLocomotion(0, moving ? 1 : 0, moving ? 0.7 : 0, sprinting, false);
   }
 
   setGaitFromSpeed(speed01, sprinting) {
     const moving = speed01 >= 0.05;
-    this.setDirLocomotion(0, moving ? -1 : 0, speed01, sprinting, this._aiming);
+    this.setDirLocomotion(0, moving ? 1 : 0, speed01, sprinting, this._aiming);
   }
 
   /**
@@ -123,7 +136,7 @@ export class BakedAnimationController {
         idle: od,
         walk: (0.72 + s * 0.45) * od,
         run: (0.88 + s * 0.42) * od,
-        sprint: (1.05 + s * 0.2) * od,
+        sprint: SPRINT_LOCO_MULT * od,
       });
     } else {
       this._locoBlend.setBandTimeScales({
@@ -210,10 +223,10 @@ export class BakedAnimationController {
   }
 }
 
-export function createBakedController(mixer, root, locoClips, allClips, weaponType = 'greatsword') {
+export function createBakedController(mixer, root, locoClips, allClips, weaponType = 'greatsword', opts = {}) {
   const director = new AnimationDirector(mixer, locoClips);
   director.externalLoco = true;
-  const ctrl = new BakedAnimationController(mixer, root, director, allClips);
+  const ctrl = new BakedAnimationController(mixer, root, director, allClips, opts);
   ctrl.setWeaponType(weaponType);
   return ctrl;
 }

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "description": "Human-readable names for baked animation registry keys. Source paths match anim-bank.glb / public/anims/baked/. Right-click clips in anim-test to edit; export JSON and save here.",
+  "clips": {
+    "idle": { "label": "Standing idle", "source": "sword_shield/sword and shield idle" },
+    "walk": { "label": "Walk forward", "source": "locomotion/walking" },
+    "run": { "label": "Run forward", "source": "sword_shield/sword and shield run" },
+    "sprint": { "label": "Sprint (run ×1.75)", "source": "(clone of run)" },
+    "walkBack": { "label": "Walk backward", "source": "longbow/standing walk back" },
+    "runBack": { "label": "Run backward", "source": "longbow/standing aim walk back" },
+    "strafeLeft": { "label": "Strafe left", "source": "locomotion/left strafe walking" },
+    "strafeRight": { "label": "Strafe right", "source": "locomotion/right strafe walking" },
+    "jump": { "label": "Jump", "source": "locomotion/jump" },
+    "dodge": { "label": "Dodge roll", "source": "locomotion/dodging" },
+    "landHard": { "label": "Hard landing", "source": "uploads/locomotion/hard_landing" },
+    "descendSlope": { "label": "Down stairs / slope", "source": "uploads_2026_06/locomotion/descending stairs" },
+    "turnLeft": { "label": "Turn left 90°", "source": "locomotion/left turn 90" },
+    "turnRight": { "label": "Turn right 90°", "source": "locomotion/right turn 90" }
+  }
+}

@@ -40,14 +40,18 @@ export const RACE_GLB_FILES = {
   undead: "UD_Characters.glb",
 };
 
-/** Race texture atlas filenames under {race}/textures/. */
+/**
+ * Race texture atlas filenames under {race}/textures/.
+ * Source of truth on disk — edit these files (or re-run scripts/sync-race-atlases.mjs).
+ * Modular GLBs only ship a 1×1 placeholder; real atlases live beside the GLB.
+ */
 export const RACE_ATLAS_FILES = {
   human: "Map__9.png",
   barbarian: "Map__9.png",
   elf: "Map__9.png",
   dwarf: "Map__12.png",
-  orc: "Map__11.png",
-  undead: "Map__11.png",
+  orc: "Map__11.webp",
+  undead: "Map__11.webp",
 };
 
 /** Grudge6 R2 mirror paths for race atlases (fallback after /cdn). */
@@ -57,6 +61,37 @@ export const RACE_TEXTURE_ATLAS = Object.fromEntries(
     `arena/assets/characters/${race}/textures/${file}`,
   ]),
 );
+
+/**
+ * Grudge6 CDN atlas WebP (sync-race-atlases.mjs source).
+ * Used when bundled Map__*.png is only the 1×1 GLB placeholder (~70 B).
+ */
+export const RACE_CDN_ATLAS_WEBP = {
+  human: "assets/western-kingdoms/textures/WK_Standard_Units.webp",
+  barbarian: "assets/barbarians/textures/BRB_StandardUnits_texture.webp",
+  elf: "assets/elves/textures/ELF_HighElves_Texture.webp",
+  dwarf: "assets/dwarves/textures/DWF_Standard_Units.webp",
+  orc: "assets/orcs/textures/ORC_StandardUnits.webp",
+  undead: "assets/undead/textures/UD_Standard_Units.webp",
+};
+
+export const ATLAS_PLACEHOLDER_MAX_BYTES = 1024;
+
+export function isPlaceholderMapImage(img) {
+  if (!img) return true;
+  const w = img.width ?? img.naturalWidth ?? 0;
+  const h = img.height ?? img.naturalHeight ?? 0;
+  if (w > 0 && h > 0) return w <= 1 && h <= 1;
+  const bytes = img.data?.length ?? img.byteLength ?? 0;
+  return bytes > 0 && bytes <= ATLAS_PLACEHOLDER_MAX_BYTES;
+}
+
+/** @param {import('three').Texture | import('three').Material} texOrMat */
+export function isPlaceholderTexture(texOrMat) {
+  // Material.map.image (patched atlas) or bare Texture.image (loader result)
+  const img = texOrMat?.map?.image ?? texOrMat?.image;
+  return isPlaceholderMapImage(img);
+}
 
 export class CharacterLoadError extends Error {
   /**
@@ -103,16 +138,20 @@ export function raceModelFallbackPaths(race) {
 export function raceTextureFallbackPaths(race) {
   const atlas = RACE_ATLAS_FILES[race];
   if (!atlas) return [];
-  return [
+  const paths = [
     charUrl(`${race}/textures/${atlas}`),
     grudge6AssetUrl(`arena/assets/characters/${race}/textures/${atlas}`),
   ];
+  const cdnWebp = RACE_CDN_ATLAS_WEBP[race];
+  if (cdnWebp) paths.push(grudge6AssetUrl(cdnWebp));
+  return paths;
 }
 
 /** Count textured vs total materials on a loaded character scene. */
 export function auditCharacterMaterials(root) {
   let total = 0;
   let withMap = 0;
+  let placeholderMaps = 0;
   let visible = 0;
   root.traverse((ch) => {
     if (!ch.isMesh && !ch.isSkinnedMesh) return;
@@ -124,20 +163,30 @@ export function auditCharacterMaterials(root) {
       const img = m.map?.image;
       if (img && ((img.width > 0 && img.height > 0) || img.data?.length > 0)) {
         withMap++;
+        if (isPlaceholderMapImage(img)) placeholderMaps++;
       }
     }
   });
-  return { total, withMap, visible };
+  return { total, withMap, placeholderMaps, visible };
 }
 
 /** Human-readable texture health for UI / logs. */
-export function textureHealth({ withMap, total }) {
+export function textureHealth({ withMap, total, placeholderMaps = 0 }) {
   if (total === 0 || withMap === 0) {
     return {
       ok: false,
       level: "error",
       label: "textures missing",
-      detail: "No atlas applied — check /cdn Map__*.png",
+      detail: "No atlas applied — run: npm run sync:atlases",
+    };
+  }
+  if (placeholderMaps > 0 || (withMap > 0 && placeholderMaps >= withMap)) {
+    return {
+      ok: false,
+      level: "error",
+      label: "placeholder atlas",
+      detail:
+        "1×1 embedded atlas — edit public/assets/characters/{race}/textures/ or npm run sync:atlases",
     };
   }
   if (withMap < total * 0.5) {
@@ -163,7 +212,7 @@ export function remediationHint(err) {
     return "Sync meshes: node scripts/build-character-library.mjs && npm run sync:assets";
   }
   if (code === "TEXTURE_MISSING") {
-    return "Rebuild atlases: node scripts/build-character-library.mjs && npm run sync:assets";
+    return "Sync real atlases: npm run sync:atlases then redeploy";
   }
   if (code === "BAKED_ANIM_INCOMPLETE") {
     return "Bake clips in grudge-character-animator → /api/assets/anims/baked/";

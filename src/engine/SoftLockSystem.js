@@ -31,10 +31,10 @@ export const softLock = {
   mouseY: 0,
   crosshairX: 0,
   crosshairY: 0,
-  zoneX: 0,
-  zoneY: 0,
-  zoneW: 0,
-  zoneH: 0,
+  /** Circular aim zone center (screen px). */
+  zoneCx: 0,
+  zoneCy: 0,
+  zoneRadius: 0,
   targetScreenX: 0,
   targetScreenY: 0,
   targetVisible: false,
@@ -53,12 +53,31 @@ export function lockProfile(weaponType) {
   return WEAPON_LOCK_PROFILES[weaponType] || DEFAULT_PROFILE;
 }
 
-export { zoneDimsFromArea };
+/** Circular zone radius from screen-area fraction (replaces rectangular zone). */
+export function zoneRadiusFromArea(rectW, rectH, areaFrac) {
+  const area = areaFrac * rectW * rectH;
+  return Math.max(56, Math.sqrt(area / Math.PI));
+}
 
-function zoneDimsFromArea(rectW, rectH, areaFrac) {
-  const w = Math.sqrt(areaFrac) * rectW;
-  const h = Math.sqrt(areaFrac) * rectH;
-  return { w: Math.max(48, w), h: Math.max(48, h) };
+/** @deprecated Rectangular zones — kept for tests; gameplay uses zoneRadiusFromArea. */
+export function zoneDimsFromArea(rectW, rectH, areaFrac) {
+  const r = zoneRadiusFromArea(rectW, rectH, areaFrac);
+  return { w: r * 2, h: r * 2 };
+}
+
+function isInsideRadialZone(px, py) {
+  const r = Math.max(8, softLock.zoneRadius - ZONE_PADDING);
+  return Math.hypot(px - softLock.zoneCx, py - softLock.zoneCy) <= r;
+}
+
+function clampToRadialZone(px, py) {
+  const dx = px - softLock.zoneCx;
+  const dy = py - softLock.zoneCy;
+  const dist = Math.hypot(dx, dy);
+  const maxR = Math.max(8, softLock.zoneRadius - ZONE_PADDING);
+  if (dist <= maxR) return { x: px, y: py };
+  const s = maxR / dist;
+  return { x: softLock.zoneCx + dx * s, y: softLock.zoneCy + dy * s };
 }
 
 function projectToClient(camera, world, rect) {
@@ -115,7 +134,7 @@ export function cycleTabTarget(camera, rect, targeting, weaponType) {
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
   const prof = lockProfile(weaponType);
-  const { w, h } = zoneDimsFromArea(rect.width, rect.height, prof.softAreaFrac);
+  const zoneR = zoneRadiusFromArea(rect.width, rect.height, prof.softAreaFrac);
   const cands = [];
 
   for (const u of enemies) {
@@ -147,27 +166,16 @@ export function cycleTabTarget(camera, rect, targeting, weaponType) {
   softLock.hardLock = false;
   softLock.magnetStrength = 0;
 
-  const left = clamp(next.x - w / 2, rect.left, rect.left + rect.width - w);
-  const top = clamp(next.y - h / 2, rect.top, rect.top + rect.height - h);
-  softLock.zoneX = left;
-  softLock.zoneY = top;
-  softLock.zoneW = w;
-  softLock.zoneH = h;
-  softLock.crosshairX = clamp(softLock.mouseX, left, left + w);
-  softLock.crosshairY = clamp(softLock.mouseY, top, top + h);
-}
-
-function isInsideZone(px, py) {
-  return (
-    px >= softLock.zoneX + ZONE_PADDING &&
-    px <= softLock.zoneX + softLock.zoneW - ZONE_PADDING &&
-    py >= softLock.zoneY + ZONE_PADDING &&
-    py <= softLock.zoneY + softLock.zoneH - ZONE_PADDING
-  );
+  softLock.zoneCx = clamp(next.x, rect.left + zoneR, rect.left + rect.width - zoneR);
+  softLock.zoneCy = clamp(next.y, rect.top + zoneR, rect.top + rect.height - zoneR);
+  softLock.zoneRadius = zoneR;
+  const clamped = clampToRadialZone(softLock.mouseX, softLock.mouseY);
+  softLock.crosshairX = clamped.x;
+  softLock.crosshairY = clamped.y;
 }
 
 function applyMagnet(desiredX, desiredY, targetX, targetY, mouseX, mouseY, prof, hard) {
-  if (!isInsideZone(mouseX, mouseY)) {
+  if (!isInsideRadialZone(mouseX, mouseY)) {
     return { x: desiredX, y: desiredY, strength: 0 };
   }
   const dx = targetX - desiredX;
@@ -215,37 +223,34 @@ export function updateSoftLock(dt, camera, rect, targeting, aiming, weaponType) 
   softLock.targetVisible = visible;
 
   const areaFrac = hard ? prof.hardAreaFrac : prof.softAreaFrac;
-  const targetDims = zoneDimsFromArea(rect.width, rect.height, areaFrac);
-  const desiredLeft = clamp(screenX - targetDims.w / 2, rect.left, rect.left + rect.width - targetDims.w);
-  const desiredTop = clamp(screenY - targetDims.h / 2, rect.top, rect.top + rect.height - targetDims.h);
+  const targetR = zoneRadiusFromArea(rect.width, rect.height, areaFrac);
+  const desiredCx = clamp(screenX, rect.left + targetR, rect.left + rect.width - targetR);
+  const desiredCy = clamp(screenY, rect.top + targetR, rect.top + rect.height - targetR);
 
   const zoneK = 1 - Math.exp(-ZONE_FOLLOW_RATE * dt);
   if (!softLock.active) {
-    softLock.zoneX = desiredLeft;
-    softLock.zoneY = desiredTop;
-    softLock.zoneW = targetDims.w;
-    softLock.zoneH = targetDims.h;
+    softLock.zoneCx = desiredCx;
+    softLock.zoneCy = desiredCy;
+    softLock.zoneRadius = targetR;
     softLock.crosshairX = screenX;
     softLock.crosshairY = screenY;
   } else {
-    const nextW = softLock.zoneW + (targetDims.w - softLock.zoneW) * zoneK;
-    const nextH = softLock.zoneH + (targetDims.h - softLock.zoneH) * zoneK;
-    softLock.zoneX = clamp(
-      softLock.zoneX + (desiredLeft - softLock.zoneX) * zoneK,
-      rect.left,
-      rect.left + rect.width - nextW,
+    softLock.zoneCx = clamp(
+      softLock.zoneCx + (desiredCx - softLock.zoneCx) * zoneK,
+      rect.left + targetR,
+      rect.left + rect.width - targetR,
     );
-    softLock.zoneY = clamp(
-      softLock.zoneY + (desiredTop - softLock.zoneY) * zoneK,
-      rect.top,
-      rect.top + rect.height - nextH,
+    softLock.zoneCy = clamp(
+      softLock.zoneCy + (desiredCy - softLock.zoneCy) * zoneK,
+      rect.top + targetR,
+      rect.top + rect.height - targetR,
     );
-    softLock.zoneW = nextW;
-    softLock.zoneH = nextH;
+    softLock.zoneRadius += (targetR - softLock.zoneRadius) * zoneK;
   }
 
-  let desiredX = clamp(softLock.mouseX, softLock.zoneX, softLock.zoneX + softLock.zoneW);
-  let desiredY = clamp(softLock.mouseY, softLock.zoneY, softLock.zoneY + softLock.zoneH);
+  const mouseClamped = clampToRadialZone(softLock.mouseX, softLock.mouseY);
+  let desiredX = mouseClamped.x;
+  let desiredY = mouseClamped.y;
 
   const magnet = applyMagnet(
     desiredX, desiredY, screenX, screenY,
@@ -265,8 +270,9 @@ export function updateSoftLock(dt, camera, rect, targeting, aiming, weaponType) 
   const chK = 1 - Math.exp(-CROSSHAIR_RATE * dt);
   softLock.crosshairX += (desiredX - softLock.crosshairX) * chK;
   softLock.crosshairY += (desiredY - softLock.crosshairY) * chK;
-  softLock.crosshairX = clamp(softLock.crosshairX, softLock.zoneX, softLock.zoneX + softLock.zoneW);
-  softLock.crosshairY = clamp(softLock.crosshairY, softLock.zoneY, softLock.zoneY + softLock.zoneH);
+  const chClamped = clampToRadialZone(softLock.crosshairX, softLock.crosshairY);
+  softLock.crosshairX = chClamped.x;
+  softLock.crosshairY = chClamped.y;
   softLock.active = true;
 }
 
@@ -278,10 +284,9 @@ export function getSoftLockHudState() {
     hardLock: softLock.hardLock,
     aiming: softLock.hardLock,
     magnet: softLock.magnetStrength,
-    zoneX: softLock.zoneX,
-    zoneY: softLock.zoneY,
-    zoneW: softLock.zoneW,
-    zoneH: softLock.zoneH,
+    zoneCx: softLock.zoneCx,
+    zoneCy: softLock.zoneCy,
+    zoneRadius: softLock.zoneRadius,
     targetX: softLock.targetScreenX,
     targetY: softLock.targetScreenY,
     accuracy: softLock.accuracy,

@@ -44,6 +44,7 @@ import {
   defaultLocoClip,
 } from './DirLocoBlend.js';
 import { moveDir, lerpAngle } from './tpsMath.js';
+import { TerrainLocoFeedback } from './TerrainLocoFeedback.js';
 
 // ── Constants ────────────────────────────────
 
@@ -102,6 +103,8 @@ export class ArenaController {
     this.controlScheme = 'wow';
     /** Raycast terrain snap — set by danger room bootstrap. */
     this.groundSampler = null;
+    this._terrainLoco = null;
+    this._prevYaw = mesh.rotation.y;
 
     /** Baked Bip001 gait (AnimationDirector) — danger room Grudge6 pipeline. */
     this.useBakedLoco = !!animCtrl?.useBakedLoco;
@@ -339,7 +342,7 @@ export class ArenaController {
 
     const hasInput = isTps ? (fwd !== 0 || rgt !== 0) : (ix !== 0 || iz !== 0);
     const isSprint = this.holdKey.ShiftLeft || this.holdKey.ShiftRight;
-    const maxSpeed = isSprint ? MOVE_SPEED * SPRINT_MULTIPLIER : MOVE_SPEED;
+    let maxSpeed = isSprint ? MOVE_SPEED * SPRINT_MULTIPLIER : MOVE_SPEED;
 
     let worldDirX = 0;
     let worldDirZ = 0;
@@ -380,10 +383,26 @@ export class ArenaController {
 
         this.targetYaw = Math.atan2(worldDirX, worldDirZ);
 
+        if (this.groundSampler) {
+          const slopeMult = this._terrainLoco?.slopeSpeedMultiplier(worldDirX, worldDirZ) ?? 1;
+          maxSpeed *= slopeMult;
+          this.currentSpeed = Math.min(this.currentSpeed, maxSpeed);
+        }
+
         this.mesh.position.x += worldDirX * this.currentSpeed * delta;
         this.mesh.position.z += worldDirZ * this.currentSpeed * delta;
         this._clampPosition();
         this._snapToGround();
+
+        const speed01 = maxSpeed > 0 ? Math.min(1, this.currentSpeed / maxSpeed) : 0;
+        const turnRate = (this.mesh.rotation.y - this._prevYaw) / Math.max(delta, 1e-4);
+        this._terrainLoco?.afterMove(delta, {
+          moving: true,
+          worldDirX,
+          worldDirZ,
+          turnRate,
+        });
+        this._terrainLoco?.maybeDescendOverlay(true, speed01, worldDirX, worldDirZ);
 
         // Update FSM bridge facing
         this._fsmChar.facing.set(worldDirX, worldDirZ);
@@ -437,8 +456,19 @@ export class ArenaController {
     // Normalize rotation.y to [-PI, PI]
     while (this.mesh.rotation.y > Math.PI) this.mesh.rotation.y -= Math.PI * 2;
     while (this.mesh.rotation.y < -Math.PI) this.mesh.rotation.y += Math.PI * 2;
+    this._prevYaw = this.mesh.rotation.y;
 
     // ── Animation mixer update is handled by game.js loop via animCtrl.update(delta) ──
+  }
+
+  /** Wire island terrain sampler + anim-bank terrain overlays (combat sandbox). */
+  setGroundSampler(sampler) {
+    this.groundSampler = sampler;
+    if (sampler && this.useBakedLoco) {
+      this._terrainLoco = new TerrainLocoFeedback(this.mesh, sampler, this.animCtrl);
+    } else {
+      this._terrainLoco = null;
+    }
   }
 
   /**
@@ -562,6 +592,7 @@ export class ArenaController {
 
   _snapToGround() {
     if (!this.groundSampler) return;
+    this._terrainLoco?.beforeGroundSnap?.();
     this.groundSampler.snapMesh(this.mesh);
   }
 

@@ -14,6 +14,29 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { resolve, join, basename, extname } from 'path';
 import { fileURLToPath } from 'url';
+import {
+  parseGLB,
+  writeGLB,
+  normalizeSkinnedGlbRootScale,
+  bakeGlbToMetres,
+  effectiveWorldHeight,
+  RACE_HEIGHT_SCALE,
+} from './lib/glb-scale.mjs';
+import {
+  buildSlotCatalog,
+  WEAPON_EQUIP_MAP,
+  WEAPON_ANIM_PACK as BAKED_WEAPON_ANIM_PACK,
+  WEAPON_ATTACH_DEFAULTS,
+  HERO_PREFABS,
+  DEFAULT_ARMOR_LOADOUT,
+  buildCharacterLoadoutPrefabs,
+  extractSkeletonRefs,
+} from './lib/d1-slot-catalog.mjs';
+
+function getRaceTargetHeight(race) {
+  if (SCALE_OVERRIDE[race] != null) return HUMANOID_HEIGHT_M * SCALE_OVERRIDE[race];
+  return HUMANOID_HEIGHT_M * (RACE_HEIGHT_SCALE[race] ?? 1);
+}
 
 const __dir = fileURLToPath(new URL('.', import.meta.url));
 const ROOT  = resolve(__dir, '..');
@@ -218,77 +241,41 @@ const SCALE_OVERRIDE = {
   undead:    null,
 };
 
-// ────────────────────────────────────────────────────────────────────
-//  GLB binary parser
-// ────────────────────────────────────────────────────────────────────
+// GLB parse/write → scripts/lib/glb-scale.mjs (vertex bake + root scale reset)
 
-function parseGLB(buf) {
-  const magic   = buf.readUInt32LE(0);
-  const version = buf.readUInt32LE(4);
-  if (magic !== 0x46546C67) throw new Error('Not a valid GLB file (bad magic)');
-  if (version !== 2)        throw new Error(`Unsupported GLB version: ${version}`);
+// Modular GLBs embed a 1×1 PNG (~70 B), not the Synty atlas — sync after bake.
+const ATLAS_PLACEHOLDER_BYTES = 1024;
+const RACE_ATLAS_FILES = {
+  human: 'Map__9.png',
+  barbarian: 'Map__9.png',
+  elf: 'Map__9.png',
+  dwarf: 'Map__12.png',
+  orc: 'Map__11.webp',
+  undead: 'Map__11.webp',
+};
 
-  let offset = 12;
-  let json   = null;
-  let binBuf = null;
-
-  while (offset < buf.length) {
-    const chunkLen  = buf.readUInt32LE(offset);
-    const chunkType = buf.readUInt32LE(offset + 4);
-    const chunkData = buf.slice(offset + 8, offset + 8 + chunkLen);
-    offset += 8 + chunkLen;
-
-    if (chunkType === 0x4E4F534A) { // JSON
-      json = JSON.parse(chunkData.toString('utf8'));
-    } else if (chunkType === 0x004E4942) { // BIN
-      binBuf = chunkData;
+function writeAtlasIfReal(outPath, data, label) {
+  const existing = existsSync(outPath) ? readFileSync(outPath) : null;
+  if (data.length <= ATLAS_PLACEHOLDER_BYTES) {
+    if (existing && existing.length > ATLAS_PLACEHOLDER_BYTES) {
+      console.warn(
+        `  ⚠ ${label}: GLB embed is ${data.length} B placeholder — kept existing ${(existing.length / 1024).toFixed(0)} KB atlas`,
+      );
+      return existing.length;
     }
+    console.warn(
+      `  ⚠ ${label}: ${data.length} B placeholder only — run: node scripts/sync-race-atlases.mjs`,
+    );
+    writeFileSync(outPath, data);
+    return data.length;
   }
-  if (!json) throw new Error('GLB missing JSON chunk');
-  return { json, bin: binBuf };
-}
-
-function writeGLB(json, bin) {
-  const jsonStr    = JSON.stringify(json);
-  // JSON chunk must be padded to 4-byte boundary with spaces (0x20)
-  const jsonPad    = (4 - (jsonStr.length % 4)) % 4;
-  const jsonBytes  = Buffer.from(jsonStr + ' '.repeat(jsonPad));
-  const jsonChunkLen = jsonBytes.length;
-
-  // BIN chunk padded with 0x00
-  const binPad    = bin ? (4 - (bin.length % 4)) % 4 : 0;
-  const binBytes  = bin ? Buffer.concat([bin, Buffer.alloc(binPad, 0)]) : Buffer.alloc(0);
-  const binChunkLen = binBytes.length;
-
-  const totalLen  = 12
-    + 8 + jsonChunkLen
-    + (binChunkLen > 0 ? 8 + binChunkLen : 0);
-
-  const out = Buffer.alloc(totalLen);
-  let off = 0;
-
-  // Header
-  out.writeUInt32LE(0x46546C67, off); off += 4; // magic
-  out.writeUInt32LE(2,          off); off += 4; // version
-  out.writeUInt32LE(totalLen,   off); off += 4; // length
-
-  // JSON chunk
-  out.writeUInt32LE(jsonChunkLen, off); off += 4;
-  out.writeUInt32LE(0x4E4F534A,  off); off += 4; // "JSON"
-  jsonBytes.copy(out, off); off += jsonChunkLen;
-
-  // BIN chunk (only if present)
-  if (binChunkLen > 0) {
-    out.writeUInt32LE(binChunkLen, off); off += 4;
-    out.writeUInt32LE(0x004E4942, off); off += 4; // "BIN\0"
-    binBytes.copy(out, off);
-  }
-
-  return out;
+  writeFileSync(outPath, data);
+  console.log(`  ✔ texture: ${label} (${(data.length / 1024).toFixed(1)} KB)`);
+  return data.length;
 }
 
 // ── Extract textures from a parsed GLB ──────────────────────────────
-function extractTextures(glbJson, bin, outDir) {
+function extractTextures(glbJson, bin, outDir, race) {
   const images = glbJson.images ?? [];
   const bufferViews = glbJson.bufferViews ?? [];
   const extracted = [];
@@ -301,78 +288,55 @@ function extractTextures(glbJson, bin, outDir) {
     const ext      = mimeType === 'image/jpeg' ? '.jpg' : '.png';
     const safeName = name.replace(/[^a-zA-Z0-9_\-]/g, '_') + ext;
     const outPath  = join(outDir, safeName);
+    let byteLen = 0;
 
     if (typeof img.bufferView === 'number' && bin) {
       const bv   = bufferViews[img.bufferView];
       const data = bin.slice(bv.byteOffset, bv.byteOffset + bv.byteLength);
-      writeFileSync(outPath, data);
-      extracted.push({ index: i, name, file: safeName, mimeType });
-      console.log(`  ✔ texture: ${safeName} (${(bv.byteLength / 1024).toFixed(1)} KB)`);
+      byteLen = writeAtlasIfReal(outPath, data, safeName);
     } else if (img.uri && img.uri.startsWith('data:')) {
-      // base64 embedded URI
-      const [header, b64] = img.uri.split(',');
+      const [, b64] = img.uri.split(',');
       const data = Buffer.from(b64, 'base64');
-      writeFileSync(outPath, data);
-      extracted.push({ index: i, name, file: safeName, mimeType });
-      console.log(`  ✔ texture (uri): ${safeName}`);
+      byteLen = writeAtlasIfReal(outPath, data, safeName);
+    }
+
+    if (byteLen > 0) {
+      extracted.push({
+        index: i,
+        name,
+        file: safeName,
+        mimeType,
+        placeholder: byteLen <= ATLAS_PLACEHOLDER_BYTES,
+      });
     }
   });
+
+  // Prefer synced atlas path in manifest when GLB only had placeholders.
+  const canonical = RACE_ATLAS_FILES[race];
+  if (canonical) {
+    const canonPath = join(outDir, canonical);
+    if (existsSync(canonPath) && readFileSync(canonPath).length > ATLAS_PLACEHOLDER_BYTES) {
+      const mime = canonical.endsWith('.webp') ? 'image/webp' : 'image/png';
+      return [{
+        name: canonical.replace(/\.\w+$/, '').replace(/__/g, ' #'),
+        file: canonical,
+        mimeType: mime,
+        placeholder: false,
+      }];
+    }
+  }
 
   return extracted;
 }
 
-// ── Detect current character height from accessor bounds ────────────
-function detectModelHeight(glbJson) {
-  const accessors = glbJson.accessors ?? [];
-  let maxY = 0;
-  let minY = 0;
-  for (const acc of accessors) {
-    if (acc.type === 'VEC3' && acc.max && acc.min) {
-      if (acc.max[1] > maxY) maxY = acc.max[1];
-      if (acc.min[1] < minY) minY = acc.min[1];
-    }
-  }
-  return maxY - minY; // total Y extent
-}
-
-// ── Apply scale to all root scene nodes ────────────────────────────
-// Modifies the glTF JSON in-place to normalise character height.
-function applyScale(glbJson, scaleFactor) {
-  if (Math.abs(scaleFactor - 1.0) < 0.001) return; // already correct
-
-  const scenes = glbJson.scenes ?? [];
-  const nodes  = glbJson.nodes  ?? [];
-
-  // Collect root node indices
-  const rootNodeIds = new Set();
-  for (const scene of scenes) {
-    for (const nid of (scene.nodes ?? [])) {
-      rootNodeIds.add(nid);
-    }
-  }
-
-  rootNodeIds.forEach(nid => {
-    const node = nodes[nid];
-    if (!node) return;
-    if (node.scale) {
-      node.scale[0] *= scaleFactor;
-      node.scale[1] *= scaleFactor;
-      node.scale[2] *= scaleFactor;
-    } else {
-      node.scale = [scaleFactor, scaleFactor, scaleFactor];
-    }
-  });
-
-  // Scale accessor bounds so Three.js bounding boxes remain accurate
-  const accessors = glbJson.accessors ?? [];
-  for (const acc of accessors) {
-    if (acc.type === 'VEC3' && acc.max && acc.min) {
-      for (let i = 0; i < 3; i++) {
-        acc.max[i] *= scaleFactor;
-        acc.min[i] *= scaleFactor;
-      }
-    }
-  }
+/** Skinned characters — root scale only (vertices + bones stay bound). */
+function bakeCharacterGlb(json, bin, targetHeightM) {
+  const baked = normalizeSkinnedGlbRootScale(json, bin, targetHeightM);
+  console.log(
+    `  skinned scale: ${baked.before.worldHeight.toFixed(3)}m → ${baked.after.worldHeight.toFixed(3)}m ` +
+      `(root×${baked.before.rootScale.toFixed(2)} → ×${baked.scaleFactor.toFixed(4)})`,
+  );
+  return baked;
 }
 
 // ── Extract mesh names & material info ──────────────────────────────
@@ -427,11 +391,28 @@ async function buildCharacterLibrary() {
   mkdirSync(OUT, { recursive: true });
 
   const manifest = {
-    version: '2.0.0',
+    schema: 'arenaPrefab/1.0',
+    version: '3.0.0',
     generated: new Date().toISOString(),
-    races: {},
+    era: 'grudge-warlords',
+    pack: 'd1_modular',
+    api: {
+      manifest: '/models/characterManifest.json',
+      characters: '/cdn/assets/characters/{race}/{prefix}_Characters.glb',
+      atlases: '/cdn/assets/characters/{race}/textures/{atlas}',
+      bakedAnims: '/api/assets/anims/baked/{rel}.json',
+      r2Prefix: 'arena',
+      r2Base: 'https://assets.grudge-studio.com/arena',
+      cdnProxy: '/cdn',
+    },
+    weaponMappings: WEAPON_EQUIP_MAP,
+    attachTuning: WEAPON_ATTACH_DEFAULTS,
+    bakedAnimPacks: BAKED_WEAPON_ANIM_PACK,
     animationPacks: ANIMATION_PACKS,
-    weaponAnimPackMap: WEAPON_ANIM_PACK,
+    weaponAnimPackMap: BAKED_WEAPON_ANIM_PACK,
+    heroes: {},
+    prefabs: {},
+    races: {},
   };
 
   for (const [race, cfg] of Object.entries(RACE_MODELS)) {
@@ -448,25 +429,14 @@ async function buildCharacterLibrary() {
 
     // ── 1. Extract textures ──────────────────────────────────────
     const texDir  = join(CHARS, race, 'textures');
-    const texInfo = extractTextures(json, bin, texDir);
+    const texInfo = extractTextures(json, bin, texDir, race);
 
-    // ── 2. Detect & apply realistic scale ───────────────────────
-    const rawHeight = detectModelHeight(json);
-    console.log(`  measured Y-extent: ${rawHeight.toFixed(4)} m`);
-
-    let scaleFactor = SCALE_OVERRIDE[race];
-    if (scaleFactor === null) {
-      if (rawHeight > 0.1) {
-        // Already in metres (typical Unity glTF pipeline). Normalise to 1.75m.
-        scaleFactor = HUMANOID_HEIGHT_M / rawHeight;
-      } else {
-        // Very small → likely exported at centimetre scale (×0.01 from Unity).
-        // Correct to metres first, then normalise.
-        scaleFactor = HUMANOID_HEIGHT_M / (rawHeight * 100);
-      }
-    }
-    console.log(`  scale factor:      ×${scaleFactor.toFixed(4)}`);
-    applyScale(json, scaleFactor);
+    // ── 2. Bake vertices to metres (not node.scale — production import) ──
+    const raceTarget = getRaceTargetHeight(race);
+    const baked = bakeCharacterGlb(json, bin, raceTarget);
+    json = baked.json;
+    bin = baked.bin;
+    const scaleFactor = baked.scaleFactor;
 
     // ── 3. Write scaled GLB back ─────────────────────────────────
     const outGlbPath = join(CHARS, race, `${cfg.prefix}_Characters.glb`);
@@ -501,8 +471,10 @@ async function buildCharacterLibrary() {
       try {
         const ebuf = readFileSync(equipSrc);
         let { json: ej, bin: eb } = parseGLB(ebuf);
-        applyScale(ej, scaleFactor); // same scale as character
-        writeFileSync(equipSrc, writeGLB(ej, eb));
+        const eqBefore = effectiveWorldHeight(ej, eb);
+        const eqTarget = eqBefore.worldHeight * (raceTarget / baked.before.worldHeight);
+        const eqBaked = bakeGlbToMetres(ej, eb, eqTarget);
+        writeFileSync(equipSrc, writeGLB(eqBaked.json, eqBaked.bin));
         equipManifest[slot] = `/assets/characters/${relPath}`;
         console.log(`  ✔ equip scaled: ${relPath}`);
       } catch (e) {
@@ -510,27 +482,74 @@ async function buildCharacterLibrary() {
       }
     }
 
-    // ── 6. Build race entry in manifest ─────────────────────────
+    const meshNames = meshes.map(m => m.name);
+    const slots = buildSlotCatalog(meshNames);
+    const skeleton = extractSkeletonRefs(json);
+
+    // ── 6. Build race prefab entry ───────────────────────────────
     manifest.races[race] = {
-      prefix:       cfg.prefix,
-      modelPath:    `/assets/characters/${cfg.char}`,
-      scaleFactor:  parseFloat(scaleFactor.toFixed(6)),
-      targetHeight: HUMANOID_HEIGHT_M,
-      textures:     texInfo.map(t => ({
+      id: race,
+      prefix: cfg.prefix,
+      pack: 'd1_modular',
+      model: {
+        glb: `/assets/characters/${cfg.char}`,
+        path: `/assets/characters/${cfg.char}`,
+        scaleFactor: parseFloat(scaleFactor.toFixed(6)),
+        targetHeightM: raceTarget,
+        bakedWorldHeightM: parseFloat(baked.after.worldHeight.toFixed(4)),
+        rootScaleAfterBake: parseFloat(baked.after.rootScale.toFixed(4)),
+        scaleMode: 'skinned-root-only',
+        rootConvention: 'feet-midpoint-y0',
+      },
+      modelPath: `/assets/characters/${cfg.char}`,
+      scaleFactor: parseFloat(scaleFactor.toFixed(6)),
+      targetHeight: raceTarget,
+      bakedWorldHeight: parseFloat(baked.after.worldHeight.toFixed(4)),
+      rootScaleAfterBake: parseFloat(baked.after.rootScale.toFixed(4)),
+      scaleMode: 'skinned-root-only',
+      textures: texInfo.map(t => ({
         name: t.name,
         file: `/assets/characters/${race}/textures/${t.file}`,
         mimeType: t.mimeType,
+        role: 'bodyAtlas',
       })),
-      meshNames:    meshes.map(m => m.name),
-      skins:        skins.map(s => ({
-        name:  s.name,
+      skeleton,
+      slots,
+      weaponMappings: WEAPON_EQUIP_MAP,
+      defaultLoadout: { armor: { ...DEFAULT_ARMOR_LOADOUT } },
+      attachTuning: WEAPON_ATTACH_DEFAULTS,
+      animPacks: {
+        default: RACE_DEFAULT_PACK[race],
+        byWeapon: BAKED_WEAPON_ANIM_PACK,
+      },
+      meshNames,
+      meshCount: meshNames.length,
+      skins: skins.map(s => ({
+        name: s.name,
         bones: s.bones,
       })),
       embeddedAnimations: embeddedAnims,
-      equipment:    equipManifest,
+      equipment: equipManifest,
       defaultAnimPack: RACE_DEFAULT_PACK[race],
     };
+    console.log(`  slots: ${Object.keys(slots).join(', ')}`);
   }
+
+  for (const [heroId, hero] of Object.entries(HERO_PREFABS)) {
+    const raceEntry = manifest.races[hero.race];
+    if (!raceEntry) continue;
+    manifest.heroes[heroId] = {
+      ...hero,
+      modelPath: raceEntry.modelPath,
+      pack: 'd1_modular',
+      prefix: raceEntry.prefix,
+      defaultLoadout: {
+        armor: { ...DEFAULT_ARMOR_LOADOUT },
+        weapon: { ...(WEAPON_EQUIP_MAP[hero.defaultWeapon] || {}) },
+      },
+    };
+  }
+  manifest.prefabs = buildCharacterLoadoutPrefabs(manifest.races);
 
   // ── Write manifest JSON ──────────────────────────────────────────
   const manifestPath = join(OUT, 'characterManifest.json');

@@ -104,12 +104,80 @@ export async function getRaceTargetHeight(race) {
   return base * (raceConf.scale ?? 1);
 }
 
+const FOOT_BONE_NAMES = new Set([
+  "Bip001_L_Foot",
+  "Bip001_R_Foot",
+  "Bip001 L Foot",
+  "Bip001 R Foot",
+]);
+
+/**
+ * Foot midpoint in world Y — root convention: pivot between feet at Y=0 on flat ground.
+ */
+function footMidpointY(scene) {
+  scene.updateMatrixWorld(true);
+  const p = new THREE.Vector3();
+  const ys = [];
+  scene.traverse((node) => {
+    if (!node.isBone || !FOOT_BONE_NAMES.has(node.name)) return;
+    node.getWorldPosition(p);
+    ys.push(p.y);
+  });
+  if (!ys.length) return null;
+  return ys.reduce((a, b) => a + b, 0) / ys.length;
+}
+
 function groundCharacter(scene) {
+  const footY = footMidpointY(scene);
+  if (footY !== null && Math.abs(footY) > 0.0005) {
+    scene.position.y -= footY;
+    return 0;
+  }
   const { bodyBox, bodyMeshes } = measureBodyBoundingBox(scene);
   const grounded = bodyMeshes > 0 ? bodyBox : new THREE.Box3().setFromObject(scene);
-  const groundedY = -grounded.min.y;
-  scene.position.y = groundedY;
-  return groundedY;
+  scene.position.y = -grounded.min.y;
+  return 0;
+}
+
+/**
+ * Absorb legacy export root scales (e.g. ×4.26) into scene.scale so height measurement is sane.
+ * Import-time bake should leave root scale at 1; this is a runtime safety net.
+ */
+/**
+ * Skinned GLBs keep export root scale on the armature — do NOT flatten to scene.scale
+ * (that desyncs bone bind from mesh). Only absorb on non-skinned props.
+ */
+export function absorbEmbeddedRootScales(scene) {
+  const hasSkin = scene.getObjectByProperty?.("isSkinnedMesh", true)
+    || (() => {
+      let sk = false;
+      scene.traverse((n) => {
+        if (n.isSkinnedMesh) sk = true;
+      });
+      return sk;
+    })();
+  if (hasSkin) {
+    scene.updateMatrixWorld(true);
+    return 1;
+  }
+  let factor = 1;
+  for (const child of scene.children) {
+    const s = child.scale?.x ?? 1;
+    if (
+      child.scale &&
+      Math.abs(child.scale.x - child.scale.y) < 0.02 &&
+      Math.abs(child.scale.y - child.scale.z) < 0.02 &&
+      Math.abs(s - 1) > 0.05
+    ) {
+      factor *= s;
+      child.scale.set(1, 1, 1);
+    }
+  }
+  if (Math.abs(factor - 1) > 0.001) {
+    scene.scale.multiplyScalar(factor);
+  }
+  scene.updateMatrixWorld(true);
+  return factor;
 }
 
 /**
@@ -117,6 +185,7 @@ function groundCharacter(scene) {
  */
 export async function applyCharacterScale(scene, race, opts = {}) {
   const log = opts.log ?? ((m) => console.log(m));
+  absorbEmbeddedRootScales(scene);
   const manifest = await loadCharacterManifest();
   const raceEntry = manifest?.races?.[race];
   const raceConf = getRaceConfig(race);
@@ -128,7 +197,10 @@ export async function applyCharacterScale(scene, race, opts = {}) {
 
   if (before.height > 0.001) {
     const delta = Math.abs(before.height - targetH) / targetH;
-    if (delta > MANIFEST_TOLERANCE) {
+    if (raceEntry?.scaleMode === "skinned-root-only" && delta <= MANIFEST_TOLERANCE) {
+      appliedScale = 1;
+      source = "manifest-baked";
+    } else if (delta > MANIFEST_TOLERANCE) {
       appliedScale = targetH / before.height;
       scene.scale.multiplyScalar(appliedScale);
       source = "measured-correct";
@@ -154,6 +226,7 @@ export async function applyCharacterScale(scene, race, opts = {}) {
     worldScale: scene.scale.x,
     appliedScale,
     groundedY,
+    rootConvention: "feet-midpoint-y0",
     bodyMeshes: after.bodyMeshes,
     manifestScaleFactor: raceEntry?.scaleFactor ?? null,
     heightOffset: raceConf.heightOffset ?? 0,

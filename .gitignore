@@ -15,3 +15,8 @@ public/assets/maps/*/
 # Animation packs are large — also on R2
 # public/assets/animations/ is kept in git (small JSON manifests only)
 
+.env*
+
+# Raw Mixamo source (unzipped boxanimations.zip — run npm run pipeline:boxanims)
+artifacts/boxanimations/
+public/anims/staging/

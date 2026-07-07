@@ -58,8 +58,10 @@ const loadingText = await page.locator("#loading-text").textContent().catch(() =
 const gameReady =
   (loadingText || "").includes("Ready") ||
   logs.some((l) => l.includes("[arena] Game loaded"));
-const humanTextured = logs.some((l) =>
-  /human: applied atlas texture to \d+ material slots/i.test(l),
+const humanTextured = logs.some(
+  (l) =>
+    /human: applied atlas texture to \d+ material slots/i.test(l) ||
+    /Human baked-grudge6 ready:.*\d+\/\d+ materials textured/i.test(l),
 );
 const scaleLog = logs.find((l) =>
   /\[modelLoader\].*target=.*measured=.*bones=/.test(l),
@@ -84,9 +86,9 @@ const scaleSane = (() => {
     bbox < Math.max(4, measured * 2.5)
   );
 })();
-/** Danger room uses CDN GLB + baked Bip001 clips (not legacy Mixamo remap). */
+/** Danger room uses D1 GLB + baked Bip001 clips (CDN or bundled /assets on sandbox). */
 const bakedGrudge6 = logs.some((l) =>
-  /baked-grudge6 ready:.*mesh=\/cdn\/assets\/characters\//.test(l),
+  /baked-grudge6 ready:.*mesh=\/(cdn\/)?assets\/characters\//.test(l),
 );
 const playerBaked = logs.some((l) =>
   /Human baked-grudge6 ready:.*WK_Characters\.glb/.test(l),

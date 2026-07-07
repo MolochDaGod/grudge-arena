@@ -4,7 +4,8 @@
  */
 
 import * as THREE from 'three';
-import { grudge6AssetUrl } from './assetConfig.js';
+import { bakedAnimUrl } from './assetConfig.js';
+import { applyBoxAnimOverrides } from './boxAnimRegistry.js';
 
 /** @typedef {'magic'|'sword_shield'|'longbow'|'rifle'|'pistol'|'unarmed'} AnimPack */
 
@@ -13,7 +14,7 @@ export const ANIM_PACK_CLIPS = {
   unarmed: {
     idle: 'unarmed/fight_idle',
     walk: 'locomotion/walking',
-    run: 'locomotion/running',
+    run: 'uploads_2026_06/locomotion/torch run forward',
     attack: 'unarmed/punching',
   },
   magic: {
@@ -48,8 +49,14 @@ export const ANIM_PACK_CLIPS = {
   },
 };
 
-/** Pack-agnostic sprint locomotion (rotation-only, all races). */
+/**
+ * Legacy sprint upload — baked ~180° opposite forward run clips (moonwalk at full sprint).
+ * Runtime clones the pack `run` clip for sprint instead; kept for CDN/catalog parity.
+ */
 export const SPRINT_CLIP = 'uploads_2026_06/locomotion/running';
+
+/** Sprint band playback vs run (matches /world GameCharacter SPRINT_MULT). */
+export const SPRINT_LOCO_MULT = 1.75;
 
 /** Arena weapon type → baked anim pack. */
 export const WeaponToBakedPack = {
@@ -72,22 +79,22 @@ export const WeaponToBakedPack = {
  */
 export const BAKED_DIR_RELS = {
   unarmed: {
-    walkBack: 'locomotion/walking',
-    runBack: 'locomotion/running',
+    walkBack: 'longbow/standing walk back',
+    runBack: 'longbow/standing aim walk back',
     strafeLeft: 'locomotion/left strafe walking',
     strafeRight: 'locomotion/right strafe walking',
   },
   magic: {
-    walkBack: 'locomotion/walking',
-    runBack: 'locomotion/running',
+    walkBack: 'longbow/standing walk back',
+    runBack: 'longbow/standing aim walk back',
     strafeLeft: 'locomotion/left strafe walking',
     strafeRight: 'locomotion/right strafe walking',
   },
   sword_shield: {
-    walkBack: 'locomotion/walking',
-    runBack: 'sword_shield/sword and shield run',
-    strafeLeft: 'sword_shield/sword and shield strafe',
-    strafeRight: 'sword_shield/sword and shield strafe (2)',
+    walkBack: 'longbow/standing walk back',
+    runBack: 'longbow/standing aim walk back',
+    strafeLeft: 'locomotion/left strafe walking',
+    strafeRight: 'locomotion/right strafe walking',
   },
   longbow: {
     walkBack: 'longbow/standing walk back',
@@ -154,12 +161,23 @@ export const BAKED_COMBAT_EXTRAS = {
   combo3: 'sword_shield/sword and shield attack (2)',
   cast: 'magic/standing 1h cast spell 01',
   cast2H: 'magic/standing 2h cast spell 01',
-  dodge: 'uploads/locomotion/Jump_From_Wall',
+  dodge: 'locomotion/dodging',
   jump: 'locomotion/jump',
+  jumpLand: 'uploads/locomotion/hard_landing',
+  landHard: 'uploads/locomotion/hard_landing',
+  descendSlope: 'uploads_2026_06/locomotion/descending stairs',
+  runSlide: 'uploads/locomotion/trip_Running_Slide',
+  slide: 'uploads/locomotion/trip_Running_Slide',
+  roll: 'uploads/locomotion/Quick_Roll_To_Run',
+  turnLeft: 'locomotion/left turn 90',
+  turnRight: 'locomotion/right turn 90',
   blockIdle: 'sword_shield/sword and shield block',
   aimIdle: 'longbow/standing idle 01',
   taunt: 'unarmed/fight_idle',
 };
+
+/** Neutral NPC overlay loop (island sandbox foragers). */
+export const BAKED_IDLE_EXAMINE_REL = 'longbow/standing idle 03 examine';
 
 const clipCache = new Map();
 
@@ -213,7 +231,7 @@ export function validateBakedLocoClips(clips, weaponType, packName) {
 }
 
 export function bakedClipUrl(rel) {
-  return grudge6AssetUrl(`anims/baked/${rel}.json`);
+  return bakedAnimUrl(rel);
 }
 
 export function toRotationOnlyClip(clip) {
@@ -242,7 +260,6 @@ export async function loadBakedPackClips(weaponType) {
     ['idle', pack.idle],
     ['walk', pack.walk],
     ['run', pack.run],
-    ['sprint', SPRINT_CLIP],
     ['attack1', pack.attack],
     ['attack', pack.attack],
   ]);
@@ -261,6 +278,8 @@ export async function loadBakedPackClips(weaponType) {
     if (!rels.has(state)) rels.set(state, rel);
   }
 
+  applyBoxAnimOverrides(rels, packName);
+
   const entries = await Promise.all(
     [...rels.entries()].map(async ([name, rel]) => {
       try {
@@ -275,19 +294,33 @@ export async function loadBakedPackClips(weaponType) {
   );
 
   const clips = new Map();
+  const clipSources = new Map();
   const skipped = [];
+  for (const [name, rel] of rels) {
+    clipSources.set(name, rel);
+  }
   for (const entry of entries) {
     if (entry) clips.set(entry[0], entry[1]);
   }
+
+  // Sprint = run clone sped up (SPRINT_CLIP faces backward — see /world GameCharacter).
+  const runClip = clips.get('run');
+  if (runClip) {
+    const sprintClip = runClip.clone();
+    sprintClip.name = 'sprint';
+    clips.set('sprint', sprintClip);
+  }
+
   for (const [name] of rels) {
     if (!clips.has(name) && REQUIRED_BAKED_LOCO.includes(name)) {
       skipped.push(name);
     }
   }
+  if (!clips.has('sprint')) skipped.push('sprint');
   if (skipped.length) {
     console.warn(
       `[bakedAnim] ${packName}: missing core clips [${skipped.join(", ")}] — check /api/assets/anims/baked/`,
     );
   }
-  return { packName, clips, skipped };
+  return { packName, clips, clipSources, skipped };
 }

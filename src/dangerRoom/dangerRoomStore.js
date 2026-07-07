@@ -33,7 +33,7 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...base };
     const saved = JSON.parse(raw);
-    return {
+    const merged = {
       mode: saved.mode === "danger" ? "danger" : "arena",
       presetId: ROOM_PRESETS[saved.presetId] ? saved.presetId : DEFAULT_PRESET_ID,
       musicEnabled: saved.musicEnabled !== false,
@@ -43,6 +43,12 @@ function load() {
       animOverdrive: typeof saved.animOverdrive === "number" ? saved.animOverdrive : 1,
       combatSandbox: !!saved.combatSandbox,
     };
+    if (isCombatSandboxMode()) {
+      merged.presetId = COMBAT_SANDBOX_PRESET;
+      merged.animOverdrive = COMBAT_SANDBOX_ANIM_OVERDRIVE;
+      merged.combatSandbox = true;
+    }
+    return merged;
   } catch {
     return { ...base };
   }

@@ -169,6 +169,10 @@ describe('WeaponToAnimPack', () => {
   it('sabres maps to sword_shield animation pack', () => {
     expect(WeaponToAnimPack.sabres).toBe('sword_shield');
   });
+
+  it('greatsword maps to sword_shield animation pack', () => {
+    expect(WeaponToAnimPack.greatsword).toBe('sword_shield');
+  });
 });
 
 describe('WeaponToAnimClass', () => {

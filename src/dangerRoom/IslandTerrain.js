@@ -45,7 +45,8 @@ export function islandHeight(x, z) {
     smoothNoise(x * 0.055, z * 0.055) * 2.4 +
     smoothNoise(x * 0.13 + 40, z * 0.13) * 1.15 +
     smoothNoise(x * 0.26, z * 0.26 + 20) * 0.5;
-  const plateau = 1.85 + hills;
+  // Walkable centre ~Y=0 — game gravity / character root align to heightfield baseline.
+  const plateau = 0.12 + hills;
   return plateau * edge - 0.12;
 }
 
@@ -59,32 +60,22 @@ export function islandEdgeFactor(x, z) {
  * @param {THREE.Group} root
  * @returns {Promise<{ terrainMesh: THREE.Mesh, terrainMeshes: THREE.Mesh[], clampRadius: number }>}
  */
-export async function buildIslandTerrain(root) {
-  const [grassMaps, sandMaps, landMaps] = await Promise.all([
-    loadTerrainPBR("/textures/terrain/aerial_grass_rock", "aerial_grass_rock", { repeat: 14 }),
-    loadTerrainPBR("/textures/terrain/coast_sand_rocks_02", "coast_sand_rocks_02", { repeat: 18, use4k: true }),
-    loadTerrainPBR("/textures/terrain/coast_land_rocks_01", "coast_land_rocks_01", { repeat: 12 }),
-  ]);
-
+function buildHeightfieldGeometry() {
   const geo = new THREE.PlaneGeometry(ISLAND_SIZE, ISLAND_SIZE, SEGMENTS, SEGMENTS);
   geo.rotateX(-Math.PI / 2);
-
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
   const splat = new Float32Array(pos.count * 2);
-
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
     const y = islandHeight(x, z);
     pos.setY(i, y);
-
     const edge = islandEdgeFactor(x, z);
     const sandW = Math.pow(edge, 1.4);
     const grassW = Math.max(0, 1 - sandW * 1.15);
     splat[i * 2] = grassW;
     splat[i * 2 + 1] = sandW;
-
     colors[i * 3] = 0.55 + grassW * 0.2;
     colors[i * 3 + 1] = 0.5 + grassW * 0.25;
     colors[i * 3 + 2] = 0.45 + sandW * 0.15;
@@ -93,8 +84,38 @@ export async function buildIslandTerrain(root) {
   geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
   geo.setAttribute("splat", new THREE.BufferAttribute(splat, 2));
   geo.computeVertexNormals();
+  return geo;
+}
 
-  const terrainMat = makeTerrainMaterial(grassMaps, { vertexColors: true });
+export async function buildIslandTerrain(root) {
+  let grassMaps;
+  let sandMaps;
+  let landMaps;
+  try {
+    [grassMaps, sandMaps, landMaps] = await Promise.all([
+      loadTerrainPBR("/textures/terrain/aerial_grass_rock", "aerial_grass_rock", { repeat: 10 }),
+      loadTerrainPBR("/textures/terrain/coast_sand_rocks_02", "coast_sand_rocks_02", { repeat: 12 }),
+      loadTerrainPBR("/textures/terrain/coast_land_rocks_01", "coast_land_rocks_01", { repeat: 10 }),
+    ]);
+  } catch (err) {
+    console.warn("[island] PBR textures unavailable — vertex-color terrain:", err.message);
+    grassMaps = sandMaps = landMaps = null;
+  }
+
+  const geo = buildHeightfieldGeometry();
+
+  const terrainMat = grassMaps?.map
+    ? makeTerrainMaterial(grassMaps, {
+        color: 0xffffff,
+        roughness: 0.92,
+        metalness: 0.02,
+      })
+    : new THREE.MeshStandardMaterial({
+        color: 0x4a7a3a,
+        roughness: 0.92,
+        metalness: 0.02,
+        vertexColors: true,
+      });
   const terrainMesh = new THREE.Mesh(geo, terrainMat);
   terrainMesh.name = "island-terrain";
   terrainMesh.receiveShadow = true;
@@ -113,13 +134,29 @@ export async function buildIslandTerrain(root) {
   bPos.needsUpdate = true;
   beachGeo.computeVertexNormals();
 
-  const sandMat = makeTerrainMaterial(sandMaps, { transparent: true, opacity: 0.92 });
+  const sandMat = sandMaps?.map
+    ? makeTerrainMaterial(sandMaps, {
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.88,
+        depthWrite: false,
+      })
+    : new THREE.MeshStandardMaterial({
+        color: 0xc4a574,
+        roughness: 0.95,
+        transparent: true,
+        opacity: 0.75,
+        depthWrite: false,
+        vertexColors: true,
+      });
   const beachMesh = new THREE.Mesh(beachGeo, sandMat);
   beachMesh.name = "island-beach-overlay";
   beachMesh.receiveShadow = true;
   root.add(beachMesh);
 
-  const rockMat = makeTerrainMaterial(landMaps);
+  const rockMat = landMaps?.map
+    ? makeTerrainMaterial(landMaps)
+    : new THREE.MeshStandardMaterial({ color: 0x6a6a62, roughness: 0.9 });
   const rocks = new THREE.Group();
   rocks.name = "island-rock-scatter";
   const rockGeo = new THREE.DodecahedronGeometry(1, 0);

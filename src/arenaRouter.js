@@ -1,4 +1,4 @@
-import { isCombatSandboxMode } from "./combatSandbox.js";
+import { isCombatSandboxHost, isCombatSandboxMode } from "./combatSandbox.js";
 
 /**
  * Arena URL router — slug-based game flow (SPA, Vercel catch-all → index.html).
@@ -48,6 +48,15 @@ export function parseRoute(pathname = location.pathname) {
     case ROUTES.DRESSING_ROOM:
       return { id: "dressing-room", path, gameMode: null, autoStart: false };
     case ROUTES.ARENA:
+      if (isCombatSandboxHost()) {
+        return {
+          id: "arena",
+          path,
+          gameMode: "danger",
+          autoStart: true,
+          combatSandbox: true,
+        };
+      }
       return { id: "arena", path, gameMode: "arena", autoStart: true };
     case ROUTES.DANGER_ROOM:
       return { id: "danger-room", path, gameMode: "danger", autoStart: true };

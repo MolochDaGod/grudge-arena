@@ -25,6 +25,7 @@ import {
   auditCharacterMaterials,
   textureHealth,
   formatCharacterLoadError,
+  isPlaceholderTexture,
 } from "./characterResources.js";
 import { getD1LoadoutForRace } from "./d1LoadoutStore.js";
 import { preloadGrudge6Anims } from './Grudge6AnimLoader.js';
@@ -34,7 +35,17 @@ import {
   BakedAnimLoadError,
 } from "./bakedAnimLoader.js";
 import { applyCharacterScale, regroundCharacter } from "./characterScale.js";
+import { applyWeaponCarryTuning, preloadWeaponAttachManifest } from "./weaponAttachConfig.js";
+import { loadArenaPrefabManifest } from "./arenaPrefab.js";
 import { createBakedController } from './BakedAnimationController.js';
+import {
+  remapClipBoneNames,
+  getTrackBindingStats,
+  resolveHandBoneName,
+  buildSceneBoneLookup,
+  bip001UnderscoreToGltf,
+} from "./mixamoRetarget.js";
+import { validateCharacterSkeleton } from "./skeletonContract.js";
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
 
@@ -55,10 +66,10 @@ export const RaceScaleConfig = {
 };
 
 export const WeaponToAnimPack = {
-  greatsword: "axe",
+  greatsword: "sword_shield",
   bow: "longbow",
   sabres: "sword_shield",
-  scythe: "axe",
+  scythe: "sword_shield",
   runeblade: "sword_shield",
   staff: "magic",
   wand: "magic",
@@ -581,150 +592,6 @@ export function playSFX(pathOrArray, volume = 0.3) {
   } catch {}
 }
 
-// ── Mixamo bone-name remapping ──────────────────────────────────────
-//
-// Animation GLBs (from Mixamo) use "mixamorig:Hips", "mixamorig:Spine1", etc.
-// Our character GLBs use bare names with slight differences:
-//   mixamorig:Spine1 → Spine01, mixamorig:Spine2 → Spine02,
-//   mixamorig:Neck → neck, mixamorig:HeadTop_End → head_end
-// We strip the prefix first, then apply the alias map.
-
-const MIXAMO_PREFIXES = [
-  "mixamorig10:",
-  "mixamorig9:",
-  "mixamorig8:",
-  "mixamorig7:",
-  "mixamorig6:",
-  "mixamorig5:",
-  "mixamorig4:",
-  "mixamorig3:",
-  "mixamorig2:",
-  "mixamorig1:",
-  "mixamorig:",
-];
-
-/**
- * Remap Mixamo bare bone names → Synty Bip001 bone names.
- * After stripping the "mixamorig:" prefix we get e.g. "Hips", "Spine", "LeftArm".
- * These need to map to the Bip001 convention used by all 6 race GLBs.
- */
-/** CDN D1 GLBs use Bip001_* underscores (GLTFLoader sanitizes bone node names). */
-const BONE_ALIASES = {
-  Hips: "Bip001_Pelvis",
-  Spine: "Bip001_Spine",
-  Spine1: "Bip001_Spine",
-  Spine2: "Bip001_Spine1",
-  Neck: "Bip001_Neck",
-  Head: "Bip001_Head",
-  HeadTop_End: "Bip001_Head",
-  LeftShoulder: "Bip001_L_Clavicle",
-  LeftArm: "Bip001_L_UpperArm",
-  LeftForeArm: "Bip001_L_Forearm",
-  LeftHand: "Bip001_L_Hand",
-  RightShoulder: "Bip001_R_Clavicle",
-  RightArm: "Bip001_R_UpperArm",
-  RightForeArm: "Bip001_R_Forearm",
-  RightHand: "Bip001_R_Hand",
-  LeftUpLeg: "Bip001_L_Thigh",
-  LeftLeg: "Bip001_L_Calf",
-  LeftFoot: "Bip001_L_Foot",
-  LeftToeBase: "Bip001_L_Toe0",
-  RightUpLeg: "Bip001_R_Thigh",
-  RightLeg: "Bip001_R_Calf",
-  RightFoot: "Bip001_R_Foot",
-  RightToeBase: "Bip001_R_Toe0",
-  Reye: null,
-  Leye: null,
-};
-
-/**
- * Bones that exist on the Synty/Bip001 character skeleton.
- * Tracks targeting anything else get stripped.
- */
-const VALID_BONES = new Set([
-  "Bip001",
-  "Bip001_Pelvis",
-  "Bip001_Spine",
-  "Bip001_Spine1",
-  "Bip001_Neck",
-  "Bip001_Head",
-  "Bip001_L_Clavicle",
-  "Bip001_L_UpperArm",
-  "Bip001_L_Forearm",
-  "Bip001_L_Hand",
-  "Bip001_R_Clavicle",
-  "Bip001_R_UpperArm",
-  "Bip001_R_Forearm",
-  "Bip001_R_Hand",
-  "Bip001_L_Thigh",
-  "Bip001_L_Calf",
-  "Bip001_L_Foot",
-  "Bip001_L_Toe0",
-  "Bip001_R_Thigh",
-  "Bip001_R_Calf",
-  "Bip001_R_Foot",
-  "Bip001_R_Toe0",
-  "Armature",
-]);
-
-function stripMixamoPrefix(name) {
-  for (const prefix of MIXAMO_PREFIXES) {
-    if (name.startsWith(prefix)) return name.slice(prefix.length);
-  }
-  // GLTFLoader sanitizes "mixamorig:Hips" → track node name "mixamorigHips"
-  if (name.startsWith("mixamorig")) return name.slice("mixamorig".length);
-  return name;
-}
-
-/**
- * Remap all track names in an AnimationClip to match our character skeletons.
- * Track format: "boneName.property" (e.g. "mixamorig:Hips.position")
- * Steps: 1) strip mixamorig prefix  2) apply bone alias map
- */
-function remapClipBoneNames(clip) {
-  for (const track of clip.tracks) {
-    const dotIdx = track.name.indexOf(".");
-    if (dotIdx === -1) continue;
-    const bone = track.name.substring(0, dotIdx);
-    const prop = track.name.substring(dotIdx);
-
-    // Step 1: strip mixamorig: prefix
-    let remapped = stripMixamoPrefix(bone);
-
-    // Step 2: apply alias map (Mixamo bare name → Bip001 name)
-    if (remapped in BONE_ALIASES) {
-      const mapped = BONE_ALIASES[remapped];
-      if (mapped === null) {
-        // Mark track for removal (no matching bone on target skeleton)
-        track.name = "__REMOVE__" + prop;
-        continue;
-      }
-      remapped = mapped;
-    }
-
-    if (remapped !== bone) {
-      track.name = remapped + prop;
-    }
-  }
-  // Remove tracks that were flagged for deletion (null-mapped bones)
-  clip.tracks = clip.tracks.filter((t) => !t.name.startsWith("__REMOVE__"));
-  return toRotationOnlyClip(clip);
-}
-
-/**
- * Strip position/scale tracks — rotation-only clips retarget across races
- * without double-scaling root motion (see grudge-asset-pipeline / character-kit).
- */
-function toRotationOnlyClip(clip) {
-  clip.tracks = clip.tracks.filter((track) => {
-    const dot = track.name.indexOf(".");
-    if (dot === -1) return true;
-    const prop = track.name.substring(dot + 1);
-    return prop === "quaternion" || prop === "rotation";
-  });
-  return clip;
-}
-
 // ── Caches ────────────────────────────────────────────────────────────────
 
 const gltfCache = new Map();
@@ -761,7 +628,7 @@ function dataTextureFromImage(img, width, height) {
 
 function loadAtlasTexture(url) {
   return new Promise((resolve) => {
-    if (/\.tga$/i.test(url)) {
+    if (/\.(tga|webp)$/i.test(url)) {
       textureLoader.load(url, resolve, undefined, () => resolve(null));
       return;
     }
@@ -771,7 +638,7 @@ function loadAtlasTexture(url) {
       url,
       (tex) => {
         tex.colorSpace = THREE.SRGBColorSpace;
-        tex.flipY = false;
+        tex.flipY = true;
         resolve(tex);
       },
       undefined,
@@ -847,10 +714,16 @@ async function loadRaceTextureMap(race) {
   const texFailures = [];
   for (const texPath of paths) {
     const tex = await loadAtlasTexture(texPath);
-    if (tex) {
+    if (tex && !isPlaceholderTexture(tex)) {
       _raceTextureCache.set(race, tex);
       console.log(`[modelLoader] ${race}: texture atlas loaded from ${texPath}`);
       return tex;
+    }
+    if (tex && isPlaceholderTexture(tex)) {
+      console.warn(
+        `[modelLoader] ${race}: skipped placeholder atlas (${texPath}) — trying fallback`,
+      );
+      tex.dispose?.();
     }
     texFailures.push(texPath);
   }
@@ -896,6 +769,13 @@ async function applyRaceTextureFix(scene, race) {
       `[modelLoader] ${race}: applied atlas texture to ${patched} material slots`,
     );
   }
+  return patched;
+}
+
+/** Re-apply atlas after D1 equipment toggles visibility (danger room gear panel). */
+export async function reapplyRaceTextures(scene, race) {
+  const patched = await applyRaceTextureFix(scene, race);
+  applyFactionBodyColor(scene, race);
   return patched;
 }
 
@@ -959,16 +839,6 @@ async function loadHumanBasemeshAnimations() {
   return _humanBasemeshAnimPromise;
 }
 
-function getTrackBindingStats(action) {
-  const bindings = action?._propertyBindings || [];
-  const total = bindings.length;
-  let bound = 0;
-  for (const binding of bindings) {
-    if (binding?.binding?.node) bound++;
-  }
-  return { total, bound, ratio: total > 0 ? bound / total : 0 };
-}
-
 function mapBasemeshClipToState(clipName) {
   const n = (clipName || "").toLowerCase();
   if (n.includes("idle")) return "idle";
@@ -995,12 +865,7 @@ async function registerCompatibleBasemeshAnimations(controller, mixer, root) {
     if (!state || controller.actions.has(state)) continue;
 
     const clip = srcClip.clone();
-    remapClipBoneNames(clip);
-    clip.tracks = clip.tracks.filter((track) => {
-      const dot = track.name.indexOf(".");
-      if (dot === -1) return true;
-      return VALID_BONES.has(track.name.substring(0, dot));
-    });
+    remapClipBoneNames(clip, root);
 
     const action = mixer.clipAction(clip, root);
     const stats = getTrackBindingStats(action);
@@ -1097,7 +962,7 @@ function cloneGLTFScene(source) {
   return clone;
 }
 
-/** Fail fast when any skinned mesh still references bones outside its hierarchy. */
+/** Fail fast when skinned meshes or skeleton contract are invalid. */
 function validateSkinnedBindings(scene, label = "character") {
   const boneSet = new Set();
   scene.traverse((n) => {
@@ -1113,7 +978,13 @@ function validateSkinnedBindings(scene, label = "character") {
   if (bad > 0) {
     console.warn(`[modelLoader] ${label}: ${bad} skinned bone refs outside hierarchy`);
   }
-  return bad === 0;
+  const skel = validateCharacterSkeleton(scene);
+  if (!skel.ok) {
+    console.warn(
+      `[modelLoader] ${label}: skeleton contract missing [${skel.missing.join(", ")}]`,
+    );
+  }
+  return bad === 0 && skel.ok;
 }
 
 /** Reset all skinned meshes to bind pose before applying Mixamo clips. */
@@ -1125,8 +996,9 @@ function resetSkeletonBindPose(scene) {
 }
 
 function hasValidTextureMap(mat) {
-  const img = mat?.map?.image;
-  if (!img) return false;
+  if (!mat?.map?.image) return false;
+  if (isPlaceholderTexture(mat)) return false;
+  const img = mat.map.image;
   if (img.width > 0 && img.height > 0) return true;
   return !!(img.data && img.data.length > 0);
 }
@@ -1162,9 +1034,8 @@ export async function loadRaceModel(race) {
   applyFactionBodyColor(scene, race);
 
   resetSkeletonBindPose(scene);
-  // Normalise to 1.75 m using bounding box Y, regardless of GLB export scale.
-  // WK/BRB/ELF/DWF/ORC/UD GLBs ship with root scale ~4.26, yielding 7.45 m
-  // world-height — this corrects that to the expected humanoid size.
+  // Import-baked GLBs keep armature root scale (skinned-root-only); runtime only
+  // corrects CDN drift via bone-primary height — never flattens rig scale to scene.scale.
   await applyCharacterScale(scene, race, {
     log: (m) => console.log(m.replace("[characterScale]", "[modelLoader]")),
   });
@@ -1185,7 +1056,7 @@ export async function loadRaceModel(race) {
   };
   for (const clip of sourceAnims) {
     const clonedClip = clip.clone();
-    if (!isGrudge6Fbx) remapClipBoneNames(clonedClip);
+    if (!isGrudge6Fbx) remapClipBoneNames(clonedClip, scene);
     const key = clonedClip.name.toLowerCase();
     const action = mixer.clipAction(clonedClip, scene);
     actions.set(key, action);
@@ -1208,11 +1079,12 @@ export async function loadRaceModel(race) {
  * All animation files are now GLB (converted from FBX via fbx2gltf).
  * GLTFLoader is used for everything — no FBXLoader needed.
  */
-export async function loadAnimClip(filePath) {
+export async function loadAnimClip(filePath, scene = null) {
   // URL-encode spaces in file paths (Mixamo filenames have spaces)
   const encodedPath = filePath.replace(/ /g, "%20");
+  const cacheKey = scene ? `${filePath}::scene` : filePath;
 
-  const cached = clipCache.get(filePath);
+  const cached = clipCache.get(cacheKey);
   if (cached) return cached.clone();
 
   try {
@@ -1223,21 +1095,9 @@ export async function loadAnimClip(filePath) {
       console.warn(`[modelLoader] No animations in ${filePath}`);
       return null;
     }
-    const clip = remapClipBoneNames(gltf.animations[0]);
+    const clip = remapClipBoneNames(gltf.animations[0].clone(), scene);
 
-    // Strip tracks targeting bones that don't exist on our 24-joint skeleton.
-    clip.tracks = clip.tracks.filter((track) => {
-      const dotIdx = track.name.indexOf(".");
-      if (dotIdx === -1) return true;
-      const boneName = track.name.substring(0, dotIdx);
-      return VALID_BONES.has(boneName);
-    });
-
-    // DO NOT scale position tracks. The Armature's 0.01 root scale already
-    // converts centimeter bone positions to world meters. Double-scaling
-    // would sink the character into the ground.
-
-    clipCache.set(filePath, clip);
+    clipCache.set(cacheKey, clip);
     return clip.clone();
   } catch (err) {
     console.warn(`[modelLoader] Failed to load ${filePath}:`, err.message);
@@ -1265,7 +1125,7 @@ export async function preloadWeaponAnims(weaponType, mixer, root) {
   const entries = Object.entries(fileMap);
   const results = await Promise.allSettled(
     entries.map(([state, file]) =>
-      loadAnimClip(basePath + file).then((clip) => ({ state, clip })),
+      loadAnimClip(basePath + file, root).then((clip) => ({ state, clip })),
     ),
   );
 
@@ -1680,23 +1540,36 @@ function createWeaponMesh(weaponType) {
  * @param {THREE.Group} weaponMesh - The weapon mesh group from createWeaponMesh()
  * @param {string} boneName - Target bone name (default: 'RightHand')
  */
-const BONE_NAME_ALIASES = {
-  RightHand: "Bip001_R_Hand",
-  LeftHand: "Bip001_L_Hand",
-  "Bip001 R Hand": "Bip001_R_Hand",
-  "Bip001 L Hand": "Bip001_L_Hand",
-};
+function resolveAttachBoneName(characterScene, boneName) {
+  if (
+    !boneName ||
+    boneName === "RightHand" ||
+    boneName === "Bip001_R_Hand" ||
+    boneName === "Bip001 R Hand"
+  ) {
+    return resolveHandBoneName(characterScene, "R");
+  }
+  if (
+    boneName === "LeftHand" ||
+    boneName === "Bip001_L_Hand" ||
+    boneName === "Bip001 L Hand"
+  ) {
+    return resolveHandBoneName(characterScene, "L");
+  }
+  const lookup = buildSceneBoneLookup(characterScene);
+  return (
+    lookup.get(boneName) ||
+    lookup.get(bip001UnderscoreToGltf(boneName)) ||
+    boneName
+  );
+}
 
-export function attachWeaponToBone(
-  characterScene,
-  weaponMesh,
-  boneName = "Bip001_R_Hand",
-) {
-  const resolved = BONE_NAME_ALIASES[boneName] || boneName;
+export function attachWeaponToBone(characterScene, weaponMesh, boneName = null) {
+  const resolved = resolveAttachBoneName(characterScene, boneName);
   let handBone = null;
 
   characterScene.traverse((node) => {
-    if (node.isBone && (node.name === resolved || node.name === boneName)) {
+    if (node.isBone && node.name === resolved) {
       handBone = node;
     }
   });
@@ -1798,16 +1671,11 @@ async function loadAnimationLibrary() {
     }
     if (!gltf) throw lastErr || new Error("animation-library.glb not found");
 
-    // Index animations by name — remap Mixamo → Bip001_* for D1 race GLBs
+    // Index animations — remap Mixamo / underscore Bip001 → D1 spaced bone names
     const clips = new Map();
     for (const clip of gltf.animations) {
       const cloned = clip.clone();
       remapClipBoneNames(cloned);
-      cloned.tracks = cloned.tracks.filter((track) => {
-        const dotIdx = track.name.indexOf(".");
-        if (dotIdx === -1) return true;
-        return VALID_BONES.has(track.name.substring(0, dotIdx));
-      });
       if (cloned.tracks.length > 0) clips.set(cloned.name, cloned);
     }
 
@@ -1874,6 +1742,11 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
   const requireD1 = opts.requireD1 ?? false;
   const meshLoadout = opts.meshLoadout ?? getD1LoadoutForRace(race);
 
+  const [prefabManifest] = await Promise.all([
+    loadArenaPrefabManifest(),
+    preloadWeaponAttachManifest(),
+  ]);
+
   const loaded = await loadModelWithFallback(raceModelFallbackPaths(race), { race });
   const sourceScene = loaded.scene;
   const scene = cloneGLTFScene(sourceScene);
@@ -1895,7 +1768,7 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
   });
   validateSkinnedBindings(scene, race);
 
-  const { packName, clips } = await loadBakedPackClips(resolvedWeapon);
+  const { packName, clips, clipSources } = await loadBakedPackClips(resolvedWeapon);
   try {
     validateBakedLocoClips(clips, resolvedWeapon, packName);
   } catch (err) {
@@ -1921,6 +1794,7 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     { idle, walk, run, sprint },
     clips,
     resolvedWeapon,
+    { clipSources },
   );
 
   const isD1 = isD1ModularScene(scene);
@@ -1931,10 +1805,14 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     );
   }
 
+  // Atlas before equipment (base skin) and again after loadout (swapped D1 parts).
+  await applyRaceTextureFix(scene, race);
+
   let equipment = null;
   if (isD1) {
-    equipment = new EquipmentManager(scene);
+    equipment = new EquipmentManager(scene, { manifest: prefabManifest });
     equipment.applyD1Loadout(resolvedWeapon, meshLoadout);
+    applyWeaponCarryTuning(scene, resolvedWeapon);
   } else if (!requireD1) {
     const weapon = createWeaponMesh(resolvedWeapon);
     tintWeaponMesh(weapon, raceConfig.gearTint, factionColors.emissive, tierCfg);
@@ -1949,7 +1827,7 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
   }
 
   const texPatched = await applyRaceTextureFix(scene, race);
-  if (texPatched === 0) applyFactionBodyColor(scene, race);
+  applyFactionBodyColor(scene, race);
 
   regroundCharacter(scene, race);
 
@@ -2012,6 +1890,8 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   const factionColors = getRaceFactionColors(race);
   const tier = opts.tier || 1;
   const tierCfg = TierConfig[tier] || TierConfig[1];
+  const prefabManifest = await loadArenaPrefabManifest();
+  await preloadWeaponAttachManifest();
 
   // Validate weapon against race restrictions (fall back to default)
   const resolvedWeapon = resolveWeapon(race, weaponType);
@@ -2025,7 +1905,13 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   // Weapon packs are loaded FIRST priority — they use Mixamo FBX->GLB with
   // remapClipBoneNames() which is proven to map correctly to Bip001 bones.
   // Animation library is supplementary (adds variety states).
-  const { scene, mixer, actions: embeddedActions, isGrudge6Fbx } = await loadRaceModel(race);
+  const {
+    scene,
+    mixer,
+    actions: embeddedActions,
+    isGrudge6Fbx,
+    modelPath,
+  } = await loadRaceModel(race);
 
   const controller = new AnimationController(mixer, scene);
   controller.registerActions(embeddedActions);
@@ -2076,9 +1962,12 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
 
   let equipment = null;
   if (isD1ModularScene(scene)) {
-    equipment = new EquipmentManager(scene);
+    equipment = new EquipmentManager(scene, { manifest: prefabManifest });
     equipment.applyLoadout(resolvedWeapon);
+    applyWeaponCarryTuning(scene, resolvedWeapon);
     await applyRaceTextureFix(scene, race);
+    applyFactionBodyColor(scene, race);
+    regroundCharacter(scene, race);
   } else {
     // Legacy fallback path for non-D1 meshes
     const weapon = createWeaponMesh(resolvedWeapon);
@@ -2107,19 +1996,27 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   // Weapon pack is now the primary loader so idle should be bound.
   // Still verify and log binding stats.
   resetSkeletonBindPose(scene);
+  validateSkinnedBindings(scene, `${race}-legacy`);
   controller.stop();
   controller.play("idle");
   mixer.update(0);
+  regroundCharacter(scene, race);
   const idleStats = getTrackBindingStats(controller.currentAction);
   if (!controller.currentAction || idleStats.bound === 0) {
     console.warn(`[modelLoader] ${race}: idle unbound — retrying weapon pack…`);
     const retry = await preloadWeaponAnims(resolvedWeapon, mixer, scene);
     controller.registerActions(retry);
     applyCommonClipAliases(controller.actions);
+    resetSkeletonBindPose(scene);
     controller.stop();
     controller.play("idle");
     mixer.update(0);
   }
+
+  console.log(
+    `[modelLoader] ${raceConfig.name} legacy ready: weapon=${resolvedWeapon}, ` +
+      `idle bound=${idleStats.bound}/${idleStats.total}, path=${modelPath}`,
+  );
 
   return {
     scene,
@@ -2131,6 +2028,9 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
     race,
     equipment,
     isGrudge6Fbx,
+    pipeline: "legacy",
+    modelPath,
+    characterMetrics: scene.userData?.characterMetrics ?? null,
   };
 }
 
@@ -2214,7 +2114,7 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
     const EMBEDDED_ALIASES = { running: ["run"], walking: ["walk"], idle: [] };
     for (const clip of gltf.animations) {
       const cloned = clip.clone();
-      remapClipBoneNames(cloned);
+      remapClipBoneNames(cloned, scene);
       const key = cloned.name.toLowerCase();
       const action = mixer.clipAction(cloned, scene);
       embeddedActions.set(key, action);
@@ -2259,9 +2159,10 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
   applyCommonClipAliases(controller.actions);
   await registerCompatibleBasemeshAnimations(controller, mixer, scene);
 
+  const prefabManifestHero = await loadArenaPrefabManifest();
   let equipment = null;
   if (isD1ModularScene(scene)) {
-    equipment = new EquipmentManager(scene);
+    equipment = new EquipmentManager(scene, { manifest: prefabManifestHero });
     equipment.applyLoadout(weaponType);
     await applyRaceTextureFix(scene, hero.race);
   } else {

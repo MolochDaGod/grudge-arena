@@ -154,7 +154,7 @@ export async function handleRoute(route) {
     return;
   }
 
-  if (route.gameMode === "danger") {
+  if (route.gameMode === "danger" || route.combatSandbox || isCombatSandboxMode()) {
     await applyDangerPresetFromUrl(route);
   }
 

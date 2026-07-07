@@ -12,20 +12,24 @@ import { bindVillageMaterials } from "./IslandVillageMaterials.js";
 const GLB_PATH = islandAssetUrl("village/glb/");
 const FBX_PATH = islandAssetUrl("village/props/");
 
+/** GLB exports from fbx2gltf are already in metres; FBX fallback is cm (×0.01). */
+const GLB_SCALE = 1;
+const FBX_SCALE = 0.01;
+
 const VILLAGE_LAYOUT = [
-  { file: "SM_BLD_base_v01_01", x: 12, z: -8, ry: -0.35, scale: 0.012 },
-  { file: "SM_BLD_body_v01_01", x: 12, z: -8, ry: -0.35, scale: 0.012, yOffset: 0.05 },
-  { file: "SM_BLD_chimney_v01_03", x: 12.8, z: -7.2, ry: -0.35, scale: 0.012, yOffset: 4.2 },
-  { file: "SM_BLD_waterwheel_construct", x: -11, z: 9, ry: 1.1, scale: 0.011 },
-  { file: "SM_PROP_well", x: 8, z: -5, ry: 0.2, scale: 0.013 },
-  { file: "SM_PROP_campfire", x: 6, z: -9, ry: 0, scale: 0.013 },
-  { file: "SM_PROP_cart_03", x: 15, z: -11, ry: -1.2, scale: 0.012 },
-  { file: "SM_PROP_barrel_01", x: 9.5, z: -7.5, ry: 0.4, scale: 0.013 },
-  { file: "SM_PROP_crate_01", x: 10.5, z: -6.8, ry: -0.6, scale: 0.013 },
-  { file: "SM_PROP_fence_v01_01", x: 4, z: -6, ry: 0.9, scale: 0.013 },
-  { file: "SM_PROP_fence_v01_02", x: 3.2, z: -4.5, ry: 0.9, scale: 0.013 },
-  { file: "SM_PROP_fence_v01_03", x: 2.5, z: -3, ry: 0.9, scale: 0.013 },
-  { file: "SM_PROP_fence_door_gate", x: 1.8, z: -1.2, ry: 0.9, scale: 0.013 },
+  { file: "SM_BLD_base_v01_01", x: 12, z: -8, ry: -0.35 },
+  { file: "SM_BLD_body_v01_01", x: 12, z: -8, ry: -0.35, yOffset: 1.05 },
+  { file: "SM_BLD_chimney_v01_03", x: 12.8, z: -7.2, ry: -0.35, yOffset: 14.8 },
+  { file: "SM_BLD_waterwheel_construct", x: -11, z: 9, ry: 1.1 },
+  { file: "SM_PROP_well", x: 8, z: -5, ry: 0.2 },
+  { file: "SM_PROP_campfire", x: 6, z: -9, ry: 0 },
+  { file: "SM_PROP_cart_03", x: 15, z: -11, ry: -1.2 },
+  { file: "SM_PROP_barrel_01", x: 9.5, z: -7.5, ry: 0.4 },
+  { file: "SM_PROP_crate_01", x: 10.5, z: -6.8, ry: -0.6 },
+  { file: "SM_PROP_fence_v01_01", x: 4, z: -6, ry: 0.9 },
+  { file: "SM_PROP_fence_v01_02", x: 3.2, z: -4.5, ry: 0.9 },
+  { file: "SM_PROP_fence_v01_03", x: 2.5, z: -3, ry: 0.9 },
+  { file: "SM_PROP_fence_door_gate", x: 1.8, z: -1.2, ry: 0.9 },
 ];
 
 function enhanceMaterials(root) {
@@ -36,11 +40,11 @@ function enhanceMaterials(root) {
   });
 }
 
-function groundProp(prop, spec) {
+function groundProp(prop, spec, unitScale) {
   const y = islandHeight(spec.x, spec.z);
   prop.position.set(spec.x, y + (spec.yOffset || 0), spec.z);
   prop.rotation.y = spec.ry ?? 0;
-  prop.scale.setScalar(spec.scale ?? 0.012);
+  prop.scale.setScalar(unitScale);
   return prop;
 }
 
@@ -51,12 +55,12 @@ async function loadVillageProp(spec, gltfLoader, fbxLoader) {
     const scene = gltf.scene;
     await bindVillageMaterials(scene);
     enhanceMaterials(scene);
-    return scene;
+    return { scene, unitScale: GLB_SCALE };
   } catch {
     const fbx = await fbxLoader.loadAsync(`${FBX_PATH}${spec.file}.fbx`);
     await bindVillageMaterials(fbx);
     enhanceMaterials(fbx);
-    return fbx;
+    return { scene: fbx, unitScale: FBX_SCALE };
   }
 }
 
@@ -74,8 +78,8 @@ export async function loadVillageCluster(root) {
   await Promise.all(
     VILLAGE_LAYOUT.map(async (spec) => {
       try {
-        const prop = await loadVillageProp(spec, gltfLoader, fbxLoader);
-        groundProp(prop, spec);
+        const { scene: prop, unitScale } = await loadVillageProp(spec, gltfLoader, fbxLoader);
+        groundProp(prop, spec, unitScale);
         prop.name = `village-${spec.file}`;
         group.add(prop);
         if (spec.file.includes("BLD_") || spec.file.includes("well") || spec.file.includes("cart")) {

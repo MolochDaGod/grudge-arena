@@ -13,12 +13,14 @@ export class CombatPostFX {
    * @param {THREE.WebGLRenderer} renderer
    * @param {THREE.Scene} scene
    * @param {THREE.Camera} camera
+   * @param {{ bloom?: boolean }} [opts]
    */
-  constructor(renderer, scene, camera) {
+  constructor(renderer, scene, camera, opts = {}) {
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;
     this.enabled = true;
+    this.bloom = null;
 
     const size = new THREE.Vector2();
     renderer.getSize(size);
@@ -26,13 +28,16 @@ export class CombatPostFX {
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
 
-    this.bloom = new UnrealBloomPass(size, 0.9, 0.35, 0.9);
-    this.composer.addPass(this.bloom);
+    // Unlit Synty atlases bloom into solid yellow silhouettes — match anim-test (no bloom).
+    if (opts.bloom !== false) {
+      this.bloom = new UnrealBloomPass(size, 0.35, 0.28, 1.05);
+      this.composer.addPass(this.bloom);
+    }
   }
 
   setSize(width, height) {
     this.composer.setSize(width, height);
-    this.bloom.resolution.set(width, height);
+    this.bloom?.resolution.set(width, height);
   }
 
   render() {

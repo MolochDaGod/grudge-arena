@@ -1,5 +1,5 @@
 /**
- * Character showcase — same pipeline as Danger Room (baked Bip001 + CDN textures).
+ * Character showcase — baked Bip001 + atlas textures + teachable anim labels.
  */
 
 import * as THREE from "three";
@@ -8,13 +8,28 @@ import {
   createBakedGrudge6Unit,
   createAnimatedUnit,
 } from "../modelLoader.js";
+import { regroundCharacter } from "../characterScale.js";
 import { WeaponToBakedPack } from "../bakedAnimLoader.js";
 import {
   CHARACTER_RACES,
   auditCharacterMaterials,
   textureHealth,
   formatCharacterLoadError,
+  raceTextureFallbackPaths,
 } from "../characterResources.js";
+import { charUrl } from "../assetConfig.js";
+import {
+  loadAnimLabelCatalog,
+  getAnimEntry,
+  setAnimLabel,
+  getOverrides,
+  exportMergedLabels,
+  downloadLabelsJson,
+} from "../animLabels.js";
+import { loadBakedClip } from "../bakedAnimLoader.js";
+import { applyWeaponCarryTuning } from "../weaponAttachConfig.js";
+import { vfxForClip } from "../combatVfx.js";
+import { mountAnimStudio } from "./studio.js";
 
 const WEAPONS = Object.keys(WeaponToBakedPack);
 
@@ -35,11 +50,66 @@ const pipeSel = document.getElementById("pipe-sel");
 const animSel = document.getElementById("anim-sel");
 const gaitSlider = document.getElementById("gait-slider");
 const gaitLabel = document.getElementById("gait-label");
+const coordPill = document.getElementById("coord-pill");
+const studioPanel = document.getElementById("studio-panel");
 
-const log = (m) => {
-  logEl.textContent += m + "\n";
+let studio = null;
+
+let labelCatalog = { clips: {} };
+loadAnimLabelCatalog().then((c) => {
+  labelCatalog = c;
+});
+
+function appendLogLine(text, { kind = "text", clipKey = null } = {}) {
+  const line = document.createElement("div");
+  line.className = `log-line log-${kind}`;
+  if (kind === "clip" && clipKey) {
+    line.classList.add("log-clip");
+    line.dataset.clipKey = clipKey;
+    line.title = "Right-click to rename / annotate (saved in browser; Export labels → animLabels.json)";
+  }
+  line.textContent = text;
+  logEl.appendChild(line);
   logEl.scrollTop = logEl.scrollHeight;
-};
+  return line;
+}
+
+const log = (m, opts) => appendLogLine(m, opts);
+
+function showClipContextMenu(e, clipKey) {
+  e.preventDefault();
+  const entry = getAnimEntry(
+    clipKey,
+    labelCatalog,
+    getOverrides(),
+    unit?.controller?.clipSources,
+  );
+  const label = prompt(
+    `Display name for "${clipKey}"\n(baked: ${entry.source || "?"})`,
+    entry.label,
+  );
+  if (label === null) return;
+  const notes = prompt("Notes (optional)", entry.notes || "");
+  if (notes === null) return;
+  setAnimLabel(clipKey, {
+    label,
+    notes,
+    source: entry.source,
+    race: raceSel.value,
+    weapon: weaponSel.value,
+  });
+  refreshClipListUI();
+  refreshClipLogLines(unit?.controller);
+  log(`✎ saved label: ${clipKey} → "${label}" (localStorage — Export labels → public/models/animLabels.json)`, {
+    kind: "meta",
+  });
+}
+
+logEl.addEventListener("contextmenu", (e) => {
+  const row = e.target.closest?.("[data-clip-key]");
+  if (!row) return;
+  showClipContextMenu(e, row.dataset.clipKey);
+});
 
 for (const r of CHARACTER_RACES) {
   const opt = document.createElement("option");
@@ -84,12 +154,14 @@ rim.position.set(-4, 2, -3);
 scene.add(rim);
 
 const ground = new THREE.Mesh(
-  new THREE.CircleGeometry(4, 48),
+  new THREE.CircleGeometry(6, 64),
   new THREE.MeshStandardMaterial({ color: 0x2a2a3a, roughness: 0.9 }),
 );
 ground.rotation.x = -Math.PI / 2;
+ground.position.y = 0;
 ground.receiveShadow = true;
 scene.add(ground);
+scene.add(new THREE.GridHelper(8, 16, 0x3a3a5a, 0x222233));
 
 function resize() {
   const w = wrap.clientWidth;
@@ -123,6 +195,52 @@ function bindStats(action) {
   return { bound, total: bindings.length };
 }
 
+function formatClipOption(key) {
+  const entry = getAnimEntry(
+    key,
+    labelCatalog,
+    getOverrides(),
+    unit?.controller?.clipSources,
+  );
+  const src = entry.source ? ` · ${entry.source}` : "";
+  return entry.label !== key ? `${entry.label} (${key})${src}` : `${key}${src}`;
+}
+
+function refreshClipListUI() {
+  if (!clipNames.length) return;
+  const prev = animSel.value;
+  animSel.innerHTML = '<option value="">— pick —</option>';
+  for (const name of clipNames) {
+    const o = document.createElement("option");
+    o.value = name;
+    o.textContent = formatClipOption(name);
+    animSel.appendChild(o);
+  }
+  if (clipNames.includes(prev)) animSel.value = prev;
+}
+
+function formatClipLogLine(key, controller) {
+  const entry = getAnimEntry(
+    key,
+    labelCatalog,
+    getOverrides(),
+    controller?.clipSources,
+  );
+  const src = entry.source ? ` ← ${entry.source}` : "";
+  const note = entry.notes ? ` // ${entry.notes}` : "";
+  return { text: `  ${entry.label} [${key}]${src}${note}`, key };
+}
+
+function refreshClipLogLines(controller) {
+  if (!controller || pipeSel.value !== "baked") return;
+  for (const row of logEl.querySelectorAll("[data-clip-key]")) {
+    const key = row.dataset.clipKey;
+    if (!key) continue;
+    const { text } = formatClipLogLine(key, controller);
+    row.textContent = text;
+  }
+}
+
 function populateClipList(controller, baked) {
   animSel.innerHTML = '<option value="">— pick —</option>';
   clipNames = [];
@@ -132,7 +250,7 @@ function populateClipList(controller, baked) {
       clipNames.push(name);
       const o = document.createElement("option");
       o.value = name;
-      o.textContent = name;
+      o.textContent = formatClipOption(name);
       animSel.appendChild(o);
     }
     return;
@@ -149,19 +267,48 @@ function populateClipList(controller, baked) {
   }
 }
 
+function logClipCatalog(controller) {
+  log("— clips (right-click name to rename) —", { kind: "meta" });
+  for (const key of clipNames) {
+    const { text } = formatClipLogLine(key, controller);
+    log(text, { kind: "clip", clipKey: key });
+  }
+}
+
 const LOCO_GAIT = { idle: 0, walk: 34, run: 70, sprint: 100 };
 
-function playClip(name) {
+function playClip(name, { loop = true } = {}) {
   if (!unit?.controller || !name) return;
   if (pipeSel.value === "baked" && name in LOCO_GAIT) {
     const v = LOCO_GAIT[name];
     gaitSlider.value = String(v);
     gaitSlider.dispatchEvent(new Event("input"));
   } else {
-    unit.controller.play(name, { loop: true });
+    unit.controller.play(name, { loop });
   }
-  log(`▶ ${name}`);
-  setStatus(`${unit.race} · ${name}`);
+  vfxForClip(unit.scene, name);
+  const entry = getAnimEntry(
+    name,
+    labelCatalog,
+    getOverrides(),
+    unit.controller.clipSources,
+  );
+  log(`▶ ${entry.label} [${name}]`, { kind: "clip", clipKey: name });
+  setStatus(`${unit.race} · ${entry.label}`);
+}
+
+async function playBankClip(rel) {
+  if (!unit?.controller?.director || !rel) return;
+  try {
+    const clip = await loadBakedClip(rel);
+    unit.controller.director.playOneShot(clip, { fade: 0.15, timeScale: 1 });
+    const key = rel.split("/").pop();
+    vfxForClip(unit.scene, key);
+    log(`▶ bank: ${rel}`, { kind: "clip", clipKey: key });
+    setStatus(`${unit.race} · ${key}`);
+  } catch (err) {
+    log(`FAIL bank clip: ${err.message}`, { kind: "error" });
+  }
 }
 
 function stopCycle() {
@@ -198,18 +345,46 @@ function disposeUnit() {
 
 function reportLoadError(err) {
   const detail = formatCharacterLoadError(err);
-  log(`FAIL: ${detail}`);
+  log(`FAIL: ${detail}`, { kind: "error" });
   console.error("[anim-test]", err);
   setStatus(err?.code || "load error", false);
 }
 
+async function logTextureSources(race) {
+  const paths = raceTextureFallbackPaths(race);
+  log("— texture source files (edit on disk) —", { kind: "meta" });
+  for (const p of paths) {
+    log(`  atlas try: ${p}`, { kind: "meta" });
+    try {
+      const res = await fetch(p, { method: "HEAD" });
+      const len = res.headers.get("content-length");
+      log(
+        `    ${res.ok ? "OK" : "FAIL"} ${res.status} ${len ? `${len} bytes` : ""}`,
+        { kind: res.ok && len && Number(len) < 1024 ? "error" : "meta" },
+      );
+      if (res.ok && len && Number(len) < 1024) {
+        log("    WARN: file is a 1×1 placeholder — run: node scripts/sync-race-atlases.mjs", {
+          kind: "error",
+        });
+      }
+    } catch (err) {
+      log(`    fetch error: ${err.message}`, { kind: "error" });
+    }
+  }
+  log(`  edit folder: public/assets/characters/${race}/textures/`, { kind: "meta" });
+  log(`  mesh GLB:    public/assets/characters/${race}/`, { kind: "meta" });
+}
+
 async function loadCharacter() {
   disposeUnit();
+  logEl.innerHTML = "";
   const race = raceSel.value;
   const weapon = weaponSel.value;
   const baked = pipeSel.value === "baked";
 
-  log(`\n=== ${race.toUpperCase()} / ${weapon} / ${baked ? "baked" : "legacy"} ===`);
+  log(`=== ${race.toUpperCase()} / ${weapon} / ${baked ? "baked" : "legacy"} ===`, {
+    kind: "meta",
+  });
 
   try {
     unit = baked
@@ -217,19 +392,32 @@ async function loadCharacter() {
       : await createAnimatedUnit(race, weapon);
 
     const mesh = unit.scene;
-    mesh.position.set(0, mesh.position.y, 0);
+    mesh.position.set(0, 0, 0);
     scene.add(mesh);
+    if (unit.equipment || baked) {
+      applyWeaponCarryTuning(mesh, weapon);
+    }
+
+    const targetH =
+      unit.characterMetrics?.targetHeight ||
+      mesh.userData?.characterMetrics?.targetHeight ||
+      1.75;
+    controls.target.set(0, targetH * 0.55, 0);
+    camera.position.set(0, targetH * 0.85, Math.max(2.8, targetH * 1.85));
+    controls.update();
+
+    await logTextureSources(race);
 
     const mats = auditCharacterMaterials(mesh);
     const health = textureHealth(mats);
-    log(`mesh: ${unit.modelPath || unit.scene?.userData?.path || "(loaded)"}`);
+    log(`mesh: ${unit.modelPath || loadedPath(race)}`);
     log(`pipeline: ${unit.pipeline || (baked ? "baked" : "legacy")}`);
     const m = unit.characterMetrics || mesh.userData?.characterMetrics;
     if (m) {
       log(
         `scale: target=${m.targetHeight.toFixed(2)}m measured=${m.measuredHeight.toFixed(2)}m ` +
           `bones=${(m.boneHeight ?? 0).toFixed(2)} bbox=${(m.bboxHeight ?? 0).toFixed(2)} ` +
-          `world=${m.worldScale.toFixed(4)} (${m.source}/${m.measureMethod ?? "?"}) · y=${m.groundedY.toFixed(3)}`,
+          `world=${m.worldScale.toFixed(4)} (${m.source}/${m.measureMethod ?? "?"}) · rootY=${mesh.position.y.toFixed(3)} (feet-mid@0)`,
       );
     } else {
       log(`scale: ${mesh.scale.x.toFixed(4)} · y=${mesh.position.y.toFixed(3)}`);
@@ -237,27 +425,29 @@ async function loadCharacter() {
     log(`materials: ${mats.withMap}/${mats.total} textured · ${mats.visible} visible meshes`);
 
     if (!health.ok) {
-      log(`WARN: ${health.detail}`);
+      log(`WARN: ${health.detail}`, { kind: "error" });
+      log("FIX: node scripts/sync-race-atlases.mjs  then hard-refresh", { kind: "error" });
       setStatus(health.label, false);
     } else {
       setStatus(`${race} · ${health.label}`);
     }
 
     populateClipList(unit.controller, baked);
-
     if (baked) {
       unit.controller.director?.primeLocomotion?.();
-      log(
-        `baked clips: ${clipNames.length} [${clipNames.slice(0, 8).join(", ")}${clipNames.length > 8 ? "…" : ""}]`,
-      );
+      logClipCatalog(unit.controller);
     } else {
       const idle = unit.controller.actions?.get("idle");
       const stats = bindStats(idle);
       log(`legacy idle bind: ${stats.bound}/${stats.total} tracks`);
       if (stats.bound < stats.total * 0.5) {
-        log("WARN: low idle bind ratio — try pipeline=baked");
+        log("WARN: low idle bind ratio — try pipeline=baked", { kind: "error" });
       }
-      if (idle) unit.controller.play("idle");
+      if (idle) {
+        unit.controller.play("idle");
+        unit.controller.mixer?.update?.(0);
+        regroundCharacter(mesh, race);
+      }
     }
 
     if (clipNames.length) {
@@ -267,6 +457,22 @@ async function loadCharacter() {
       if (autoCycle) startCycle();
     }
 
+    if (!studio) {
+      studio = mountAnimStudio(studioPanel, {
+        getWeapon: () => weaponSel.value,
+        getClipNames: () => clipNames,
+        onPlayClip: (key) => playClip(key, { loop: false }),
+        onPlayBankClip: playBankClip,
+        onWeaponTuningChange: () => {
+          if (unit?.scene) applyWeaponCarryTuning(unit.scene, weaponSel.value);
+        },
+        onSkillAnimChange: (slot, clip) => {
+          log(`skill ${slot} → ${clip}`, { kind: "meta" });
+        },
+      });
+    }
+    await studio.refresh();
+
     history.replaceState(
       null,
       "",
@@ -275,6 +481,10 @@ async function loadCharacter() {
   } catch (err) {
     reportLoadError(err);
   }
+}
+
+function loadedPath(race) {
+  return charUrl(`${race}/${race === "human" ? "WK" : race === "barbarian" ? "BRB" : race === "elf" ? "ELF" : race === "dwarf" ? "DWF" : race === "orc" ? "ORC" : "UD"}_Characters.glb`);
 }
 
 gaitSlider.addEventListener("input", () => {
@@ -319,6 +529,12 @@ document.getElementById("cycle-btn").addEventListener("click", (e) => {
   e.target.style.borderColor = autoCycle ? "#5fcf7a" : "";
 });
 
+document.getElementById("export-labels-btn")?.addEventListener("click", async () => {
+  const merged = await exportMergedLabels(unit?.controller?.clipSources);
+  downloadLabelsJson(merged);
+  log("exported animLabels.json — save to public/models/animLabels.json", { kind: "meta" });
+});
+
 window.addEventListener("unhandledrejection", (ev) => {
   reportLoadError(ev.reason);
 });
@@ -332,6 +548,11 @@ window.addEventListener("unhandledrejection", (ev) => {
     } else {
       unit.controller.update(dt);
     }
+  }
+  if (unit?.scene && coordPill) {
+    const m = unit.scene;
+    coordPill.textContent =
+      `root (${m.position.x.toFixed(1)}, ${m.position.y.toFixed(2)}, ${m.position.z.toFixed(1)}) · ground Y=0`;
   }
   controls.update();
   renderer.render(scene, camera);

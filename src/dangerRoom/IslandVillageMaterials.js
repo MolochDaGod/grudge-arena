@@ -16,6 +16,11 @@ const FILE_ALIASES = {
   T_stonebrick_02_png: "T_stonebrick_02_BC",
   T_rooftiles_05: "T_rooftiles_05_BC",
   T_rooftiles_03: "T_rooftiles_03_BC",
+  T_rooftiles_01: "T_rooftiles_01_BC",
+  T_wall_02: "T_wall_02_BC",
+  T_wood_05: "T_wood_05_BC",
+  T_wood_detail_01: "T_wood_detail_01_BC",
+  T_metal_02: "T_metal_02_BC",
 };
 
 /** Tint when a PNG is missing so props are not flat grey. */
@@ -88,6 +93,14 @@ function fallbackColorForStem(stem) {
   return key ? STEM_FALLBACK_COLORS[key] : 0x888878;
 }
 
+/** fbx2gltf embeds a 1×1 placeholder — discard so local PNGs can bind. */
+function isPlaceholderMap(tex) {
+  if (!tex?.image) return true;
+  const w = tex.image.width ?? tex.image.naturalWidth ?? 0;
+  const h = tex.image.height ?? tex.image.naturalHeight ?? 0;
+  return w <= 4 && h <= 4;
+}
+
 function upgradeMaterial(mat, map, normalMap = null, stem = "") {
   let out = mat;
   if (!mat?.isMeshStandardMaterial) {
@@ -99,6 +112,9 @@ function upgradeMaterial(mat, map, normalMap = null, stem = "") {
       side: THREE.DoubleSide,
     });
   }
+  if (out.map && isPlaceholderMap(out.map)) {
+    out.map = null;
+  }
   if (map) {
     out.map = map;
     out.color.set(0xffffff);
@@ -109,6 +125,9 @@ function upgradeMaterial(mat, map, normalMap = null, stem = "") {
     out.normalMap = normalMap;
     out.normalScale.set(1, 1);
   }
+  out.roughness = 0.88;
+  out.metalness = 0.05;
+  out.envMapIntensity = Math.max(out.envMapIntensity ?? 0.4, 0.9);
   out.needsUpdate = true;
   return out;
 }

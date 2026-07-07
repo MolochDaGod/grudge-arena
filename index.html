@@ -1483,6 +1483,7 @@
     joinQueue: runQueueMatchmaking,
     openAnimTest(race, weapon) {
       const url = '/anim-test.html?race=' + encodeURIComponent(race || 'human') +
+        '&pipeline=baked' +
         (weapon ? '&weapon=' + encodeURIComponent(weapon) : '');
       window.open(url, '_blank', 'noopener');
     },

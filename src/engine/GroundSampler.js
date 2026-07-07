@@ -14,6 +14,13 @@ export class GroundSampler {
     this._meshes = [];
     this._fallbackY = 0;
     this._rayHeight = 64;
+    /** Analytical height (e.g. islandHeight) when meshes are not streamed yet. */
+    this._heightFn = null;
+  }
+
+  /** @param {(x: number, z: number) => number} fn */
+  setHeightSampleFn(fn) {
+    this._heightFn = typeof fn === "function" ? fn : null;
   }
 
   /** Register walkable terrain meshes (updated when presets swap). */
@@ -32,19 +39,23 @@ export class GroundSampler {
    * @param {number} [hintY] — ray origin height hint
    */
   sampleY(x, z, hintY = 0) {
-    if (!this._meshes.length) return this._fallbackY;
+    if (this._meshes.length) {
+      _origin.set(x, Math.max(hintY, this._fallbackY) + this._rayHeight, z);
+      this._raycaster.set(_origin, _dir);
+      this._raycaster.far = this._rayHeight * 2;
+      this._raycaster.near = 0;
 
-    _origin.set(x, Math.max(hintY, this._fallbackY) + this._rayHeight, z);
-    this._raycaster.set(_origin, _dir);
-    this._raycaster.far = this._rayHeight * 2;
-    this._raycaster.near = 0;
-
-    const hits = this._raycaster.intersectObjects(this._meshes, true);
-    if (hits.length > 0) return hits[0].point.y;
+      const hits = this._raycaster.intersectObjects(this._meshes, true);
+      if (hits.length > 0) return hits[0].point.y;
+    }
+    if (this._heightFn) return this._heightFn(x, z);
     return this._fallbackY;
   }
 
-  /** Stick mesh feet to terrain (mutates mesh.position.y). */
+  /**
+   * Stick character root to terrain (mutates mesh.position.y).
+   * Root pivot is between feet at local Y=0 — world Y = sampled ground height.
+   */
   snapMesh(mesh, footOffset = 0) {
     if (!mesh) return;
     mesh.position.y = this.sampleY(

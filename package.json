@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "deploy": "node scripts/deploy.mjs",
     "deploy:prod": "node scripts/deploy.mjs --prod",
+    "deploy:sandbox": "node scripts/deploy-sandbox.mjs",
     "deploy:full": "node scripts/deploy.mjs --prod --assets",
     "sync:assets": "node scripts/sync-assets-r2.mjs",
     "sync:assets:dry": "node scripts/sync-assets-r2.mjs --dry-run",
@@ -18,14 +19,25 @@
     "smoke:anim-test": "node scripts/smoke-anim-test.mjs",
     "smoke:anim-test:all": "node scripts/smoke-anim-test-all-races.mjs",
     "smoke": "node scripts/smoke-arena.mjs && node scripts/smoke-anim-test.mjs",
-    "convert:island-village": "node scripts/convert-island-village.mjs"
+    "convert:island-village": "node scripts/convert-island-village.mjs",
+    "bake:anim-bank": "node scripts/bake-anim-bank.mjs locomotion uploads uploads_2026_06 sword_shield magic longbow unarmed pistol rifle",
+    "ingest:boxanims": "node scripts/ingest-boxanimations.mjs",
+    "bake:boxanims": "node scripts/bake-mixamo-staging.mjs",
+    "pipeline:boxanims": "node scripts/ingest-boxanimations.mjs && node scripts/bake-mixamo-staging.mjs && node scripts/build-anim-catalog.mjs",
+    "sync:atlases": "node scripts/sync-race-atlases.mjs",
+    "bake:characters": "node scripts/build-character-library.mjs",
+    "bake:prefabs": "node scripts/build-character-library.mjs && node scripts/build-anim-catalog.mjs",
+    "validate:assets": "node scripts/validate-arena-assets.mjs",
+    "build:anim-catalog": "node scripts/build-anim-catalog.mjs"
   },
   "devDependencies": {
     "fbx2gltf": "^0.9.7-p1",
+    "playwright": "^1.61.1",
     "vite": "^6.2.0",
     "vitest": "^4.1.7"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.2",
     "cannon-es": "^0.20.0",
     "socket.io-client": "^4.7.0",
     "three": "^0.160.0",

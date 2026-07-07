@@ -74,8 +74,8 @@ const CFG = {
 
   // Island sandbox / Fortnite TPS (CameraRig + probe RTS Player)
   TPS_INITIAL_YAW:       Math.PI,
-  TPS_INITIAL_PITCH:     0.25,
-  TPS_INITIAL_DISTANCE:  4.5,
+  TPS_INITIAL_PITCH:     0.38,
+  TPS_INITIAL_DISTANCE:  5.5,
   TPS_ZOOM_MIN:          2.0,
   TPS_ZOOM_MAX:          10.0,
   TPS_HIP_FOV:           55,
@@ -83,7 +83,7 @@ const CFG = {
   TPS_ORBIT_SENS_Y:      0.0022,
   TPS_PITCH_MIN:        -1.2,
   TPS_PITCH_MAX:         0.6,
-  TPS_PIVOT_HEIGHT:      1.55,
+  TPS_PIVOT_HEIGHT:      1.62,
 };
 
 // Tab-target nudge

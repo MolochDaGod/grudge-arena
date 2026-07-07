@@ -28,19 +28,7 @@
  *   wood       — carried wood extra
  */
 
-/** Arena weapon type → which D1 mesh slot(s) to show */
-const WEAPON_EQUIP_MAP = {
-  greatsword: { rSlot: "axe", rVariant: "A" },
-  scythe: { rSlot: "axe", rVariant: "B" },
-  sabres: { rSlot: "sword", rVariant: "A", lSlot: "shield", lVariant: "A" },
-  runeblade: { rSlot: "sword", rVariant: "B" },
-  bow: { lSlot: "bow", lVariant: null, extras: ["quiver"] },
-  staff: { lSlot: "staff", lVariant: "A" },
-  wand: { lSlot: "staff", lVariant: "A" },
-  mace: { rSlot: "hammer", rVariant: "A" },
-  rifle: { rSlot: "axe", rVariant: "A" }, // fallback
-  unarmed: {},
-};
+import { resolveWeaponMapping } from "./d1SlotCatalog.js";
 
 const WEAPON_SLOTS = [
   "sword",
@@ -98,11 +86,17 @@ export class EquipmentManager {
   /**
    * @param {THREE.Object3D} scene - The root scene from a loaded D1 GLB
    */
-  constructor(scene) {
+  constructor(scene, opts = {}) {
     // Map<slotName, Map<variant, THREE.Object3D>>
     this.slots = new Map();
     this._hasMeshes = false;
+    /** @type {object|null} arenaPrefab manifest slice */
+    this._manifest = opts.manifest ?? null;
     this._catalog(scene);
+  }
+
+  setManifest(manifest) {
+    this._manifest = manifest;
   }
 
   /** Whether this manager found any equipment meshes */
@@ -200,7 +194,7 @@ export class EquipmentManager {
       this.unequip(s);
     }
 
-    const mapping = WEAPON_EQUIP_MAP[weaponType] ?? WEAPON_EQUIP_MAP.greatsword;
+    const mapping = resolveWeaponMapping(this._manifest, weaponType);
 
     if (mapping.rSlot) this.equip(mapping.rSlot, mapping.rVariant ?? null);
     if (mapping.lSlot) this.equip(mapping.lSlot, mapping.lVariant ?? null);
@@ -244,7 +238,7 @@ export class EquipmentManager {
     if (w.rSlot) this.equip(w.rSlot, w.rVariant ?? null);
     if (w.lSlot) this.equip(w.lSlot, w.lVariant ?? null);
 
-    const mapping = WEAPON_EQUIP_MAP[weaponType] ?? WEAPON_EQUIP_MAP.greatsword;
+    const mapping = resolveWeaponMapping(this._manifest, weaponType);
     if (!w.rSlot && mapping.rSlot) this.equip(mapping.rSlot, mapping.rVariant ?? null);
     if (!w.lSlot && mapping.lSlot) this.equip(mapping.lSlot, mapping.lVariant ?? null);
 

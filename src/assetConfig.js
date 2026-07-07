@@ -2,23 +2,31 @@
  * assetConfig.js
  * Single source of truth for asset base URLs.
  *
- * In production (Vercel / any non-localhost host):
- *   Assets are served from Cloudflare R2 via assets.grudge-studio.com/arena/
+ * Local / bundled (localhost, island combat sandbox Vercel project):
+ *   Characters + island props ship in /public → /assets/...
  *
- * In local dev (localhost / 127.0.0.1):
- *   Assets are served from /public/ (Vite static serve)
+ * Production grudge-arena (Vercel / grudge-arena.grudge-studio.com):
+ *   Character meshes + atlases via /cdn/* → R2 assets.grudge-studio.com/arena/
  *
  * Usage:
  *   import { assetUrl, charUrl, animUrl, audioUrl } from './assetConfig.js';
  *   const src = charUrl('barbarian/BRB_Characters.glb');
- *   // prod → https://assets.grudge-studio.com/arena/assets/characters/barbarian/BRB_Characters.glb
- *   // dev  → /assets/characters/barbarian/BRB_Characters.glb
+ *   // arena prod → /cdn/assets/characters/barbarian/BRB_Characters.glb
+ *   // sandbox/dev → /assets/characters/barbarian/BRB_Characters.glb
  */
+
+import { isCombatSandboxHost } from "./combatSandbox.js";
 
 const IS_DEV =
   typeof window !== "undefined" &&
   (window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1");
+
+/** Self-contained deploys (sandbox) bundle characters like island props — no R2 hop. */
+export function useBundledArenaAssets() {
+  if (IS_DEV) return true;
+  return isCombatSandboxHost();
+}
 
 // R2 direct URL (for server-side reference only — never used in the browser
 // because cross-origin fetch from vercel.app is blocked by CORS).
@@ -30,7 +38,7 @@ export const LOCAL_BASE = ""; // Vite serves /public as root
 export const CDN_PROXY = "/cdn";
 
 /** Resolved base — use this for all assets */
-export const ASSET_BASE = IS_DEV ? LOCAL_BASE : CDN_PROXY;
+export const ASSET_BASE = useBundledArenaAssets() ? LOCAL_BASE : CDN_PROXY;
 
 /**
  * Build a full URL for any public/ asset.
@@ -38,7 +46,7 @@ export const ASSET_BASE = IS_DEV ? LOCAL_BASE : CDN_PROXY;
  */
 export function assetUrl(path) {
   const p = path.startsWith("/") ? path.slice(1) : path;
-  return IS_DEV ? `/${p}` : `${CDN_PROXY}/${p}`;
+  return useBundledArenaAssets() ? `/${p}` : `${CDN_PROXY}/${p}`;
 }
 
 /** Shorthand for public/assets/characters/... */
@@ -90,4 +98,14 @@ export function islandAssetUrl(path) {
   const p = path.startsWith("/") ? path.slice(1) : path;
   const rel = p.startsWith("assets/island/") ? p : `assets/island/${p}`;
   return `/${rel}`;
+}
+
+/**
+ * Baked Bip001 JSON clips — bundled under /anims/baked on sandbox/dev, CDN proxy in prod.
+ * @param {string} rel - e.g. 'locomotion/walking' (no .json)
+ */
+export function bakedAnimUrl(rel) {
+  const p = rel.startsWith("/") ? rel.slice(1) : rel;
+  if (useBundledArenaAssets()) return `/anims/baked/${p}.json`;
+  return `/api/assets/anims/baked/${p}.json`;
 }

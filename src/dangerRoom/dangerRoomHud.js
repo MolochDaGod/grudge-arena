@@ -48,6 +48,7 @@ function buildShell(presetName) {
       <span class="dr-mm-value" id="dr-motion-label">IDLE</span>
       <span>·</span>
       <span id="dr-weapon-label">Weapon</span>
+      ${sandbox ? `<span class="dr-height-readout" id="dr-height-label"></span>` : ""}
       ${sandbox ? `<span class="dr-focus-filter" id="dr-focus-filter">FOCUS: ALL</span>` : ""}
       <span class="dr-combo-badge" id="dr-combo-badge" hidden>Hit <span id="dr-combo-n">1</span></span>
     </div>
@@ -161,6 +162,10 @@ export function updateDangerHud(opts = {}) {
 
   if (opts.motion && motion) motion.textContent = opts.motion;
   if (opts.weapon && weapon) weapon.textContent = opts.weapon;
+  if (opts.height != null) {
+    const h = document.getElementById("dr-height-label");
+    if (h) h.textContent = `· ${opts.height.toFixed(2)}m`;
+  }
   if (opts.accent && rootEl) {
     rootEl.style.setProperty("--dr-accent", opts.accent);
   }
@@ -187,7 +192,12 @@ export function updateDangerHud(opts = {}) {
       crosshair.classList.toggle("focus-enemy", kind === "enemy");
       crosshair.classList.toggle("focus-neutral", kind === "neutral");
       crosshair.classList.toggle("focus-harvest", kind === "harvestable");
-      if (magnet) magnet.style.opacity = String(0.25 + (softLock.magnet || 0) * 0.55);
+      if (magnet) {
+        magnet.style.opacity = String(0.25 + (softLock.magnet || 0) * 0.55);
+        if (softLock.zoneRadius > 0) {
+          crosshair.style.setProperty("--magnet-r", `${softLock.zoneRadius}px`);
+        }
+      }
     } else {
       crosshair.style.left = "50%";
       crosshair.style.top = "50%";
@@ -228,20 +238,10 @@ export function updateDangerHud(opts = {}) {
   }
 
   const sl = opts.softLock;
-  if (softZone && sl?.active && sl.zoneW > 0) {
-    softZone.hidden = false;
-    softZone.style.left = `${sl.zoneX}px`;
-    softZone.style.top = `${sl.zoneY}px`;
-    softZone.style.width = `${sl.zoneW}px`;
-    softZone.style.height = `${sl.zoneH}px`;
-    softZone.classList.toggle("dr-softlock-hard", !!sl.hardLock);
-    softZone.classList.toggle("focus-enemy", kind === "enemy");
-    softZone.classList.toggle("focus-neutral", kind === "neutral");
-    softZone.classList.toggle("focus-harvest", kind === "harvestable");
-  } else if (softZone) {
+  // Radial soft-focus only — never show the dashed rectangle (magnet ring + pip convey aim).
+  if (softZone) {
     softZone.hidden = true;
   }
-
   if (targetPip && sl?.active && sl.targetX != null) {
     targetPip.hidden = false;
     targetPip.style.left = `${sl.targetX}px`;

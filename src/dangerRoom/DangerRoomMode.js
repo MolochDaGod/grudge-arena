@@ -72,32 +72,35 @@ import {
   focusHardLockCameraAssistRate,
   getFocusSoftLockHudState,
 } from "../engine/FocusSoftLock.js";
-import { animUrl } from "../assetConfig.js";
-import { loadAnimClip } from "../modelLoader.js";
+import { BAKED_IDLE_EXAMINE_REL, loadBakedClip } from "../bakedAnimLoader.js";
+import { reapplyRaceTextures } from "../modelLoader.js";
+import { sampleIslandHeight } from "./IslandTerrain.js";
+import { loadIslandOutdoorSky, applyIslandEnvMap } from "./IslandOutdoorSky.js";
 
-/** Island neutrals use Standing Idle 03 Examine overlay on the baked pipeline. */
+/** Island neutrals — baked Bip001 examine idle via AnimationDirector overlay. */
 export async function applyNeutralExamineIdle(units) {
-  const clip = await loadAnimClip(animUrl("longbow/standing idle 03 examine.glb"));
-  if (!clip) return;
-  clip.name = "idleExamine";
+  let clip;
+  try {
+    clip = await loadBakedClip(BAKED_IDLE_EXAMINE_REL);
+    clip.name = "idleExamine";
+  } catch (err) {
+    console.warn("[danger] baked idleExamine unavailable:", err.message);
+    return;
+  }
   for (const u of units || []) {
-    if (u.team !== "N" || !u.controller) continue;
-    const examine = clip.clone();
-    u.controller.clips?.set?.("idleExamine", examine);
-    u.controller.actions?.set?.(
-      "idleExamine",
-      u.mixer.clipAction(examine, u.mesh),
-    );
-    u.controller.play("idleExamine", { loop: true, fadeDuration: 0.35 });
+    if (u.team !== "N" || !u.controller?.director) continue;
+    u.controller.clips?.set?.("idleExamine", clip.clone());
+    u.controller.director.playLoop(clip, 0.35);
+    u.controller.currentState = "idleExamine";
   }
 }
 
 /** Training dummies — enemy team targets that don't chase the player. */
 export function getDangerNeutralTeams() {
   return [
-    { heroId: "human", weapon: "staff", isPlayer: false, tier: 0, displayName: "Island Forager", neutral: true },
-    { heroId: "dwarf", weapon: "mace", isPlayer: false, tier: 0, displayName: "Rock Trader", neutral: true },
-    { heroId: "elf", weapon: "bow", isPlayer: false, tier: 0, displayName: "Wood Gatherer", neutral: true },
+    { race: "human", weapon: "staff", isPlayer: false, tier: 1, displayName: "Island Forager", neutral: true },
+    { race: "dwarf", weapon: "mace", isPlayer: false, tier: 1, displayName: "Rock Trader", neutral: true },
+    { race: "elf", weapon: "bow", isPlayer: false, tier: 1, displayName: "Wood Gatherer", neutral: true },
   ];
 }
 
@@ -115,17 +118,35 @@ export function getDangerTrainingTeams(playerRace, playerWeapon, buildConfig) {
     },
   ];
   const TEAM_B = [
-    { heroId: "orc", weapon: "greatsword", isPlayer: false, tier: 1, displayName: "Training Dummy" },
-    { heroId: "elf", weapon: "bow", isPlayer: false, tier: 1, displayName: "Archer Dummy" },
-    { heroId: "undead", weapon: "staff", isPlayer: false, tier: 1, displayName: "Mage Dummy" },
+    { race: "orc", weapon: "greatsword", isPlayer: false, tier: 1, displayName: "Training Dummy" },
+    { race: "elf", weapon: "bow", isPlayer: false, tier: 1, displayName: "Archer Dummy" },
+    { race: "undead", weapon: "staff", isPlayer: false, tier: 1, displayName: "Mage Dummy" },
   ];
   return { TEAM_A, TEAM_B };
 }
 
-/** Compact spawns inside the 32×32 training chamber. */
+let _useIslandSpawnHeights = false;
+
+/** Enable heightfield Y for combat-island spawns (metres, not flat y=0). */
+export function setIslandSpawnHeights(enabled) {
+  _useIslandSpawnHeights = !!enabled;
+}
+
+/** True when spawns include island heightfield Y (combat sandbox). */
+export function isIslandSpawnHeightsEnabled() {
+  return _useIslandSpawnHeights;
+}
+
+function spawnY(x, z) {
+  return _useIslandSpawnHeights ? sampleIslandHeight(x, z) : 0;
+}
+
+/** Compact spawns inside the 32×32 training chamber (island: on heightfield). */
 export function getDangerSpawnPosition(teamId, slot, teamSize) {
   if (teamId === "A") {
-    return new THREE.Vector3(0, 0, 5);
+    const x = 0;
+    const z = 5;
+    return new THREE.Vector3(x, spawnY(x, z), z);
   }
   if (teamId === "N") {
     const spots = [
@@ -134,14 +155,48 @@ export function getDangerSpawnPosition(teamId, slot, teamSize) {
       [5, -12],
     ];
     const s = spots[slot % spots.length];
-    return new THREE.Vector3(s[0], 0, s[1]);
+    return new THREE.Vector3(s[0], spawnY(s[0], s[1]), s[1]);
   }
   const x = (slot - (teamSize - 1) / 2) * 3.5;
-  return new THREE.Vector3(x, 0, -7);
+  const z = -7;
+  return new THREE.Vector3(x, spawnY(x, z), z);
 }
 
+/**
+ * Bip001 D1 GLBs face +X at yaw 0. Island spawns use −Z / +Z lanes (not arena ±X).
+ * Team A @ z+5 faces dummies @ z−7 (−Z) → π/2. Team B faces player (+Z) → −π/2.
+ */
 export function getDangerSpawnFacing(teamId) {
-  return teamId === "A" ? Math.PI : 0;
+  if (teamId === "A") return Math.PI / 2;
+  if (teamId === "N") return -Math.PI / 2;
+  return -Math.PI / 2;
+}
+
+/** Build island / chamber geometry before character GLBs finish loading. */
+export function prebuildDangerEnvironment(arena) {
+  if (arena._dangerEnv) return arena._dangerEnv;
+  const state = getDangerRoomState();
+  arena._dangerEnv = buildDangerRoomEnvironment(arena.scene, state.presetId);
+  arena._dangerClampRadius = arena._dangerEnv.clampRadius;
+  arena._obstacleMeshes = arena._dangerEnv.obstacleMeshes;
+  arena._terrainMeshes = arena._dangerEnv.terrainMeshes;
+  if (isCombatSandboxUi()) {
+    arena._dangerEnv.terrainLoadPromise?.then((island) => {
+      if (!island || !arena._dangerEnv) return;
+      arena._dangerEnv.terrainMeshes = island.terrainMeshes;
+      arena._dangerEnv.clampRadius = island.clampRadius;
+      arena._terrainMeshes = island.terrainMeshes;
+      arena._dangerClampRadius = island.clampRadius;
+      if (island.obstacleMeshes?.length) {
+        arena._dangerEnv.obstacleMeshes = [
+          ...arena._dangerEnv.obstacleMeshes,
+          ...island.obstacleMeshes,
+        ];
+        arena._obstacleMeshes = arena._dangerEnv.obstacleMeshes;
+      }
+    });
+  }
+  return arena._dangerEnv;
 }
 
 /**
@@ -150,6 +205,7 @@ export function getDangerSpawnFacing(teamId) {
  */
 export function bootstrapDangerRoom(arena) {
   setDangerMode(true);
+  if (!arena._dangerEnv) prebuildDangerEnvironment(arena);
   if (isCombatSandboxUi()) {
     document.body.classList.add("combat-sandbox-active");
   }
@@ -201,8 +257,9 @@ export function bootstrapDangerRoom(arena) {
   setDangerWeaponLabel(weaponName);
   mountHarvestForArena(arena);
   if (isCombatSandboxUi()) {
+    setIslandSpawnHeights(true);
     syncUnitsToFocusRegistry(arena.allUnits);
-    arena._dangerEnv?.terrainLoadPromise?.then((island) => {
+    arena._dangerEnv?.terrainLoadPromise?.then(async (island) => {
       if (!island || !arena._dangerEnv) return;
       arena._dangerEnv.terrainMeshes = island.terrainMeshes;
       arena._dangerEnv.clampRadius = island.clampRadius;
@@ -216,9 +273,24 @@ export function bootstrapDangerRoom(arena) {
         arena._obstacleMeshes = arena._dangerEnv.obstacleMeshes;
         arena.orbitCamera?.setCollisionMeshes?.(arena._obstacleMeshes);
       }
+      for (const mesh of island.terrainMeshes || []) {
+        arena.collisionSystem?.addCollider(mesh, "environment");
+      }
+      for (const mesh of island.obstacleMeshes || []) {
+        arena.collisionSystem?.addCollider(mesh, "environment");
+      }
+      arena._groundSampler?.setHeightSampleFn?.(sampleIslandHeight);
       arena._groundSampler?.setTerrainMeshes?.(island.terrainMeshes);
+      const outdoor = await loadIslandOutdoorSky(arena.renderer, arena.scene);
+      if (outdoor?.envMap && arena._dangerEnv?.root) {
+        applyIslandEnvMap(arena._dangerEnv.root, outdoor.envMap);
+        arena.renderer.toneMappingExposure = 1.15;
+      }
       for (const u of arena.allUnits || []) {
         arena._groundSampler?.snapMesh?.(u.mesh);
+      }
+      if (arena.playerUnit?.mesh) {
+        arena.orbitCamera?.snapBehind?.();
       }
     });
     arena._focusFilterToast = (label) => {
@@ -285,12 +357,14 @@ export function teardownDangerRoom(arena) {
 }
 
 /** Live D1 mesh tweak without full reload (armor / weapon variant only). */
-export function applyDangerLiveLoadout(arena) {
+export async function applyDangerLiveLoadout(arena) {
   const unit = arena.playerUnit;
   if (!unit?.equipment) return;
   const st = getD1LoadoutState();
   const weapon = arena._getWeaponTypeKey?.() ?? st.weapon;
-  applyLiveD1ToEquipment(unit.equipment, weapon, getD1LoadoutForRace(st.race));
+  const race = st.race || unit.race || "human";
+  applyLiveD1ToEquipment(unit.equipment, weapon, getD1LoadoutForRace(race));
+  await reapplyRaceTextures(unit.mesh, race);
   syncGearCatalog(unit.equipment);
 }
 
@@ -394,8 +468,12 @@ export function tickDangerRoomHud(arena, delta = 0.016) {
   const crosshairBase = getDangerRoomState().crosshairBase ?? 10;
   const focusHud = sandbox ? getFocusSoftLockHudState() : {};
   const locked = sandbox ? getLockedFocusTarget() : null;
+  const metrics = arena.playerUnit?.characterMetrics || arena.playerUnit?.mesh?.userData?.characterMetrics;
+  const measuredH = metrics?.measuredHeight ?? metrics?.targetHeight;
+
   updateDangerHud({
     motion,
+    height: measuredH,
     weapon: locked
       ? `${locked.label} · ${locked.kind.toUpperCase()}`
       : (weapon ? `${weapon.name} · ${feel.title}` : feel.title),

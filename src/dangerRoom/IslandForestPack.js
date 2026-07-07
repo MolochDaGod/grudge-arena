@@ -38,6 +38,11 @@ function fixMaterialMaps(mat) {
     next.map.needsUpdate = true;
   }
   next.color.set(0xffffff);
+  if (next.emissive?.set) next.emissive.set(0x000000);
+  if (next.emissiveIntensity !== undefined) next.emissiveIntensity = 0;
+  next.roughness = Math.min(next.roughness ?? 1, 0.95);
+  next.metalness = Math.min(next.metalness ?? 0, 0.08);
+  next.envMapIntensity = Math.max(next.envMapIntensity ?? 0.4, 0.85);
   next.side = THREE.DoubleSide;
   next.needsUpdate = true;
   return next;

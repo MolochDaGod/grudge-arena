@@ -1,0 +1,258 @@
+{
+  "version": 1,
+  "generated": "2026-07-07T03:39:54.560Z",
+  "ok": true,
+  "conventions": {
+    "units": "metres",
+    "characterFacingYaw": "Bip001 faces +X at yaw 0; spawn uses π/2 for −Z",
+    "textureSource": "public/assets/characters/{race}/textures/ — not GLB embed",
+    "scaleBake": "skinned-root-only — armature scale, vertices+bones bound",
+    "rootConvention": "feet-midpoint-y0",
+    "prefabSchema": "arenaPrefab/1.0"
+  },
+  "characters": {
+    "human": {
+      "race": "human",
+      "path": "/assets/characters/human/WK_Characters.glb",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "vertexHeightM": 0.411,
+      "worldHeightM": 1.75,
+      "rootScale": 4.257815862375984,
+      "rootScaleNodes": [
+        {
+          "name": "RootNode",
+          "scale": [
+            4.257815862375984,
+            4.257815862375984,
+            4.257815862375984
+          ]
+        }
+      ],
+      "targetHeightM": 1.75,
+      "boneCount": 18,
+      "texture": {
+        "ok": true,
+        "bytes": 8429410,
+        "path": "assets/characters/human/textures/Map__9.png"
+      },
+      "meshCount": 42
+    },
+    "barbarian": {
+      "race": "barbarian",
+      "path": "/assets/characters/barbarian/BRB_Characters.glb",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "vertexHeightM": 0.3553,
+      "worldHeightM": 1.96,
+      "rootScale": 5.516550650957672,
+      "rootScaleNodes": [
+        {
+          "name": "RootNode",
+          "scale": [
+            5.516550650957672,
+            5.516550650957672,
+            5.516550650957672
+          ]
+        }
+      ],
+      "targetHeightM": 1.9600000000000002,
+      "boneCount": 18,
+      "texture": {
+        "ok": true,
+        "bytes": 8746603,
+        "path": "assets/characters/barbarian/textures/Map__9.png"
+      },
+      "meshCount": 47
+    },
+    "elf": {
+      "race": "elf",
+      "path": "/assets/characters/elf/ELF_Characters.glb",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "vertexHeightM": 0.6049,
+      "worldHeightM": 1.8375,
+      "rootScale": 3.037463951333395,
+      "rootScaleNodes": [
+        {
+          "name": "RootNode",
+          "scale": [
+            3.037463951333395,
+            3.037463951333395,
+            3.037463951333395
+          ]
+        }
+      ],
+      "targetHeightM": 1.8375000000000001,
+      "boneCount": 18,
+      "texture": {
+        "ok": true,
+        "bytes": 9687012,
+        "path": "assets/characters/elf/textures/Map__9.png"
+      },
+      "meshCount": 47
+    },
+    "dwarf": {
+      "race": "dwarf",
+      "path": "/assets/characters/dwarf/DWF_Characters.glb",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "vertexHeightM": 0.3634,
+      "worldHeightM": 1.4875,
+      "rootScale": 4.093081408846387,
+      "rootScaleNodes": [
+        {
+          "name": "RootNode",
+          "scale": [
+            4.093081408846387,
+            4.093081408846387,
+            4.093081408846387
+          ]
+        }
+      ],
+      "targetHeightM": 1.4875,
+      "boneCount": 18,
+      "texture": {
+        "ok": true,
+        "bytes": 8054377,
+        "path": "assets/characters/dwarf/textures/Map__12.png"
+      },
+      "meshCount": 48
+    },
+    "orc": {
+      "race": "orc",
+      "path": "/assets/characters/orc/ORC_Characters.glb",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "vertexHeightM": 0.4765,
+      "worldHeightM": 1.89,
+      "rootScale": 3.9660528082417112,
+      "rootScaleNodes": [
+        {
+          "name": "RootNode",
+          "scale": [
+            3.9660528082417112,
+            3.9660528082417112,
+            3.9660528082417112
+          ]
+        }
+      ],
+      "targetHeightM": 1.8900000000000001,
+      "boneCount": 20,
+      "texture": {
+        "ok": true,
+        "bytes": 4595498,
+        "path": "assets/characters/orc/textures/Map__11.webp"
+      },
+      "meshCount": 48
+    },
+    "undead": {
+      "race": "undead",
+      "path": "/assets/characters/undead/UD_Characters.glb",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "vertexHeightM": 0.4083,
+      "worldHeightM": 1.6625,
+      "rootScale": 4.072163586618506,
+      "rootScaleNodes": [
+        {
+          "name": "RootNode",
+          "scale": [
+            4.072163586618506,
+            4.072163586618506,
+            4.072163586618506
+          ]
+        }
+      ],
+      "targetHeightM": 1.6624999999999999,
+      "boneCount": 18,
+      "texture": {
+        "ok": true,
+        "bytes": 4799856,
+        "path": "assets/characters/undead/textures/Map__11.webp"
+      },
+      "meshCount": 50
+    }
+  },
+  "islandProps": [
+    {
+      "path": "assets/island/forest_pack.glb",
+      "ok": true,
+      "errors": [],
+      "sizeM": {
+        "x": 1.43,
+        "y": 1.49,
+        "z": 2.29
+      },
+      "rootScale": 1
+    },
+    {
+      "path": "assets/island/village/glb/SM_PROP_well.glb",
+      "ok": true,
+      "errors": [],
+      "sizeM": {
+        "x": 2.5,
+        "y": 5.17,
+        "z": 4.48
+      },
+      "rootScale": 1,
+      "warnings": [
+        "embedded 1×1 texture — bind external textures"
+      ]
+    },
+    {
+      "path": "assets/island/village/glb/SM_BLD_body_v01_01.glb",
+      "ok": true,
+      "errors": [],
+      "sizeM": {
+        "x": 8.21,
+        "y": 14.28,
+        "z": 7.11
+      },
+      "rootScale": 1,
+      "warnings": [
+        "embedded 1×1 texture — bind external textures"
+      ]
+    }
+  ],
+  "bakedAnims": {
+    "ok": true,
+    "errors": [],
+    "clips": {
+      "idle": {
+        "ok": true,
+        "path": "anims/baked/sword_shield/sword and shield idle.json"
+      },
+      "walk": {
+        "ok": true,
+        "path": "anims/baked/locomotion/walking.json"
+      },
+      "run": {
+        "ok": true,
+        "path": "anims/baked/sword_shield/sword and shield run.json"
+      },
+      "sprint": {
+        "ok": true,
+        "path": "(cloned from run at runtime)"
+      }
+    }
+  },
+  "boxAnimations": {
+    "ok": true,
+    "count": 138,
+    "errors": [],
+    "ingested": 138
+  },
+  "prefabManifest": {
+    "ok": true,
+    "errors": [],
+    "heroCount": 6,
+    "prefabCount": 6
+  }
+}

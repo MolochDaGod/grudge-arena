@@ -9,6 +9,8 @@ import {
   textureHealth,
   remediationHint,
   CharacterLoadError,
+  isPlaceholderTexture,
+  isPlaceholderMapImage,
 } from "../src/characterResources.js";
 
 describe("characterResources", () => {
@@ -31,16 +33,20 @@ describe("characterResources", () => {
     expect(paths.at(-1)).toContain(".fbx");
   });
 
-  it("raceTextureFallbackPaths lists cdn then grudge6 mirror", () => {
-    const paths = raceTextureFallbackPaths("dwarf");
-    expect(paths[0]).toContain("Map__12.png");
-    expect(paths[1]).toContain("/api/assets/arena/assets/characters/dwarf");
+  it("raceTextureFallbackPaths lists bundled, arena mirror, then grudge6 webp", () => {
+    const paths = raceTextureFallbackPaths("barbarian");
+    expect(paths[0]).toContain("Map__9.png");
+    expect(paths[1]).toContain("/api/assets/arena/assets/characters/barbarian");
+    expect(paths[2]).toContain("BRB_StandardUnits_texture.webp");
   });
 
   it("textureHealth flags missing and partial atlases", () => {
     expect(textureHealth({ withMap: 0, total: 42 }).ok).toBe(false);
     expect(textureHealth({ withMap: 10, total: 42 }).level).toBe("warn");
     expect(textureHealth({ withMap: 42, total: 42 }).ok).toBe(true);
+    expect(
+      textureHealth({ withMap: 42, total: 42, placeholderMaps: 42 }).ok,
+    ).toBe(false);
   });
 
   it("remediationHint maps error codes to operator actions", () => {
@@ -51,6 +57,17 @@ describe("characterResources", () => {
 
   it("auditCharacterMaterials counts mesh materials", () => {
     const stats = auditCharacterMaterials({ traverse() {} });
-    expect(stats).toEqual({ total: 0, withMap: 0, visible: 0 });
+    expect(stats).toEqual({ total: 0, withMap: 0, placeholderMaps: 0, visible: 0 });
+  });
+
+  it("isPlaceholderTexture accepts loader Texture.image (not only Material.map)", () => {
+    expect(isPlaceholderMapImage({ width: 2048, height: 2048 })).toBe(false);
+    expect(isPlaceholderTexture({ image: { width: 2048, height: 2048 } })).toBe(
+      false,
+    );
+    expect(isPlaceholderTexture({ image: { width: 1, height: 1 } })).toBe(true);
+    expect(
+      isPlaceholderTexture({ map: { image: { width: 2048, height: 2048 } } }),
+    ).toBe(false);
   });
 });

@@ -46,12 +46,15 @@ import {
 } from './src/engine/ProceduralArena.js';
 import {
   bootstrapDangerRoom,
+  prebuildDangerEnvironment,
   teardownDangerRoom,
   applyNeutralExamineIdle,
   getDangerTrainingTeams,
   getDangerNeutralTeams,
   getDangerSpawnPosition,
   getDangerSpawnFacing,
+  setIslandSpawnHeights,
+  isIslandSpawnHeightsEnabled,
   tickDangerRoomSystems,
   dangerRoomCycleTarget,
   applyDangerLiveLoadout,
@@ -83,6 +86,9 @@ import { GroundSampler } from './src/engine/GroundSampler.js';
 import { syncAbilityBarFlash, setDangerWeaponLabel } from './src/dangerRoom/dangerRoomHud.js';
 import { getAnimOverdrive } from './src/dangerRoom/dangerRoomStore.js';
 import { isCombatSandboxMode } from './src/combatSandbox.js';
+import { sampleIslandHeight } from './src/dangerRoom/IslandTerrain.js';
+import { resolveSkillAnim } from './src/skillAnimMap.js';
+import { vfxForClip } from './src/combatVfx.js';
 
 const VALID_RACES = ["human", "barbarian", "elf", "dwarf", "orc", "undead"];
 const VALID_CLASSES = ["warrior", "mage", "ranger", "worge"];
@@ -125,7 +131,9 @@ class GrudgeArena {
 
     this.world = new World();
     this.collisionSystem = new CollisionSystem();
-    this.physicsWorld = null;       // cannon-es PhysicsWorld
+    this.physicsWorld = null;       // cannon-es or RapierPhysicsWorld (sandbox)
+    this._cannonHitbox = null;      // cannon-es world for melee hitboxes when using Rapier
+    this._usingRapier = false;
     this.hitboxManager = null;      // HitboxManager (weapon hitboxes)
     this.particleSystem = null;
     this.spriteSystem = null;
@@ -189,9 +197,18 @@ class GrudgeArena {
     this.particleSystem = new ParticleSystem(this.scene);
     this.spriteSystem = new SpriteSystem(this.scene);
 
-    // Initialize physics world (cannon-es) and hitbox manager
-    this.physicsWorld = new PhysicsWorld();
-    this.hitboxManager = new HitboxManager(this.physicsWorld.world);
+    // Physics — Rapier heightfield + capsules on island sandbox; cannon-es elsewhere
+    if (isCombatSandboxMode()) {
+      const { RapierPhysicsWorld } = await import("./src/engine/RapierPhysicsWorld.js");
+      this.physicsWorld = await RapierPhysicsWorld.create();
+      this._usingRapier = true;
+      this._cannonHitbox = new PhysicsWorld();
+      this._cannonHitbox.world.gravity.set(0, 0, 0);
+      this.hitboxManager = new HitboxManager(this._cannonHitbox.world);
+    } else {
+      this.physicsWorld = new PhysicsWorld();
+      this.hitboxManager = new HitboxManager(this.physicsWorld.world);
+    }
 
     await this._createArena();
     if (!this.dangerMode) {
@@ -208,6 +225,11 @@ class GrudgeArena {
 
     try {
       setProgress(10, "Loading engine modules...");
+      if (this.dangerMode && isCombatSandboxMode()) {
+        setIslandSpawnHeights(true);
+        prebuildDangerEnvironment(this);
+        setProgress(15, "Building island terrain...");
+      }
       const [matchMod, targetMod, aiMod, modelMod] = await Promise.all([
         import("./src/arenaMatch.js"),
         import("./src/targetSystem.js"),
@@ -244,7 +266,6 @@ class GrudgeArena {
       } else {
         TEAM_A = [
           {
-            heroId: DefaultHeroForRace[race] || "human",
             race,
             weapon: playerWeapon,
             isPlayer: true,
@@ -252,13 +273,13 @@ class GrudgeArena {
             displayName: this._getPlayerDisplayName(buildConfig),
             profile: playerProfile,
           },
-          { heroId: "elf", weapon: "bow", isPlayer: false, tier: 2 },
-          { heroId: "dwarf", weapon: "sabres", isPlayer: false, tier: 2 },
+          { race: "elf", weapon: "bow", isPlayer: false, tier: 2 },
+          { race: "dwarf", weapon: "sabres", isPlayer: false, tier: 2 },
         ];
         TEAM_B = [
-          { heroId: "orc", weapon: "greatsword", isPlayer: false, tier: 2 },
-          { heroId: "barbarian", weapon: "mace", isPlayer: false, tier: 2 },
-          { heroId: "undead", weapon: "staff", isPlayer: false, tier: 3 },
+          { race: "orc", weapon: "greatsword", isPlayer: false, tier: 2 },
+          { race: "barbarian", weapon: "mace", isPlayer: false, tier: 2 },
+          { race: "undead", weapon: "staff", isPlayer: false, tier: 3 },
         ];
       }
 
@@ -284,6 +305,14 @@ class GrudgeArena {
       this.playerUnit = this.allUnits.find((u) => u.isPlayer);
       this.playerEntity = this.playerUnit?.entity;
 
+      if (this.playerUnit?.characterMetrics) {
+        const m = this.playerUnit.characterMetrics;
+        console.log(
+          `[arena] ${m.race || this.config.race}: height ${m.measuredHeight?.toFixed(2)}m ` +
+            `(target ${m.targetHeight?.toFixed(2)}m)`,
+        );
+      }
+
       // Hydrate the player's persistent inventory (backend → localStorage → memory).
       // Fire-and-forget: the match can start before the network resolves; the UI
       // will re-render once the inventory component version bumps.
@@ -304,10 +333,8 @@ class GrudgeArena {
       );
       for (const u of this.allUnits) this.targeting.register(u);
 
-      // Create physics bodies + hitboxes for all units, detectors for AI
-      this._initPhysicsBodies();
-
       if (!this.dangerMode) {
+        this._initPhysicsBodies();
         for (const u of this.allUnits) {
           if (!u.isPlayer) {
             const physicsCtx = {
@@ -345,7 +372,11 @@ class GrudgeArena {
         );
         if (this.dangerMode) {
           this.playerController.controlScheme = 'tps';
-          this.playerController.groundSampler = this._groundSampler;
+          if (this.playerController.setGroundSampler) {
+            this.playerController.setGroundSampler(this._groundSampler);
+          } else {
+            this.playerController.groundSampler = this._groundSampler;
+          }
           if (this._dangerClampRadius) {
             this.playerController.clampRadius = this._dangerClampRadius;
           }
@@ -411,6 +442,10 @@ class GrudgeArena {
         }
       }
 
+      if (this.dangerMode && !isCombatSandboxMode()) {
+        this._initPhysicsBodies();
+      }
+
       if (this.dangerMode) {
         if (isCombatSandboxMode()) {
           await applyNeutralExamineIdle(this.allUnits);
@@ -426,13 +461,21 @@ class GrudgeArena {
         this._setupSoftLockInput();
         bootstrapDangerRoom(this);
         this._groundSampler = new GroundSampler();
+        if (isCombatSandboxMode()) {
+          this._groundSampler.setHeightSampleFn(sampleIslandHeight);
+        }
         this._groundSampler.setTerrainMeshes(this._terrainMeshes);
         if (this.playerController) {
-          this.playerController.groundSampler = this._groundSampler;
+          if (this.playerController.setGroundSampler) {
+            this.playerController.setGroundSampler(this._groundSampler);
+          } else {
+            this.playerController.groundSampler = this._groundSampler;
+          }
         }
         for (const u of this.allUnits) {
           this._groundSampler.snapMesh(u.mesh);
         }
+        this._initPhysicsBodies();
         if (this.playerUnit?.equipment) {
           syncGearCatalog(this.playerUnit.equipment);
         }
@@ -447,7 +490,9 @@ class GrudgeArena {
           this,
           this._dangerEnv?.outdoor,
         );
-        this.postFX = new CombatPostFX(this.renderer, this.scene, this.camera);
+        this.postFX = new CombatPostFX(this.renderer, this.scene, this.camera, {
+          bloom: false,
+        });
       }
 
       const gameUI = document.getElementById("gameUI");
@@ -680,68 +725,36 @@ class GrudgeArena {
       WeaponDefinitions[comp.weapon] ||
       WeaponDefinitions[WeaponTypes.GREATSWORD];
 
-    // Use hero prefab if heroId is specified, otherwise fall back to race/weapon.
-    // If hero asset loading fails (e.g. 404 in production), fall through to the
-    // generic race model instead of letting the whole team load reject.
+    // Grudge-studio baked Bip001 pipeline — CDN D1 GLB + rotation-only JSON clips.
+    // Legacy Mixamo (createAnimatedUnit / createHeroUnit) is not used in prod paths.
+    const raceId =
+      comp.race ||
+      (comp.heroId ? getHero(comp.heroId)?.race : null) ||
+      comp.heroId ||
+      "human";
+    const d1 = getD1LoadoutForRace(raceId);
+    const strictD1 = this.dangerMode || isCombatSandboxMode();
     let unitResult;
-    if (comp.heroId && !this.dangerMode) {
-      const hero = getHero(comp.heroId);
-      if (hero) {
-        try {
-          unitResult = await modelMod.createHeroUnit(
-            hero,
-            comp.weapon || null,
-            {
-              tier: comp.tier || 1,
-            },
-          );
-        } catch (err) {
-          console.warn(
-            `[arena] hero "${comp.heroId}" model load failed; falling back to race model:`,
-            err.message,
-          );
-        }
+    try {
+      unitResult = await modelMod.createBakedGrudge6Unit(raceId, comp.weapon, {
+        tier: comp.tier || 1,
+        requireD1: strictD1,
+        meshLoadout: d1,
+      });
+    } catch (err) {
+      if (strictD1) {
+        throw new Error(
+          `[arena] baked D1 pipeline required for ${raceId} — ${err.message}`,
+        );
       }
-    }
-    if (!unitResult) {
-      const raceId =
-        comp.race ||
-        (comp.heroId ? getHero(comp.heroId)?.race : null) ||
-        comp.heroId ||
-        "human";
-      if (this.dangerMode) {
-        const d1 = getD1LoadoutForRace(raceId);
-        try {
-          unitResult = await modelMod.createBakedGrudge6Unit(raceId, comp.weapon, {
-            tier: comp.tier || 1,
-            requireD1: true,
-            meshLoadout: d1,
-          });
-        } catch (err) {
-          console.warn(
-            `[arena] baked D1 load failed for ${raceId}; retrying without D1 gate:`,
-            err.message,
-          );
-          try {
-            unitResult = await modelMod.createBakedGrudge6Unit(raceId, comp.weapon, {
-              tier: comp.tier || 1,
-              meshLoadout: d1,
-            });
-          } catch (err2) {
-            console.warn(`[arena] baked fallback failed:`, err2.message);
-          }
-        }
-      }
-      if (!unitResult) {
-        if (this.dangerMode) {
-          throw new Error(
-            `[arena] baked pipeline required in Danger Room for ${raceId} — legacy Mixamo fallback disabled`,
-          );
-        }
-        unitResult = await modelMod.createAnimatedUnit(raceId, comp.weapon, {
-          tier: comp.tier || 1,
-        });
-      }
+      console.warn(
+        `[arena] baked D1 load failed for ${raceId}; retrying without D1 gate:`,
+        err.message,
+      );
+      unitResult = await modelMod.createBakedGrudge6Unit(raceId, comp.weapon, {
+        tier: comp.tier || 1,
+        meshLoadout: d1,
+      });
     }
 
     const {
@@ -756,7 +769,9 @@ class GrudgeArena {
     mesh.position.copy(spawnPos);
     if (this.dangerMode && this._groundSampler) {
       this._groundSampler.snapMesh(mesh);
-    } else {
+    } else if (!isIslandSpawnHeightsEnabled()) {
+      // Flat danger room: regroundCharacter already zeroed feet — restore loader Y.
+      // Island spawns: spawnPos.y is terrain height — do not overwrite with ~0.
       mesh.position.y = groundedY;
     }
     mesh.rotation.y = facing;
@@ -859,7 +874,7 @@ class GrudgeArena {
     this._harvest?.clearTool?.();
 
     if (opts.live && this.playerUnit.equipment) {
-      applyDangerLiveLoadout(this);
+      await applyDangerLiveLoadout(this);
       return;
     }
 
@@ -952,6 +967,13 @@ class GrudgeArena {
    * Create cannon-es physics bodies, hitboxes, AI detectors, and behavior FSMs
    * for all loaded units. Called once after all units are loaded.
    */
+  _capsuleCenterY(mesh, phys) {
+    const terrainY = this._groundSampler
+      ? this._groundSampler.sampleY(mesh.position.x, mesh.position.z, mesh.position.y)
+      : mesh.position.y;
+    return terrainY + (phys?.offset ?? 0.9);
+  }
+
   _initPhysicsBodies() {
     if (!this.physicsWorld) return;
     const pw = this.physicsWorld;
@@ -970,13 +992,24 @@ class GrudgeArena {
         null;
       const phys = physicsSizeFromMetrics(metrics);
       const spawnPos = unit.mesh.position;
+      const bodyY = this._capsuleCenterY(unit.mesh, phys);
       const body = pw.createCharacterBody(
-        { x: spawnPos.x, y: phys.offset, z: spawnPos.z },
+        { x: spawnPos.x, y: bodyY, z: spawnPos.z },
         phys.radius,
         phys.height,
         group,
         mask,
       );
+      let cannonProxy = null;
+      if (this._usingRapier && this._cannonHitbox) {
+        cannonProxy = this._cannonHitbox.createCharacterBody(
+          { x: spawnPos.x, y: bodyY, z: spawnPos.z },
+          phys.radius,
+          phys.height,
+          group,
+          mask,
+        );
+      }
       unit.physicsSize = phys;
       body.belongTo = {
         unit,
@@ -1009,15 +1042,18 @@ class GrudgeArena {
         },
       };
       unit.physicsBody = body;
+      unit.cannonProxyBody = cannonProxy;
 
-      // Hitbox (weapon collider)
+      // Hitbox (weapon collider) — melee hits cannon proxy bodies on _hitboxWorld
       this.hitboxManager.register(unit);
 
       // AI-only: detector + behavior FSM
+      const detectorWorld = this._cannonHitbox?.world ?? pw.world;
+      const detectorBody = cannonProxy || body;
       if (!unit.isPlayer) {
         const detectorRadius = (unit.weaponDef?.range ?? 0) > 5 ? 20 : 12;
         const targetGroup = isTeamA ? GROUP_ENEMY : GROUP_PLAYER;
-        const detector = new AIDetector(pw.world, body, {
+        const detector = new AIDetector(detectorWorld, detectorBody, {
           radius: detectorRadius,
           targetGroup,
         });
@@ -1327,14 +1363,18 @@ class GrudgeArena {
     const selfCastEffects = new Set(["meteor"]);
     if (castTime > 0 && !selfCastEffects.has(ability.effect)) {
       this._casting = true;
-      if (ctrl) ctrl.playOnce(this._getSkillAnim(ability), animSpeed * 0.82);
+      const skillClip = this._getSkillAnim(ability, key);
+      if (ctrl) ctrl.playOnce(skillClip, animSpeed * 0.82);
+      vfxForClip(this.playerUnit.mesh, skillClip);
       this.gameTimers.add(castTime, () => {
         this._casting = false;
         this._executeAbility(ability);
         this._processAbilityQueue();
       });
     } else {
-      if (ctrl) ctrl.playOnce(this._getSkillAnim(ability), animSpeed);
+      const skillClip = this._getSkillAnim(ability, key);
+      if (ctrl) ctrl.playOnce(skillClip, animSpeed);
+      vfxForClip(this.playerUnit.mesh, skillClip);
       this._executeAbility(ability);
     }
     this._updateUI();
@@ -1347,8 +1387,13 @@ class GrudgeArena {
    * generic per-effect map; finally defaults to `attack1` (which the
    * AnimationController will itself fall back to idle if missing).
    */
-  _getSkillAnim(ability) {
+  _getSkillAnim(ability, slot) {
     if (typeof ability === "string") ability = { effect: ability };
+    const weapon = this._getWeaponTypeKey?.() || "greatsword";
+    if (slot) {
+      const mapped = resolveSkillAnim(weapon, slot, null);
+      if (mapped) return mapped;
+    }
     if (ability?.skillAnim) return ability.skillAnim;
     const map = {
       fireball: "cast",
@@ -2086,19 +2131,42 @@ class GrudgeArena {
 
     // ── Physics step & sync (annihilatetrainer pattern) ──
     if (this.physicsWorld) {
+      const off = (u) => u.physicsSize?.offset ?? 0.9;
       // Sync player mesh → physics body (player drives mesh directly)
       if (this.playerUnit?.physicsBody) {
-        this.physicsWorld.syncBodyToMesh(this.playerUnit.physicsBody, this.playerUnit.mesh);
+        this.physicsWorld.syncBodyToMesh(
+          this.playerUnit.physicsBody,
+          this.playerUnit.mesh,
+          off(this.playerUnit),
+        );
+        if (this.playerUnit.cannonProxyBody) {
+          this._cannonHitbox.syncBodyToMesh(
+            this.playerUnit.cannonProxyBody,
+            this.playerUnit.mesh,
+            off(this.playerUnit),
+          );
+        }
+      }
+
+      for (const u of this.allUnits) {
+        if (!u.isPlayer && u.physicsBody && this._usingRapier) {
+          this.physicsWorld.syncBodyToMesh(u.physicsBody, u.mesh, off(u));
+        }
+        if (u.cannonProxyBody) {
+          this._cannonHitbox.syncBodyToMesh(u.cannonProxyBody, u.mesh, off(u));
+        }
       }
 
       this.physicsWorld.step(delta);
+      if (this._cannonHitbox) {
+        this._cannonHitbox.step(delta);
+      }
 
-      // Sync AI physics bodies → meshes
+      // Sync AI physics bodies → meshes (cannon-driven AI on classic arena)
       for (const u of this.allUnits) {
-        if (!u.isPlayer && u.physicsBody) {
-          this.physicsWorld.syncMeshToBody(u.mesh, u.physicsBody);
+        if (!u.isPlayer && u.physicsBody && !this._usingRapier) {
+          this.physicsWorld.syncMeshToBody(u.mesh, u.physicsBody, off(u));
         }
-        // Update AI detectors
         if (u.aiDetector) u.aiDetector.update();
       }
 

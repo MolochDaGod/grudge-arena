@@ -26,10 +26,23 @@ export async function loadTerrainPBR(basePath, prefix, opts = {}) {
   const aoPath = `${basePath}/${prefix}_ao_${auxRes}.jpg`;
   paths.aoMap = aoPath;
 
+  async function loadTex(url, fallbackUrl) {
+    try {
+      return await loader.loadAsync(url);
+    } catch (err) {
+      if (fallbackUrl) return loader.loadAsync(fallbackUrl);
+      throw err;
+    }
+  }
+
   const maps = {};
   for (const [key, url] of Object.entries(paths)) {
     try {
-      const tex = await loader.loadAsync(url);
+      const fallback =
+        key === "map" && mapRes === "2k"
+          ? `${basePath}/${prefix}_diff_4k.jpg`
+          : null;
+      const tex = await loadTex(url, fallback);
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
       tex.repeat.set(repeat, repeat);
       if (key === "map") tex.colorSpace = THREE.SRGBColorSpace;

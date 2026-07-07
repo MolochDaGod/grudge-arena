@@ -1,0 +1,902 @@
+{
+  "version": 1,
+  "generated": "2026-07-07T03:36:55.404Z",
+  "source": "C:\\Users\\david\\Desktop\\grudge-arena\\artifacts\\boxanimations\\boxanimations",
+  "staging": "anims/staging/boxanimations",
+  "skipped": [
+    {
+      "file": "Breakdance Freezes (1).fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Driving.fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Entering Car (1).fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Exiting Car (1).fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Harvesting.fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Macaco Side.fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Northern Soul Floor Spin.fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Punching Bag.fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Rapping.fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Skinning Test (1).fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Skinning Test.fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Smoking.fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Soccer Tackle (1).fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Soccer Tackle.fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Talking.fbx",
+      "reason": "non-gameplay"
+    },
+    {
+      "file": "Working On Device (1).fbx",
+      "reason": "non-gameplay"
+    }
+  ],
+  "clips": [
+    {
+      "file": "Back Flip To Uppercut (1).fbx",
+      "category": "unarmed",
+      "name": "Back Flip To Uppercut (1)",
+      "rel": "unarmed/Back Flip To Uppercut (1)"
+    },
+    {
+      "file": "Bayonet Stab (1).fbx",
+      "category": "rifle",
+      "name": "Bayonet Stab (1)",
+      "rel": "rifle/Bayonet Stab (1)"
+    },
+    {
+      "file": "Big Stomach Hit.fbx",
+      "category": "reactions",
+      "name": "Big Stomach Hit",
+      "rel": "reactions/Big Stomach Hit"
+    },
+    {
+      "file": "Block With Rifle (1).fbx",
+      "category": "rifle",
+      "name": "Block With Rifle (1)",
+      "rel": "rifle/Block With Rifle (1)"
+    },
+    {
+      "file": "Block With Rifle.fbx",
+      "category": "rifle",
+      "name": "Block With Rifle",
+      "rel": "rifle/Block With Rifle"
+    },
+    {
+      "file": "Block.fbx",
+      "category": "locomotion",
+      "name": "Block",
+      "rel": "locomotion/Block"
+    },
+    {
+      "file": "Blocking (1).fbx",
+      "category": "locomotion",
+      "name": "Blocking (1)",
+      "rel": "locomotion/Blocking (1)"
+    },
+    {
+      "file": "Climbing Down Wall.fbx",
+      "category": "traversal",
+      "name": "Climbing Down Wall",
+      "rel": "traversal/Climbing Down Wall"
+    },
+    {
+      "file": "Climbing To Top.fbx",
+      "category": "traversal",
+      "name": "Climbing To Top",
+      "rel": "traversal/Climbing To Top"
+    },
+    {
+      "file": "Crouch To Stand.fbx",
+      "category": "locomotion",
+      "name": "Crouch To Stand",
+      "rel": "locomotion/Crouch To Stand"
+    },
+    {
+      "file": "Crouch Walk.fbx",
+      "category": "locomotion",
+      "name": "Crouch Walk",
+      "rel": "locomotion/Crouch Walk"
+    },
+    {
+      "file": "Crouched To Sprinting (2).fbx",
+      "category": "locomotion",
+      "name": "Crouched To Sprinting (2)",
+      "rel": "locomotion/Crouched To Sprinting (2)"
+    },
+    {
+      "file": "Crouched To Standing.fbx",
+      "category": "locomotion",
+      "name": "Crouched To Standing",
+      "rel": "locomotion/Crouched To Standing"
+    },
+    {
+      "file": "Dizzy Idle.fbx",
+      "category": "reactions",
+      "name": "Dizzy Idle",
+      "rel": "reactions/Dizzy Idle"
+    },
+    {
+      "file": "Dodging Back.fbx",
+      "category": "locomotion",
+      "name": "Dodging Back",
+      "rel": "locomotion/Dodging Back"
+    },
+    {
+      "file": "Double Dagger Stab (1).fbx",
+      "category": "unarmed",
+      "name": "Double Dagger Stab (1)",
+      "rel": "unarmed/Double Dagger Stab (1)"
+    },
+    {
+      "file": "Draw A Great Sword 1.fbx",
+      "category": "sword_shield",
+      "name": "Draw A Great Sword 1",
+      "rel": "sword_shield/Draw A Great Sword 1"
+    },
+    {
+      "file": "Draw Sword 2.fbx",
+      "category": "sword_shield",
+      "name": "Draw Sword 2",
+      "rel": "sword_shield/Draw Sword 2"
+    },
+    {
+      "file": "Drop To Freehang.fbx",
+      "category": "traversal",
+      "name": "Drop To Freehang",
+      "rel": "traversal/Drop To Freehang"
+    },
+    {
+      "file": "Dual Weapon Combo (1).fbx",
+      "category": "unarmed",
+      "name": "Dual Weapon Combo (1)",
+      "rel": "unarmed/Dual Weapon Combo (1)"
+    },
+    {
+      "file": "Dual Weapon Combo (2).fbx",
+      "category": "unarmed",
+      "name": "Dual Weapon Combo (2)",
+      "rel": "unarmed/Dual Weapon Combo (2)"
+    },
+    {
+      "file": "Dying.fbx",
+      "category": "reactions",
+      "name": "Dying",
+      "rel": "reactions/Dying"
+    },
+    {
+      "file": "Entry.fbx",
+      "category": "locomotion",
+      "name": "Entry",
+      "rel": "locomotion/Entry"
+    },
+    {
+      "file": "Fall B Loop.fbx",
+      "category": "locomotion",
+      "name": "Fall B Loop",
+      "rel": "locomotion/Fall B Loop"
+    },
+    {
+      "file": "Fall Over.fbx",
+      "category": "locomotion",
+      "name": "Fall Over",
+      "rel": "locomotion/Fall Over"
+    },
+    {
+      "file": "Falling (2).fbx",
+      "category": "locomotion",
+      "name": "Falling (2)",
+      "rel": "locomotion/Falling (2)"
+    },
+    {
+      "file": "Falling Idle (2).fbx",
+      "category": "locomotion",
+      "name": "Falling Idle (2)",
+      "rel": "locomotion/Falling Idle (2)"
+    },
+    {
+      "file": "Fast Run.fbx",
+      "category": "locomotion",
+      "name": "Fast Run",
+      "rel": "locomotion/Fast Run"
+    },
+    {
+      "file": "Fight Idle To Standing Idle.fbx",
+      "category": "locomotion",
+      "name": "Fight Idle To Standing Idle",
+      "rel": "locomotion/Fight Idle To Standing Idle"
+    },
+    {
+      "file": "Fireball (1).fbx",
+      "category": "magic",
+      "name": "Fireball (1)",
+      "rel": "magic/Fireball (1)"
+    },
+    {
+      "file": "Firing Rifle.fbx",
+      "category": "rifle",
+      "name": "Firing Rifle",
+      "rel": "rifle/Firing Rifle"
+    },
+    {
+      "file": "Flip Kick (1).fbx",
+      "category": "unarmed",
+      "name": "Flip Kick (1)",
+      "rel": "unarmed/Flip Kick (1)"
+    },
+    {
+      "file": "Flying Kick.fbx",
+      "category": "unarmed",
+      "name": "Flying Kick",
+      "rel": "unarmed/Flying Kick"
+    },
+    {
+      "file": "Flying.fbx",
+      "category": "locomotion",
+      "name": "Flying",
+      "rel": "locomotion/Flying"
+    },
+    {
+      "file": "Getting Hit Backwards.fbx",
+      "category": "reactions",
+      "name": "Getting Hit Backwards",
+      "rel": "reactions/Getting Hit Backwards"
+    },
+    {
+      "file": "Getting Up (1).fbx",
+      "category": "locomotion",
+      "name": "Getting Up (1)",
+      "rel": "locomotion/Getting Up (1)"
+    },
+    {
+      "file": "Grab And Put Back Rifle.fbx",
+      "category": "rifle",
+      "name": "Grab And Put Back Rifle",
+      "rel": "rifle/Grab And Put Back Rifle"
+    },
+    {
+      "file": "Grab Rifle From Back.fbx",
+      "category": "rifle",
+      "name": "Grab Rifle From Back",
+      "rel": "rifle/Grab Rifle From Back"
+    },
+    {
+      "file": "Grab Rifle From Behind Shoulder.fbx",
+      "category": "rifle",
+      "name": "Grab Rifle From Behind Shoulder",
+      "rel": "rifle/Grab Rifle From Behind Shoulder"
+    },
+    {
+      "file": "Great Sword Casting (3).fbx",
+      "category": "sword_shield",
+      "name": "Great Sword Casting (3)",
+      "rel": "sword_shield/Great Sword Casting (3)"
+    },
+    {
+      "file": "Great Sword Idle.fbx",
+      "category": "sword_shield",
+      "name": "Great Sword Idle",
+      "rel": "sword_shield/Great Sword Idle"
+    },
+    {
+      "file": "Gunplay (3).fbx",
+      "category": "rifle",
+      "name": "Gunplay (3)",
+      "rel": "rifle/Gunplay (3)"
+    },
+    {
+      "file": "Gunplay (4).fbx",
+      "category": "rifle",
+      "name": "Gunplay (4)",
+      "rel": "rifle/Gunplay (4)"
+    },
+    {
+      "file": "Hit Reaction.fbx",
+      "category": "reactions",
+      "name": "Hit Reaction",
+      "rel": "reactions/Hit Reaction"
+    },
+    {
+      "file": "Hook Punch.fbx",
+      "category": "unarmed",
+      "name": "Hook Punch",
+      "rel": "unarmed/Hook Punch"
+    },
+    {
+      "file": "Inspecting.fbx",
+      "category": "emotes",
+      "name": "Inspecting",
+      "rel": "emotes/Inspecting"
+    },
+    {
+      "file": "Inward Block.fbx",
+      "category": "locomotion",
+      "name": "Inward Block",
+      "rel": "locomotion/Inward Block"
+    },
+    {
+      "file": "Jump Attack.fbx",
+      "category": "locomotion",
+      "name": "Jump Attack",
+      "rel": "locomotion/Jump Attack"
+    },
+    {
+      "file": "Jump Away (1).fbx",
+      "category": "locomotion",
+      "name": "Jump Away (1)",
+      "rel": "locomotion/Jump Away (1)"
+    },
+    {
+      "file": "Jumping Down (2).fbx",
+      "category": "locomotion",
+      "name": "Jumping Down (2)",
+      "rel": "locomotion/Jumping Down (2)"
+    },
+    {
+      "file": "Jumping Down (3).fbx",
+      "category": "locomotion",
+      "name": "Jumping Down (3)",
+      "rel": "locomotion/Jumping Down (3)"
+    },
+    {
+      "file": "Jumping Down (4).fbx",
+      "category": "locomotion",
+      "name": "Jumping Down (4)",
+      "rel": "locomotion/Jumping Down (4)"
+    },
+    {
+      "file": "Jumping Down (5).fbx",
+      "category": "locomotion",
+      "name": "Jumping Down (5)",
+      "rel": "locomotion/Jumping Down (5)"
+    },
+    {
+      "file": "Kip Up (2).fbx",
+      "category": "locomotion",
+      "name": "Kip Up (2)",
+      "rel": "locomotion/Kip Up (2)"
+    },
+    {
+      "file": "Knife Idle (1).fbx",
+      "category": "locomotion",
+      "name": "Knife Idle (1)",
+      "rel": "locomotion/Knife Idle (1)"
+    },
+    {
+      "file": "Knocked Down.fbx",
+      "category": "reactions",
+      "name": "Knocked Down",
+      "rel": "reactions/Knocked Down"
+    },
+    {
+      "file": "Leg Sweep.fbx",
+      "category": "locomotion",
+      "name": "Leg Sweep",
+      "rel": "locomotion/Leg Sweep"
+    },
+    {
+      "file": "Look Behind Run.fbx",
+      "category": "locomotion",
+      "name": "Look Behind Run",
+      "rel": "locomotion/Look Behind Run"
+    },
+    {
+      "file": "Magic Heal.fbx",
+      "category": "magic",
+      "name": "Magic Heal",
+      "rel": "magic/Magic Heal"
+    },
+    {
+      "file": "Magic Spell Casting.fbx",
+      "category": "magic",
+      "name": "Magic Spell Casting",
+      "rel": "magic/Magic Spell Casting"
+    },
+    {
+      "file": "Mutant Swiping.fbx",
+      "category": "unarmed",
+      "name": "Mutant Swiping",
+      "rel": "unarmed/Mutant Swiping"
+    },
+    {
+      "file": "Ninja Idle.fbx",
+      "category": "emotes",
+      "name": "Ninja Idle",
+      "rel": "emotes/Ninja Idle"
+    },
+    {
+      "file": "One Hand Club Combo (1).fbx",
+      "category": "unarmed",
+      "name": "One Hand Club Combo (1)",
+      "rel": "unarmed/One Hand Club Combo (1)"
+    },
+    {
+      "file": "One Hand Club Combo.fbx",
+      "category": "unarmed",
+      "name": "One Hand Club Combo",
+      "rel": "unarmed/One Hand Club Combo"
+    },
+    {
+      "file": "One Hand Sword Combo.fbx",
+      "category": "sword_shield",
+      "name": "One Hand Sword Combo",
+      "rel": "sword_shield/One Hand Sword Combo"
+    },
+    {
+      "file": "Outward Block.fbx",
+      "category": "locomotion",
+      "name": "Outward Block",
+      "rel": "locomotion/Outward Block"
+    },
+    {
+      "file": "Punch Combo (1).fbx",
+      "category": "unarmed",
+      "name": "Punch Combo (1)",
+      "rel": "unarmed/Punch Combo (1)"
+    },
+    {
+      "file": "Put Back Rifle Behind Shoulder.fbx",
+      "category": "rifle",
+      "name": "Put Back Rifle Behind Shoulder",
+      "rel": "rifle/Put Back Rifle Behind Shoulder"
+    },
+    {
+      "file": "Quick Formal Bow.fbx",
+      "category": "longbow",
+      "name": "Quick Formal Bow",
+      "rel": "longbow/Quick Formal Bow"
+    },
+    {
+      "file": "Quick Roll To Run (1).fbx",
+      "category": "locomotion",
+      "name": "Quick Roll To Run (1)",
+      "rel": "locomotion/Quick Roll To Run (1)"
+    },
+    {
+      "file": "Rifle Aiming Idle.fbx",
+      "category": "rifle",
+      "name": "Rifle Aiming Idle",
+      "rel": "rifle/Rifle Aiming Idle"
+    },
+    {
+      "file": "Rifle Block.fbx",
+      "category": "rifle",
+      "name": "Rifle Block",
+      "rel": "rifle/Rifle Block"
+    },
+    {
+      "file": "Rifle Kneel To Prone.fbx",
+      "category": "rifle",
+      "name": "Rifle Kneel To Prone",
+      "rel": "rifle/Rifle Kneel To Prone"
+    },
+    {
+      "file": "Rifle Prone To Kneel.fbx",
+      "category": "rifle",
+      "name": "Rifle Prone To Kneel",
+      "rel": "rifle/Rifle Prone To Kneel"
+    },
+    {
+      "file": "Run Backwards.fbx",
+      "category": "locomotion",
+      "name": "Run Backwards",
+      "rel": "locomotion/Run Backwards"
+    },
+    {
+      "file": "Run To Flip.fbx",
+      "category": "unarmed",
+      "name": "Run To Flip",
+      "rel": "unarmed/Run To Flip"
+    },
+    {
+      "file": "Run With Sword.fbx",
+      "category": "sword_shield",
+      "name": "Run With Sword",
+      "rel": "sword_shield/Run With Sword"
+    },
+    {
+      "file": "Running Dive Roll.fbx",
+      "category": "locomotion",
+      "name": "Running Dive Roll",
+      "rel": "locomotion/Running Dive Roll"
+    },
+    {
+      "file": "Running Turn 180.fbx",
+      "category": "locomotion",
+      "name": "Running Turn 180",
+      "rel": "locomotion/Running Turn 180"
+    },
+    {
+      "file": "Sheath A Great Sword 1.fbx",
+      "category": "sword_shield",
+      "name": "Sheath A Great Sword 1",
+      "rel": "sword_shield/Sheath A Great Sword 1"
+    },
+    {
+      "file": "Sheath Sword 1.fbx",
+      "category": "sword_shield",
+      "name": "Sheath Sword 1",
+      "rel": "sword_shield/Sheath Sword 1"
+    },
+    {
+      "file": "Shooting.fbx",
+      "category": "rifle",
+      "name": "Shooting",
+      "rel": "rifle/Shooting"
+    },
+    {
+      "file": "Sitting Dazed.fbx",
+      "category": "locomotion",
+      "name": "Sitting Dazed",
+      "rel": "locomotion/Sitting Dazed"
+    },
+    {
+      "file": "Sitting Idle (2).fbx",
+      "category": "locomotion",
+      "name": "Sitting Idle (2)",
+      "rel": "locomotion/Sitting Idle (2)"
+    },
+    {
+      "file": "Sitting Idle (3).fbx",
+      "category": "locomotion",
+      "name": "Sitting Idle (3)",
+      "rel": "locomotion/Sitting Idle (3)"
+    },
+    {
+      "file": "Sitting Idle (4).fbx",
+      "category": "locomotion",
+      "name": "Sitting Idle (4)",
+      "rel": "locomotion/Sitting Idle (4)"
+    },
+    {
+      "file": "Sneak Walk.fbx",
+      "category": "locomotion",
+      "name": "Sneak Walk",
+      "rel": "locomotion/Sneak Walk"
+    },
+    {
+      "file": "Stabbing (1).fbx",
+      "category": "unarmed",
+      "name": "Stabbing (1)",
+      "rel": "unarmed/Stabbing (1)"
+    },
+    {
+      "file": "Stabbing (2).fbx",
+      "category": "unarmed",
+      "name": "Stabbing (2)",
+      "rel": "unarmed/Stabbing (2)"
+    },
+    {
+      "file": "Stable Sword Inward Slash.fbx",
+      "category": "sword_shield",
+      "name": "Stable Sword Inward Slash",
+      "rel": "sword_shield/Stable Sword Inward Slash"
+    },
+    {
+      "file": "Stable Sword Outward Slash (2).fbx",
+      "category": "sword_shield",
+      "name": "Stable Sword Outward Slash (2)",
+      "rel": "sword_shield/Stable Sword Outward Slash (2)"
+    },
+    {
+      "file": "Stable Sword Outward Slash (3).fbx",
+      "category": "sword_shield",
+      "name": "Stable Sword Outward Slash (3)",
+      "rel": "sword_shield/Stable Sword Outward Slash (3)"
+    },
+    {
+      "file": "Stable Sword Outward Slash (4).fbx",
+      "category": "sword_shield",
+      "name": "Stable Sword Outward Slash (4)",
+      "rel": "sword_shield/Stable Sword Outward Slash (4)"
+    },
+    {
+      "file": "Stand To Crouch.fbx",
+      "category": "locomotion",
+      "name": "Stand To Crouch",
+      "rel": "locomotion/Stand To Crouch"
+    },
+    {
+      "file": "Standing Aim Idle 02 Looking.fbx",
+      "category": "locomotion",
+      "name": "Standing Aim Idle 02 Looking",
+      "rel": "locomotion/Standing Aim Idle 02 Looking"
+    },
+    {
+      "file": "Standing Aim Recoil (1).fbx",
+      "category": "locomotion",
+      "name": "Standing Aim Recoil (1)",
+      "rel": "locomotion/Standing Aim Recoil (1)"
+    },
+    {
+      "file": "Standing Block Idle.fbx",
+      "category": "locomotion",
+      "name": "Standing Block Idle",
+      "rel": "locomotion/Standing Block Idle"
+    },
+    {
+      "file": "Standing Block React Large.fbx",
+      "category": "reactions",
+      "name": "Standing Block React Large",
+      "rel": "reactions/Standing Block React Large"
+    },
+    {
+      "file": "Standing Block.fbx",
+      "category": "locomotion",
+      "name": "Standing Block",
+      "rel": "locomotion/Standing Block"
+    },
+    {
+      "file": "Standing Death Left 02.fbx",
+      "category": "reactions",
+      "name": "Standing Death Left 02",
+      "rel": "reactions/Standing Death Left 02"
+    },
+    {
+      "file": "Standing Disarm Bow.fbx",
+      "category": "longbow",
+      "name": "Standing Disarm Bow",
+      "rel": "longbow/Standing Disarm Bow"
+    },
+    {
+      "file": "Standing Disarm Underarm.fbx",
+      "category": "locomotion",
+      "name": "Standing Disarm Underarm",
+      "rel": "locomotion/Standing Disarm Underarm"
+    },
+    {
+      "file": "Standing Dodge Backward (2).fbx",
+      "category": "locomotion",
+      "name": "Standing Dodge Backward (2)",
+      "rel": "locomotion/Standing Dodge Backward (2)"
+    },
+    {
+      "file": "Standing Draw Arrow (1).fbx",
+      "category": "longbow",
+      "name": "Standing Draw Arrow (1)",
+      "rel": "longbow/Standing Draw Arrow (1)"
+    },
+    {
+      "file": "Standing Idle 03 Examine.fbx",
+      "category": "locomotion",
+      "name": "Standing Idle 03 Examine",
+      "rel": "locomotion/Standing Idle 03 Examine"
+    },
+    {
+      "file": "Standing Melee Combo Attack Ver. 1.fbx",
+      "category": "unarmed",
+      "name": "Standing Melee Combo Attack Ver. 1",
+      "rel": "unarmed/Standing Melee Combo Attack Ver. 1"
+    },
+    {
+      "file": "Standing Melee Combo Attack Ver. 2 (2).fbx",
+      "category": "unarmed",
+      "name": "Standing Melee Combo Attack Ver. 2 (2)",
+      "rel": "unarmed/Standing Melee Combo Attack Ver. 2 (2)"
+    },
+    {
+      "file": "Standing Melee Combo Attack Ver. 3 (1).fbx",
+      "category": "unarmed",
+      "name": "Standing Melee Combo Attack Ver. 3 (1)",
+      "rel": "unarmed/Standing Melee Combo Attack Ver. 3 (1)"
+    },
+    {
+      "file": "Standing Melee Combo Attack Ver. 3.fbx",
+      "category": "unarmed",
+      "name": "Standing Melee Combo Attack Ver. 3",
+      "rel": "unarmed/Standing Melee Combo Attack Ver. 3"
+    },
+    {
+      "file": "Standing React Large From Right.fbx",
+      "category": "reactions",
+      "name": "Standing React Large From Right",
+      "rel": "reactions/Standing React Large From Right"
+    },
+    {
+      "file": "Standing Sprint Forward.fbx",
+      "category": "locomotion",
+      "name": "Standing Sprint Forward",
+      "rel": "locomotion/Standing Sprint Forward"
+    },
+    {
+      "file": "Standing Taunt Battlecry.fbx",
+      "category": "emotes",
+      "name": "Standing Taunt Battlecry",
+      "rel": "emotes/Standing Taunt Battlecry"
+    },
+    {
+      "file": "Standing Torch Light Torch From Wall.fbx",
+      "category": "traversal",
+      "name": "Standing Torch Light Torch From Wall",
+      "rel": "traversal/Standing Torch Light Torch From Wall"
+    },
+    {
+      "file": "Standing Torch Light Torch.fbx",
+      "category": "locomotion",
+      "name": "Standing Torch Light Torch",
+      "rel": "locomotion/Standing Torch Light Torch"
+    },
+    {
+      "file": "Standing Walk Left.fbx",
+      "category": "locomotion",
+      "name": "Standing Walk Left",
+      "rel": "locomotion/Standing Walk Left"
+    },
+    {
+      "file": "Standing Walk Right.fbx",
+      "category": "locomotion",
+      "name": "Standing Walk Right",
+      "rel": "locomotion/Standing Walk Right"
+    },
+    {
+      "file": "Standing W_Briefcase Idle.fbx",
+      "category": "locomotion",
+      "name": "Standing W_Briefcase Idle",
+      "rel": "locomotion/Standing W_Briefcase Idle"
+    },
+    {
+      "file": "Start Swinging (1).fbx",
+      "category": "locomotion",
+      "name": "Start Swinging (1)",
+      "rel": "locomotion/Start Swinging (1)"
+    },
+    {
+      "file": "Strafing.fbx",
+      "category": "locomotion",
+      "name": "Strafing",
+      "rel": "locomotion/Strafing"
+    },
+    {
+      "file": "Stumble Backwards (1).fbx",
+      "category": "reactions",
+      "name": "Stumble Backwards (1)",
+      "rel": "reactions/Stumble Backwards (1)"
+    },
+    {
+      "file": "Stunned (2).fbx",
+      "category": "reactions",
+      "name": "Stunned (2)",
+      "rel": "reactions/Stunned (2)"
+    },
+    {
+      "file": "Stylish Flip.fbx",
+      "category": "unarmed",
+      "name": "Stylish Flip",
+      "rel": "unarmed/Stylish Flip"
+    },
+    {
+      "file": "Sweep Fall.fbx",
+      "category": "reactions",
+      "name": "Sweep Fall",
+      "rel": "reactions/Sweep Fall"
+    },
+    {
+      "file": "Swinging.fbx",
+      "category": "locomotion",
+      "name": "Swinging",
+      "rel": "locomotion/Swinging"
+    },
+    {
+      "file": "Sword And Shield Casting (2).fbx",
+      "category": "sword_shield",
+      "name": "Sword And Shield Casting (2)",
+      "rel": "sword_shield/Sword And Shield Casting (2)"
+    },
+    {
+      "file": "Sword And Shield Death.fbx",
+      "category": "sword_shield",
+      "name": "Sword And Shield Death",
+      "rel": "sword_shield/Sword And Shield Death"
+    },
+    {
+      "file": "Sword And Shield Idle (1).fbx",
+      "category": "sword_shield",
+      "name": "Sword And Shield Idle (1)",
+      "rel": "sword_shield/Sword And Shield Idle (1)"
+    },
+    {
+      "file": "Sword And Shield Slash (3).fbx",
+      "category": "sword_shield",
+      "name": "Sword And Shield Slash (3)",
+      "rel": "sword_shield/Sword And Shield Slash (3)"
+    },
+    {
+      "file": "Sword And Shield Slash (4).fbx",
+      "category": "sword_shield",
+      "name": "Sword And Shield Slash (4)",
+      "rel": "sword_shield/Sword And Shield Slash (4)"
+    },
+    {
+      "file": "Thrust Slash (1).fbx",
+      "category": "unarmed",
+      "name": "Thrust Slash (1)",
+      "rel": "unarmed/Thrust Slash (1)"
+    },
+    {
+      "file": "Turn To Knocked Unconscious (1).fbx",
+      "category": "reactions",
+      "name": "Turn To Knocked Unconscious (1)",
+      "rel": "reactions/Turn To Knocked Unconscious (1)"
+    },
+    {
+      "file": "Two Hand Club Combo.fbx",
+      "category": "unarmed",
+      "name": "Two Hand Club Combo",
+      "rel": "unarmed/Two Hand Club Combo"
+    },
+    {
+      "file": "Two Hand Sword Combo (1).fbx",
+      "category": "sword_shield",
+      "name": "Two Hand Sword Combo (1)",
+      "rel": "sword_shield/Two Hand Sword Combo (1)"
+    },
+    {
+      "file": "Unarmed Equip Over Shoulder.fbx",
+      "category": "unarmed",
+      "name": "Unarmed Equip Over Shoulder",
+      "rel": "unarmed/Unarmed Equip Over Shoulder"
+    },
+    {
+      "file": "Unarmed Equip Underarm.fbx",
+      "category": "unarmed",
+      "name": "Unarmed Equip Underarm",
+      "rel": "unarmed/Unarmed Equip Underarm"
+    },
+    {
+      "file": "Unarmed Jump Running.fbx",
+      "category": "unarmed",
+      "name": "Unarmed Jump Running",
+      "rel": "unarmed/Unarmed Jump Running"
+    },
+    {
+      "file": "Unarmed Run Back.fbx",
+      "category": "unarmed",
+      "name": "Unarmed Run Back",
+      "rel": "unarmed/Unarmed Run Back"
+    },
+    {
+      "file": "Withdrawing Sword.fbx",
+      "category": "sword_shield",
+      "name": "Withdrawing Sword",
+      "rel": "sword_shield/Withdrawing Sword"
+    }
+  ]
+}

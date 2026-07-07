@@ -48,7 +48,7 @@ export function installDangerRoomLighting(scene, arena = null, outdoor = false) 
   scene.add(fill);
   lights.push(fill);
 
-  const spotlight = new THREE.SpotLight(0xfff4e8, 2.4, 28, Math.PI / 5.5, 0.45, 1.2);
+  const spotlight = new THREE.SpotLight(0xfff4e8, 1.35, 28, Math.PI / 5.5, 0.45, 1.2);
   spotlight.position.set(0, 11, 4);
   spotlight.castShadow = false;
   scene.add(spotlight);
@@ -56,7 +56,7 @@ export function installDangerRoomLighting(scene, arena = null, outdoor = false) 
   lights.push(spotlight);
 
   if (arena?.renderer) {
-    arena.renderer.toneMappingExposure = 1.12;
+    arena.renderer.toneMappingExposure = outdoor ? 1.12 : 1.0;
   }
 
   function update(playerMesh) {
