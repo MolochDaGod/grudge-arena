@@ -44,23 +44,26 @@ async function fetchWithFallback(workerPath, pagesFile) {
 
 // ── Weapon Skills ────────────────────────────────────────────────
 
-/** Fetch all weapon skills (17 types, 207 skills) */
+/** Fetch all weapon skills (canonical master dataset — 24 weapon types, 473 skills) */
 export async function getWeaponSkills() {
-  return fetchWithFallback('/v1/weapon-skills', 'weaponSkills.json');
+    // '/v1/weapon-skills' + 'weaponSkills.json' are the OLD, now-archived
+    // endpoint (legacy 17 weapon types, 268 skills). Use the canonical
+    // master-weaponSkills route (same family as master-items/master-weapons).
+    return fetchWithFallback('/v1/game-data/master-weaponSkills', 'master-weaponSkills.json');
 }
 
 /** Fetch weapon skills for a specific weapon type (e.g. 'SWORD', 'GREATSWORD') */
 export async function getWeaponSkillTree(weaponType) {
-  return fetchWithFallback(`/v1/weapon-skills/${weaponType}`, 'weaponSkills.json')
-    .then(data => {
-      // If we got the full dataset (Pages fallback), filter locally
-      if (data?.weaponTypes) {
-        return data.weaponTypes.find(w =>
-          w.id === weaponType.toUpperCase() || w.name.toLowerCase() === weaponType.toLowerCase()
-        ) || null;
-      }
-      return data;
-    });
+    return fetchWithFallback('/v1/game-data/master-weaponSkills', 'master-weaponSkills.json')
+      .then(data => {
+              // Filter the canonical dataset locally to the requested weapon type.
+              if (data?.weaponTypes) {
+                        return data.weaponTypes.find(w =>
+                                    w.id === weaponType.toUpperCase() || w.name.toLowerCase() === weaponType.toLowerCase()
+                                  ) || null;
+              }
+              return data;
+      });
 }
 
 /** Get all weapon types available for a class */
