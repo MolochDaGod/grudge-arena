@@ -1768,7 +1768,10 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
   });
   validateSkinnedBindings(scene, race);
 
-  const { packName, clips, clipSources } = await loadBakedPackClips(resolvedWeapon);
+  const { packName, clips, clipSources } = await loadBakedPackClips(
+    resolvedWeapon,
+    scene,
+  );
   try {
     validateBakedLocoClips(clips, resolvedWeapon, packName);
   } catch (err) {

@@ -34,6 +34,16 @@ import { loadBakedClip } from "../bakedAnimLoader.js";
 import { applyWeaponCarryTuning } from "../weaponAttachConfig.js";
 import { vfxForClip } from "../combatVfx.js";
 import { mountAnimStudio } from "./studio.js";
+import {
+  getClipTrim,
+  tickTrimmedAction,
+} from "../skillAnimTrim.js";
+import {
+  getD1LoadoutForRace,
+  setD1ArmorSlot,
+  setD1WeaponSlot,
+  setD1Weapon,
+} from "../d1LoadoutStore.js";
 
 const WEAPONS = Object.keys(WeaponToBakedPack);
 
@@ -58,6 +68,8 @@ const coordPill = document.getElementById("coord-pill");
 const studioPanel = document.getElementById("studio-panel");
 
 let studio = null;
+/** @type {{ action: import('three').AnimationAction, trim: object } | null} */
+let activeTrim = null;
 
 let labelCatalog = { clips: {} };
 loadAnimLabelCatalog().then((c) => {
@@ -283,12 +295,20 @@ const LOCO_GAIT = { idle: 0, walk: 34, run: 70, sprint: 100 };
 
 function playClip(name, { loop = true } = {}) {
   if (!unit?.controller || !name) return;
+  activeTrim = null;
+  const trim = getClipTrim(name);
   if (pipeSel.value === "baked" && name in LOCO_GAIT) {
     const v = LOCO_GAIT[name];
     gaitSlider.value = String(v);
     gaitSlider.dispatchEvent(new Event("input"));
   } else {
-    unit.controller.play(name, { loop });
+    const speed = trim.timeScale ?? 1;
+    unit.controller.play(name, { loop, speed });
+    const action = unit.controller.currentAction;
+    if (action && (trim.start > 0 || trim.end != null)) {
+      action.time = trim.start ?? 0;
+      activeTrim = { action, trim };
+    }
   }
   vfxForClip(unit.scene, name);
   const entry = getAnimEntry(
@@ -304,7 +324,7 @@ function playClip(name, { loop = true } = {}) {
 async function playBankClip(rel) {
   if (!unit?.controller?.director || !rel) return;
   try {
-    const clip = await loadBakedClip(rel);
+    const clip = await loadBakedClip(rel, unit.scene);
     unit.controller.director.playOneShot(clip, { fade: 0.15, timeScale: 1 });
     const key = rel.split("/").pop();
     vfxForClip(unit.scene, key);
@@ -469,6 +489,9 @@ async function loadCharacter() {
       studio = mountAnimStudio(studioPanel, {
         getWeapon: () => weaponSel.value,
         getClipNames: () => clipNames,
+        getCurrentClip: () => animSel.value,
+        getEquipmentCatalog: () => unit?.equipment?.getCatalog?.() || {},
+        getD1Loadout: () => getD1LoadoutForRace(raceSel.value),
         onPlayClip: (key) => playClip(key, { loop: false }),
         onPlayBankClip: playBankClip,
         onWeaponTuningChange: () => {
@@ -476,6 +499,27 @@ async function loadCharacter() {
         },
         onSkillAnimChange: (slot, clip) => {
           log(`skill ${slot} → ${clip}`, { kind: "meta" });
+        },
+        onTrimChange: (key) => log(`trim ${key}: ${JSON.stringify(getClipTrim(key))}`, { kind: "meta" }),
+        onTrimSaved: (id, key) => log(`saved clip "${id}" ← ${key}`, { kind: "meta" }),
+        onArenaWeaponChange: (w) => {
+          weaponSel.value = w;
+          setD1Weapon(w);
+          loadCharacter();
+        },
+        onD1ArmorChange: (slot, variant) => setD1ArmorSlot(slot, variant),
+        onD1WeaponSlotChange: (key, value) => {
+          const w = getD1LoadoutForRace(raceSel.value).weapon || {};
+          if (key === "rSlot") setD1WeaponSlot("r", value, w.rVariant);
+          else if (key === "rVariant") setD1WeaponSlot("r", w.rSlot, value);
+          else if (key === "lSlot") setD1WeaponSlot("l", value, w.lVariant);
+          else if (key === "lVariant") setD1WeaponSlot("l", w.lSlot, value);
+        },
+        onD1LoadoutChange: async () => {
+          if (!unit?.equipment) return;
+          const d1 = getD1LoadoutForRace(raceSel.value);
+          unit.equipment.applyD1Loadout(weaponSel.value, d1);
+          regroundCharacter(unit.scene, raceSel.value);
         },
       });
     }
@@ -512,6 +556,7 @@ pipeSel.addEventListener("change", loadCharacter);
 animSel.addEventListener("change", () => {
   stopCycle();
   playClip(animSel.value);
+  studio?.refreshTrim?.();
 });
 
 document.getElementById("prev-btn").addEventListener("click", () => {
@@ -555,6 +600,10 @@ window.addEventListener("unhandledrejection", (ev) => {
       unit.controller.director.update(dt);
     } else {
       unit.controller.update(dt);
+    }
+    if (activeTrim?.action) {
+      const playing = tickTrimmedAction(activeTrim.action, activeTrim.trim);
+      if (!playing) activeTrim = null;
     }
   }
   if (unit?.scene && coordPill) {

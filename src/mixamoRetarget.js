@@ -205,6 +205,14 @@ export function remapClipBoneNames(clip, scene = null) {
   return filterClipToValidBones(remapMixamoClip(clip, scene), scene);
 }
 
+/**
+ * Baked JSON clips (anim-bank) ship Bip001_* — D1 GLBs use spaced names.
+ * Call at load time before mixer.clipAction().
+ */
+export function normalizeBakedBip001Clip(clip, scene = null) {
+  return filterClipToValidBones(remapMixamoClip(clip, scene), scene);
+}
+
 export function getTrackBindingStats(action) {
   let bound = 0;
   const bindings = action?._propertyBindings || [];

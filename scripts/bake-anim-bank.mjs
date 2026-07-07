@@ -10,6 +10,7 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { normalizeBakedBip001Clip } from "../src/mixamoRetarget.js";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
@@ -69,7 +70,7 @@ async function main() {
       skipped++;
       continue;
     }
-    const rot = toRotationOnlyClip(src);
+    const rot = normalizeBakedBip001Clip(toRotationOnlyClip(src));
     if (!rot.tracks.length) {
       console.warn(`  skip (no quats): ${src.name}`);
       skipped++;

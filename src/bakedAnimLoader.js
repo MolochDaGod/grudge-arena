@@ -6,6 +6,10 @@
 import * as THREE from 'three';
 import { bakedAnimUrl } from './assetConfig.js';
 import { applyBoxAnimOverrides } from './boxAnimRegistry.js';
+import {
+  normalizeBakedBip001Clip,
+  getTrackBindingStats,
+} from './mixamoRetarget.js';
 
 /** @typedef {'magic'|'sword_shield'|'longbow'|'rifle'|'pistol'|'unarmed'} AnimPack */
 
@@ -239,21 +243,23 @@ export function toRotationOnlyClip(clip) {
   return new THREE.AnimationClip(clip.name, clip.duration, tracks);
 }
 
-export async function loadBakedClip(rel) {
-  const cached = clipCache.get(rel);
+export async function loadBakedClip(rel, scene = null) {
+  const cacheKey = scene ? `${rel}::scene` : rel;
+  const cached = clipCache.get(cacheKey);
   if (cached) return cached.clone();
 
   const url = bakedClipUrl(rel);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`[bakedAnim] ${url} HTTP ${res.status}`);
   const json = await res.json();
-  const clip = toRotationOnlyClip(THREE.AnimationClip.parse(json));
-  clipCache.set(rel, clip);
+  let clip = toRotationOnlyClip(THREE.AnimationClip.parse(json));
+  clip = normalizeBakedBip001Clip(clip, scene);
+  clipCache.set(cacheKey, clip);
   return clip.clone();
 }
 
 /** Load locomotion + combat clips for a weapon type. */
-export async function loadBakedPackClips(weaponType) {
+export async function loadBakedPackClips(weaponType, scene = null) {
   const packName = WeaponToBakedPack[weaponType] || 'sword_shield';
   const pack = ANIM_PACK_CLIPS[packName];
   const rels = new Map([
@@ -283,7 +289,7 @@ export async function loadBakedPackClips(weaponType) {
   const entries = await Promise.all(
     [...rels.entries()].map(async ([name, rel]) => {
       try {
-        const clip = await loadBakedClip(rel);
+        const clip = await loadBakedClip(rel, scene);
         clip.name = name;
         return [name, clip];
       } catch (err) {
@@ -301,6 +307,19 @@ export async function loadBakedPackClips(weaponType) {
   }
   for (const entry of entries) {
     if (entry) clips.set(entry[0], entry[1]);
+  }
+
+  if (scene) {
+    const idle = clips.get("idle");
+    if (idle) {
+      const mixer = new THREE.AnimationMixer(scene);
+      const stats = getTrackBindingStats(mixer.clipAction(idle, scene));
+      if (stats.ratio < 0.45) {
+        console.warn(
+          `[bakedAnim] ${packName}: low idle bind ${stats.bound}/${stats.total} — check Bip001 bone names`,
+        );
+      }
+    }
   }
 
   // Sprint = run clone sped up (SPRINT_CLIP faces backward — see /world GameCharacter).
