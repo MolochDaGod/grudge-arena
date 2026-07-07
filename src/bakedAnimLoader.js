@@ -83,41 +83,41 @@ export const WeaponToBakedPack = {
  */
 export const BAKED_DIR_RELS = {
   unarmed: {
-    walkBack: 'longbow/standing walk back',
-    runBack: 'longbow/standing aim walk back',
-    strafeLeft: 'locomotion/left strafe walking',
-    strafeRight: 'locomotion/right strafe walking',
+        walkBack: 'longbow/standing aim walk back',
+        runBack: 'longbow/standing aim walk back',
+        strafeLeft: 'locomotion/left strafe walking',
+        strafeRight: 'locomotion/right strafe walking',
   },
-  magic: {
-    walkBack: 'longbow/standing walk back',
-    runBack: 'longbow/standing aim walk back',
-    strafeLeft: 'locomotion/left strafe walking',
-    strafeRight: 'locomotion/right strafe walking',
-  },
-  sword_shield: {
-    walkBack: 'longbow/standing walk back',
-    runBack: 'longbow/standing aim walk back',
-    strafeLeft: 'locomotion/left strafe walking',
-    strafeRight: 'locomotion/right strafe walking',
-  },
-  longbow: {
-    walkBack: 'longbow/standing walk back',
-    runBack: 'longbow/standing run back',
-    strafeLeft: 'longbow/standing walk left',
-    strafeRight: 'longbow/standing walk right',
-  },
-  rifle: {
-    walkBack: 'rifle/walk backward',
-    runBack: 'rifle/run backward',
-    strafeLeft: 'rifle/walk forward',
-    strafeRight: 'rifle/walk forward',
-  },
-  pistol: {
-    walkBack: 'pistol/pistol walk backward',
-    runBack: 'pistol/pistol run backward',
-    strafeLeft: 'pistol/pistol strafe',
-    strafeRight: 'pistol/pistol strafe',
-  },
+    magic: {
+          walkBack: 'longbow/standing aim walk back',
+          runBack: 'longbow/standing aim walk back',
+          strafeLeft: 'locomotion/left strafe walking',
+          strafeRight: 'locomotion/right strafe walking',
+    },
+    sword_shield: {
+          walkBack: 'longbow/standing aim walk back',
+          runBack: 'longbow/standing aim walk back',
+          strafeLeft: 'locomotion/left strafe walking',
+          strafeRight: 'locomotion/right strafe walking',
+    },
+    longbow: {
+          walkBack: 'longbow/standing aim walk back',
+          runBack: 'longbow/standing aim walk back',
+          strafeLeft: 'longbow/standing aim walk left',
+          strafeRight: 'longbow/standing aim walk right',
+    },
+    rifle: {
+          walkBack: 'longbow/standing aim walk back',
+          runBack: 'longbow/standing aim walk back',
+          strafeLeft: 'locomotion/left strafe walking',
+          strafeRight: 'locomotion/right strafe walking',
+    },
+    pistol: {
+          walkBack: 'longbow/standing aim walk back',
+          runBack: 'longbow/standing aim walk back',
+          strafeLeft: 'locomotion/left strafe walking',
+          strafeRight: 'locomotion/right strafe walking',
+    },
 };
 
 /** Pack-specific combat overlays (fire / reload / aim). */
@@ -164,7 +164,7 @@ export const BAKED_COMBAT_EXTRAS = {
   combo2: 'sword_shield/sword and shield slash',
   combo3: 'sword_shield/sword and shield attack (2)',
   cast: 'magic/standing 1h cast spell 01',
-  cast2H: 'magic/standing 2h cast spell 01',
+  cast2H: 'magic/standing 1h cast spell 01',
   dodge: 'locomotion/dodging',
   jump: 'locomotion/jump',
   jumpLand: 'uploads/locomotion/hard_landing',
