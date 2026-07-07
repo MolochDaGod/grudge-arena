@@ -10,14 +10,14 @@ import { islandHeight, islandEdgeFactor } from "./IslandTerrain.js";
 const PACK_URL = islandAssetUrl("forest_pack.glb");
 
 const SCATTER = [
-  { template: "tree 1", count: 22, minScale: 2.8, maxScale: 4.2, minY: 0.35 },
-  { template: "tree 2", count: 18, minScale: 2.4, maxScale: 3.8, minY: 0.35 },
-  { template: "rock 1", count: 14, minScale: 1.2, maxScale: 2.4, minY: 0.2 },
-  { template: "rock 2", count: 10, minScale: 1.4, maxScale: 2.8, minY: 0.2 },
-  { template: "grass 1", count: 28, minScale: 0.9, maxScale: 1.4, minY: 0.15 },
-  { template: "grass 2", count: 24, minScale: 0.85, maxScale: 1.3, minY: 0.15 },
-  { template: "flower 1", count: 16, minScale: 0.8, maxScale: 1.2, minY: 0.15 },
-  { template: "mushroom 1", count: 12, minScale: 0.7, maxScale: 1.1, minY: 0.15 },
+  { template: "tree_1", count: 22, minScale: 2.8, maxScale: 4.2, minY: 0.35 },
+  { template: "tree_2", count: 18, minScale: 2.4, maxScale: 3.8, minY: 0.35 },
+  { template: "rock_1", count: 14, minScale: 1.2, maxScale: 2.4, minY: 0.2 },
+  { template: "rock_2", count: 10, minScale: 1.4, maxScale: 2.8, minY: 0.2 },
+  { template: "grass_1", count: 28, minScale: 0.9, maxScale: 1.4, minY: 0.15 },
+  { template: "grass_2", count: 24, minScale: 0.85, maxScale: 1.3, minY: 0.15 },
+  { template: "flower_1", count: 16, minScale: 0.8, maxScale: 1.2, minY: 0.15 },
+  { template: "mushroom_1", count: 12, minScale: 0.7, maxScale: 1.1, minY: 0.15 },
 ];
 
 function mulberry32(seed) {
