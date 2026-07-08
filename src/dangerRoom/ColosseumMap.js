@@ -3,7 +3,7 @@
  */
 
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { createGLTFLoader } from "../gltfLoader.js";
 import { assetUrl } from "../assetConfig.js";
 
 const COLOSSEUM_URL = assetUrl("assets/danger/colosseum.glb");
@@ -36,7 +36,7 @@ export async function loadColosseumMap(scene) {
   const root = new THREE.Group();
   root.name = "colosseum-map";
 
-  const loader = new GLTFLoader();
+  const loader = await createGLTFLoader();
   const gltf = await loader.loadAsync(COLOSSEUM_URL);
   const map = gltf.scene;
   enhanceMapMaterials(map);

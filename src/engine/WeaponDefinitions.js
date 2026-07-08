@@ -64,7 +64,7 @@ export const WeaponDefinitions = {
     name: 'Sabres', title: 'ASSASSIN',
     description: 'Stealth burst with deadly combos',
     primaryResource: 'energy', baseAttackDamage: 25, attackSpeed: 2.0, range: 1.5,
-    attackAnims: ['attack1', 'attack2', 'slash1', 'slash2'],
+    attackAnims: ['attack1', 'attack2', 'attack3', 'attack4'],
     abilities: {
       Q: { name: 'Shadow Step', description: 'Teleport behind target enemy.', cooldown: 6, cost: 40, costType: 'energy', range: 15, effect: 'teleport_behind', offGCD: true, skillAnim: 'dodge' },
       E: { name: 'Blade Dance', description: 'Spin attack hitting all nearby enemies.', cooldown: 3, cost: 30, costType: 'energy', damage: 40, radius: 3, effect: 'aoe_melee', skillAnim: 'slash3' },
@@ -90,7 +90,7 @@ export const WeaponDefinitions = {
     name: 'Runeblade', title: 'TEMPLAR',
     description: 'Life-steal knight with holy magic',
     primaryResource: 'mana', baseAttackDamage: 40, attackSpeed: 1.1, range: 2,
-    attackAnims: ['attack1', 'attack3', 'slash1'],
+    attackAnims: ['attack1', 'attack2', 'attack3', 'attack4'],
     abilities: {
       Q: { name: 'Holy Strike', description: 'Smite enemy, healing for damage dealt.', cooldown: 4, cost: 25, costType: 'mana', damage: 50, healPercent: 0.3, effect: 'melee_lifesteal', skillAnim: 'attack2' },
       E: { name: 'Divine Shield', description: 'Shield yourself and nearby allies.', cooldown: 10, cost: 60, costType: 'mana', shieldAmount: 100, duration: 5, radius: 5, effect: 'aoe_shield', skillAnim: 'powerUp' },
@@ -120,7 +120,7 @@ export const WeaponDefinitions = {
     name: 'Mace', title: 'WORGE',
     description: 'Savage shapeshifter — mace bruiser with werebear transformation',
     primaryResource: 'rage', baseAttackDamage: 42, attackSpeed: 0.9, range: 2.5,
-    attackAnims: ['attack1', 'combo1', 'attack2', 'spin'],
+    attackAnims: ['attack1', 'attack2', 'attack3', 'attack4'],
     abilities: {
       Q: { name: 'Maul', description: 'Savage overhead smash with bonus damage.', cooldown: 3, cost: 15, costType: 'rage', damage: 70, effect: 'aoe_strike', aoeRadius: 2.5, skillAnim: 'combo1' },
       E: { name: 'Feral Charge', description: 'Charge at the enemy and stun on impact.', cooldown: 8, cost: 0, costType: null, damage: 50, distance: 12, effect: 'dash', skillAnim: 'jumpAttack' },

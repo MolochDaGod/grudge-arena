@@ -74,6 +74,9 @@ export class ArenaAI {
   constructor() {
     /** All AI-controlled units */
     this.units = [];
+    /** @type {import('./engine/ArenaTerrainSystem.js').ArenaTerrainSystem | null} */
+    this.terrainSystem = null;
+    this.clampRadius = 35;
   }
 
   /**
@@ -87,11 +90,90 @@ export class ArenaAI {
     unit.aiAttackTimer = 0;
     unit.aiAbilityTimer = 0;
     unit.aiCooldowns = {}; // abilityKey → remaining seconds
+    unit.aiPath = null;
+    unit.aiPathIdx = 0;
     // Physics-based systems (optional — falls back to distance checks if absent)
     unit.aiDetector = physics?.detector || null;
     unit.aiBehaviorFSM = physics?.behaviorFSM || null;
     unit.physicsBody = physics?.physicsBody || null;
     this.units.push(unit);
+  }
+
+  _moveUnit(unit, worldDir, speed, delta) {
+    const dx = worldDir.x * speed * delta;
+    const dz = worldDir.z * speed * delta;
+    if (this.terrainSystem) {
+      const resolved = this.terrainSystem.resolveMove(
+        unit.mesh,
+        dx,
+        dz,
+        worldDir.x,
+        worldDir.z,
+      );
+      unit.mesh.position.x = resolved.x;
+      unit.mesh.position.z = resolved.z;
+      this.terrainSystem.snapMesh(unit.mesh);
+    } else if (unit.physicsBody) {
+      unit.physicsBody.position.x += dx;
+      unit.physicsBody.position.z += dz;
+    } else {
+      unit.mesh.position.x += dx;
+      unit.mesh.position.z += dz;
+    }
+    this._clampToArena(unit.mesh);
+  }
+
+  _ensurePath(unit, targetMesh) {
+    if (!this.terrainSystem || !targetMesh) {
+      unit.aiPath = null;
+      unit.aiPathIdx = 0;
+      return null;
+    }
+    const dest = targetMesh.position;
+    if (!unit._aiPathTarget) unit._aiPathTarget = new THREE.Vector3();
+    const targetMoved = unit._aiPathTarget.distanceToSquared(dest) > 9;
+    if (!unit.aiPath?.length || targetMoved) {
+      unit.aiPath = this.terrainSystem.findPath(
+        unit.mesh.position.x,
+        unit.mesh.position.z,
+        dest.x,
+        dest.z,
+      );
+      unit.aiPathIdx = 0;
+      unit._aiPathTarget.copy(dest);
+    }
+    return unit.aiPath;
+  }
+
+  _steerAlongPath(unit, targetMesh, speed, delta) {
+    const path = this._ensurePath(unit, targetMesh);
+    if (!path?.length) {
+      const toTarget = new THREE.Vector3()
+        .subVectors(targetMesh.position, unit.mesh.position);
+      if (toTarget.lengthSq() < 1e-6) return null;
+      toTarget.normalize();
+      this._moveUnit(unit, toTarget, speed, delta);
+      return toTarget;
+    }
+
+    while (unit.aiPathIdx < path.length) {
+      const wp = path[unit.aiPathIdx];
+      const toWp = new THREE.Vector3(wp.x - unit.mesh.position.x, 0, wp.z - unit.mesh.position.z);
+      if (toWp.lengthSq() < 2.0 * 2.0) {
+        unit.aiPathIdx++;
+        continue;
+      }
+      toWp.normalize();
+      this._moveUnit(unit, toWp, speed, delta);
+      return toWp;
+    }
+
+    const toTarget = new THREE.Vector3()
+      .subVectors(targetMesh.position, unit.mesh.position);
+    if (toTarget.lengthSq() < 1e-6) return null;
+    toTarget.normalize();
+    this._moveUnit(unit, toTarget, speed, delta);
+    return toTarget;
   }
 
   /** Get all living units on a team */
@@ -105,6 +187,8 @@ export class ArenaAI {
    * (trigger-based acquisition). Otherwise fall back to distance scanning.
    */
   findNearestEnemy(unit, allUnits) {
+    if (unit.team === "N") return null;
+
     // Physics detector target (annihilatetrainer Ai.js pattern)
     if (unit.aiDetector) {
       const detected = unit.aiDetector.getTarget();
@@ -112,7 +196,7 @@ export class ArenaAI {
     }
 
     // Fallback: distance scan
-    const enemyTeam = unit.team === 'A' ? 'B' : 'A';
+    const enemyTeam = unit.team === "A" ? "B" : "A";
     const enemies = this.getTeamAlive(allUnits, enemyTeam);
     if (enemies.length === 0) return null;
 
@@ -205,21 +289,18 @@ export class ArenaAI {
           return;
         }
 
-        // Annihilatetrainer Ai.js movement pattern:
-        // Compute direction toward target, normalize, scale by speed × dt
         const toTarget = new THREE.Vector3()
           .subVectors(unit.aiTarget.mesh.position, unit.mesh.position);
-        const moveDir = toTarget.clone().normalize();
-        if (isRanged && dist < RANGED_KITE_MIN) moveDir.multiplyScalar(-1);
-
-        // Move via physics body if available, else direct mesh mutation
-        if (unit.physicsBody) {
-          unit.physicsBody.position.x += moveDir.x * MOVE_SPEED * delta;
-          unit.physicsBody.position.z += moveDir.z * MOVE_SPEED * delta;
+        let moveDir;
+        if (isRanged && dist < RANGED_KITE_MIN) {
+          moveDir = toTarget.clone().normalize().multiplyScalar(-1);
+          this._moveUnit(unit, moveDir, MOVE_SPEED, delta);
         } else {
-          unit.mesh.position.addScaledVector(moveDir, MOVE_SPEED * delta);
+          moveDir = this._steerAlongPath(unit, unit.aiTarget.mesh, MOVE_SPEED, delta);
+          if (!moveDir) {
+            moveDir = toTarget.clone().normalize();
+          }
         }
-        this._clampToArena(unit.mesh);
 
         // Face target (annihilatetrainer canFacing pattern)
         unit.mesh.lookAt(
@@ -265,8 +346,7 @@ export class ArenaAI {
           const dir = new THREE.Vector3()
             .subVectors(unit.aiTarget.mesh.position, unit.mesh.position)
             .normalize();
-          unit.mesh.position.addScaledVector(dir, MOVE_SPEED * delta);
-          this._clampToArena(unit.mesh);
+          this._moveUnit(unit, dir, MOVE_SPEED, delta);
         }
 
         // Always face target before swinging (WoW snap-to-target)
@@ -313,8 +393,7 @@ export class ArenaAI {
         const awayDir = new THREE.Vector3()
           .subVectors(unit.mesh.position, unit.aiTarget.mesh.position)
           .normalize();
-        unit.mesh.position.addScaledVector(awayDir, MOVE_SPEED * 0.8 * delta);
-        this._clampToArena(unit.mesh);
+        this._moveUnit(unit, awayDir, MOVE_SPEED * 0.8, delta);
         driveUnitLocomotion(unit, awayDir, MOVE_SPEED * 0.8, true);
 
         // Try defensive ability (block, heal, etc.)
@@ -420,8 +499,9 @@ export class ArenaAI {
 
   /** Keep AI units inside the arena ring */
   _clampToArena(mesh) {
-    mesh.position.x = Math.max(-35, Math.min(35, mesh.position.x));
-    mesh.position.z = Math.max(-35, Math.min(35, mesh.position.z));
+    const r = this.clampRadius ?? 35;
+    mesh.position.x = Math.max(-r, Math.min(r, mesh.position.x));
+    mesh.position.z = Math.max(-r, Math.min(r, mesh.position.z));
   }
 
   _tryDefensiveAbility(unit) {

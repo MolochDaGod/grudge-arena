@@ -29,6 +29,7 @@ import {
   WEAPON_ATTACH_DEFAULTS,
   HERO_PREFABS,
   DEFAULT_ARMOR_LOADOUT,
+  getRaceClassArmor,
   buildCharacterLoadoutPrefabs,
   extractSkeletonRefs,
 } from './lib/d1-slot-catalog.mjs';
@@ -250,8 +251,8 @@ const RACE_ATLAS_FILES = {
   barbarian: 'Map__9.png',
   elf: 'Map__9.png',
   dwarf: 'Map__12.png',
-  orc: 'Map__11.webp',
-  undead: 'Map__11.webp',
+  orc: 'Map__11.png',
+  undead: 'Map__11.png',
 };
 
 function writeAtlasIfReal(outPath, data, label) {
@@ -418,10 +419,20 @@ async function buildCharacterLibrary() {
   for (const [race, cfg] of Object.entries(RACE_MODELS)) {
     console.log(`\n── ${race.toUpperCase()} (${cfg.prefix}) ─────────────────────────`);
 
-    const glbPath = join(CHARS, cfg.char);
-    if (!existsSync(glbPath)) {
-      console.warn(`  ⚠ MISSING: ${cfg.char} — skipping`);
+    // Canonical sources live in public/models/{race}.glb (intact skin joints).
+    // Never re-bake from a previously baked assets/characters/* file — that can
+    // compound export drift (null skin joints, underscore-only bone names).
+    const sourceCandidates = [
+      join(OUT, `${race}.glb`),
+      join(CHARS, cfg.char),
+    ];
+    const glbPath = sourceCandidates.find((p) => existsSync(p));
+    if (!glbPath) {
+      console.warn(`  ⚠ MISSING source GLB for ${race} — skipping`);
       continue;
+    }
+    if (glbPath.startsWith(OUT)) {
+      console.log(`  source: models/${race}.glb`);
     }
 
     const buf = readFileSync(glbPath);
@@ -516,7 +527,14 @@ async function buildCharacterLibrary() {
       skeleton,
       slots,
       weaponMappings: WEAPON_EQUIP_MAP,
-      defaultLoadout: { armor: { ...DEFAULT_ARMOR_LOADOUT } },
+      defaultLoadout: {
+        armor: {
+          ...getRaceClassArmor(
+            race,
+            Object.values(HERO_PREFABS).find((h) => h.race === race)?.classId || "warrior",
+          ),
+        },
+      },
       attachTuning: WEAPON_ATTACH_DEFAULTS,
       animPacks: {
         default: RACE_DEFAULT_PACK[race],
@@ -544,7 +562,7 @@ async function buildCharacterLibrary() {
       pack: 'd1_modular',
       prefix: raceEntry.prefix,
       defaultLoadout: {
-        armor: { ...DEFAULT_ARMOR_LOADOUT },
+        armor: { ...getRaceClassArmor(hero.race, hero.classId) },
         weapon: { ...(WEAPON_EQUIP_MAP[hero.defaultWeapon] || {}) },
       },
     };

@@ -4,6 +4,7 @@
  */
 
 import * as THREE from "three";
+import { getAnimationRoot } from "./characterScale.js";
 import {
   BIP001_D1_BONES,
   buildSceneBoneLookup,
@@ -31,10 +32,18 @@ export const MIN_CLIP_BIND_RATIO = 0.45;
 /** Minimum bound tracks for combat/loco overlays (filters empty remaps). */
 export const MIN_CLIP_BIND_COUNT = 8;
 
-export function collectSceneBones(scene) {
+export { getAnimationRoot } from "./characterScale.js";
+
+export function collectSceneBones(scene, scope = null) {
+  const root = scope || getAnimationRoot(scene);
   const bones = new Set();
-  scene.traverse((node) => {
+  root.traverse((node) => {
     if (node.isBone) bones.add(node.name);
+    if (node.isSkinnedMesh?.skeleton?.bones) {
+      for (const bone of node.skeleton.bones) {
+        if (bone?.name) bones.add(bone.name);
+      }
+    }
   });
   return bones;
 }
@@ -53,8 +62,10 @@ export function hasD1ModularMeshes(scene) {
  * @returns {{ ok: boolean, missing: string[], bones: string[] }}
  */
 export function validateCharacterSkeleton(scene) {
-  const bones = collectSceneBones(scene);
-  const missing = D1_REQUIRED_BONES.filter((b) => !bones.has(b));
+  const animRoot = getAnimationRoot(scene);
+  const lookup = buildSceneBoneLookup(animRoot);
+  const bones = collectSceneBones(scene, animRoot);
+  const missing = D1_REQUIRED_BONES.filter((b) => !lookup.has(b));
   return {
     ok: missing.length === 0,
     missing,
@@ -69,8 +80,9 @@ export function validateCharacterSkeleton(scene) {
  * @param {THREE.AnimationMixer} [mixer]
  */
 export function validateClipBinding(clip, scene, mixer = null) {
-  const m = mixer || new THREE.AnimationMixer(scene);
-  const action = m.clipAction(clip, scene);
+  const animRoot = getAnimationRoot(scene);
+  const m = mixer || new THREE.AnimationMixer(animRoot);
+  const action = m.clipAction(clip, animRoot);
   const stats = getTrackBindingStats(action);
   const ok =
     stats.total >= MIN_CLIP_BIND_COUNT &&
@@ -79,7 +91,7 @@ export function validateClipBinding(clip, scene, mixer = null) {
 }
 
 export function filterValidBoneTracks(clip, scene = null) {
-  const lookup = scene ? buildSceneBoneLookup(scene) : null;
+  const lookup = scene ? buildSceneBoneLookup(getAnimationRoot(scene)) : null;
   clip.tracks = clip.tracks.filter((track) => {
     const dot = track.name.indexOf(".");
     if (dot === -1) return true;

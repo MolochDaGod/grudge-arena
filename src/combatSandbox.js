@@ -21,7 +21,8 @@ export function isCombatSandboxMode() {
 }
 
 export const COMBAT_SANDBOX_PRESET = "island";
-export const COMBAT_SANDBOX_ANIM_OVERDRIVE = 2;
+/** Match anim-test gait timing — higher values look sped-up and harsh on island TPS. */
+export const COMBAT_SANDBOX_ANIM_OVERDRIVE = 1;
 
 export function combatSandboxDefaultRoute() {
   return isCombatSandboxHost() ? "/" : COMBAT_SANDBOX_PATH;

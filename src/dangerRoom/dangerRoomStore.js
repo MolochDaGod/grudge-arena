@@ -138,3 +138,14 @@ export function setCombatSandboxUi(on) {
 export function isCombatSandboxUi() {
   return !!state.combatSandbox || isCombatSandboxMode();
 }
+
+/**
+ * Island heightfield + Rapier + ground sampling — combat-sandbox route OR island preset.
+ * /danger-room defaults to island preset but is not the /combat-sandbox path; both need
+ * the same terrain/physics stack or characters float, fall through mesh, and PBR ground
+ * never registers colliders.
+ */
+export function needsIslandTerrain() {
+  if (isCombatSandboxMode()) return true;
+  return state.presetId === "island";
+}

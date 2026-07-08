@@ -49,7 +49,11 @@ export async function getSkillAnimMap(weaponType) {
 
 export function resolveSkillAnim(weaponType, slot, fallback = "attack1") {
   const local = loadLocalOverrides()[weaponType] || {};
-  return local[slot] || fallback;
+  if (local[slot]) return local[slot];
+  const def = WeaponDefinitions[weaponType];
+  const fromDef = def?.abilities?.[slot]?.skillAnim;
+  if (fromDef) return fromDef;
+  return fallback;
 }
 
 export async function resolveSkillAnimAsync(weaponType, slot, fallback = "attack1") {

@@ -10,6 +10,11 @@ import {
   normalizeBakedBip001Clip,
   getTrackBindingStats,
 } from './mixamoRetarget.js';
+import {
+  validateClipBinding,
+  MIN_CLIP_BIND_RATIO,
+} from './skeletonContract.js';
+import { getAnimationRoot } from './characterScale.js';
 
 /** @typedef {'magic'|'sword_shield'|'longbow'|'rifle'|'pistol'|'unarmed'} AnimPack */
 
@@ -160,9 +165,18 @@ export const PACK_COMBAT_EXTRAS = {
 export const BAKED_COMBAT_EXTRAS = {
   attack2: 'sword_shield/sword and shield slash',
   attack3: 'sword_shield/sword and shield attack (2)',
+  attack4: 'sword/one hand sword combo',
   combo1: 'sword_shield/sword and shield attack',
   combo2: 'sword_shield/sword and shield slash',
   combo3: 'sword_shield/sword and shield attack (2)',
+  slash3: 'sword_shield/sword and shield attack (2)',
+  swing: 'sword/great sword attack',
+  block: 'sword_shield/sword and shield block',
+  aoe: 'magic/standing 1h cast spell 01',
+  aoe2: 'magic/standing 2h cast spell 01',
+  powerUp: 'magic/standing 2h cast spell 01',
+  crouch: 'uploads/action/Crouch_Idle',
+  hit: 'uploads/action/Aerial_Evade',
   cast: 'magic/standing 1h cast spell 01',
   cast2H: 'magic/standing 2h cast spell 01',
   dodge: 'locomotion/dodging',
@@ -243,8 +257,14 @@ export function toRotationOnlyClip(clip) {
   return new THREE.AnimationClip(clip.name, clip.duration, tracks);
 }
 
+function sceneCacheTag(scene) {
+  if (!scene) return "";
+  const root = getAnimationRoot(scene);
+  return root?.uuid ? `::${root.uuid}` : "::scene";
+}
+
 export async function loadBakedClip(rel, scene = null) {
-  const cacheKey = scene ? `${rel}::scene` : rel;
+  const cacheKey = `${rel}${sceneCacheTag(scene)}`;
   const cached = clipCache.get(cacheKey);
   if (cached) return cached.clone();
 
@@ -253,6 +273,7 @@ export async function loadBakedClip(rel, scene = null) {
   if (!res.ok) throw new Error(`[bakedAnim] ${url} HTTP ${res.status}`);
   const json = await res.json();
   let clip = toRotationOnlyClip(THREE.AnimationClip.parse(json));
+  // Scene-aware remap filters tracks to the primary body armature only.
   clip = normalizeBakedBip001Clip(clip, scene);
   clipCache.set(cacheKey, clip);
   return clip.clone();
@@ -312,11 +333,11 @@ export async function loadBakedPackClips(weaponType, scene = null) {
   if (scene) {
     const idle = clips.get("idle");
     if (idle) {
-      const mixer = new THREE.AnimationMixer(scene);
-      const stats = getTrackBindingStats(mixer.clipAction(idle, scene));
-      if (stats.ratio < 0.45) {
-        console.warn(
-          `[bakedAnim] ${packName}: low idle bind ${stats.bound}/${stats.total} — check Bip001 bone names`,
+      const bind = validateClipBinding(idle, scene);
+      if (!bind.ok) {
+        throw new BakedAnimLoadError(
+          `[bakedAnim] ${packName}: idle bind ${bind.bound}/${bind.total} (${Math.round(bind.ratio * 100)}%, need ≥${Math.round(MIN_CLIP_BIND_RATIO * 100)}%) — check Bip001 bone names`,
+          { weaponType, packName, missing: ["idle-bind"] },
         );
       }
     }

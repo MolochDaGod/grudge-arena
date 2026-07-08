@@ -120,4 +120,32 @@ describe("mixamoRetarget", () => {
     expect(names).toContain("Bip001 R Hand.quaternion");
     expect(names.some((n) => n.includes("_"))).toBe(false);
   });
+
+  it("keeps underscore track names when the loaded rig uses underscores", () => {
+    const root = new THREE.Group();
+    const arm = new THREE.Bone();
+    arm.name = "Armature";
+    root.add(arm);
+    for (const name of ["Bip001_Pelvis", "Bip001_Spine", "Bip001_R_Hand", "Bip001_L_Hand"]) {
+      const bone = new THREE.Bone();
+      bone.name = name;
+      arm.add(bone);
+    }
+
+    const times = [0, 1];
+    const values = [0, 0, 0, 1, 0, 0, 0, 1];
+    const clip = new THREE.AnimationClip("baked", 1, [
+      new THREE.QuaternionKeyframeTrack("Bip001_Pelvis.quaternion", times, values),
+      new THREE.QuaternionKeyframeTrack("Bip001_R_Hand.quaternion", times, values),
+    ]);
+    remapClipBoneNames(clip, root);
+
+    const names = clip.tracks.map((t) => t.name);
+    expect(names).toContain("Bip001_Pelvis.quaternion");
+    expect(names).toContain("Bip001_R_Hand.quaternion");
+
+    const mixer = new THREE.AnimationMixer(root);
+    const stats = getTrackBindingStats(mixer.clipAction(clip, root));
+    expect(stats.ratio).toBe(1);
+  });
 });

@@ -60,6 +60,8 @@ const DOUBLE_TAP_WINDOW = 280;  // ms
 const DOUBLE_TAP_COOLDOWN = 0.5;// seconds
 const DASH_SPEED = 14;          // Units/sec burst
 const DASH_DISTANCE = 5;        // How far a dash moves
+const CLIMB_DURATION = 1.15;
+const CLIMB_FORWARD_SPEED = 1.4;
 
 export class ArenaController {
   /**
@@ -103,8 +105,19 @@ export class ArenaController {
     this.controlScheme = 'wow';
     /** Raycast terrain snap — set by danger room bootstrap. */
     this.groundSampler = null;
+    /** Navmesh + climb + wall-slide (island combat sandbox). */
+    this.terrainSystem = null;
+    /** When true, Y snap runs after procedural IK in game.js (Three.js best practice). */
+    this.deferGroundSnap = false;
     this._terrainLoco = null;
     this._prevYaw = mesh.rotation.y;
+    this._lastClimbHint = null;
+    this._climbing = false;
+    this._climbT = 0;
+    this._climbStartY = 0;
+    this._climbTopY = 0;
+    this._climbDirX = 0;
+    this._climbDirZ = 0;
 
     /** Baked Bip001 gait (AnimationDirector) — danger room Grudge6 pipeline. */
     this.useBakedLoco = !!animCtrl?.useBakedLoco;
@@ -262,7 +275,11 @@ export class ArenaController {
     // RMB → toggle auto-attack (WoW-style).
     // Tab → cycle to next enemy target (WoW-style).
 
-    if (this.tickKey._RMB) {
+    const isTps = this.controlScheme === "tps";
+    // WoW: RMB toggles auto-attack. TPS sandbox: LMB click (not held for ADS).
+    if (this.tickKey._RMB && !isTps) {
+      this.onAttack?.("toggle");
+    } else if (this.tickKey._LMBAttack && isTps) {
       this.onAttack?.("toggle");
     }
 
@@ -272,7 +289,11 @@ export class ArenaController {
     }
 
     if (this.tickKey.Space) {
-      fsm.send({ type: "jump" });
+      if (this._tryStartClimb()) {
+        /* climb started — skip jump */
+      } else {
+        fsm.send({ type: "jump" });
+      }
     } else if (this.tickKey.ControlLeft || this.tickKey.ControlRight) {
       fsm.send({ type: "dash" });
     } else if (this.tickKey.KeyV) {
@@ -288,8 +309,17 @@ export class ArenaController {
       this._activeSkill = 3; this._fireSkill('R');
     } else if (this.tickKey.Digit4 || this.tickKey.Numpad4) {
       this._activeSkill = 4; this._fireSkill('F');
+    } else if (this.tickKey.Digit5 || this.tickKey.Numpad5) {
+      this._fireSkill('P');
+    } else if (this.tickKey.KeyQ) {
+      this._activeSkill = 1; this._fireSkill('Q');
+    } else if (this.tickKey.KeyE) {
+      this._activeSkill = 2; this._fireSkill('E');
+    } else if (this.tickKey.KeyR) {
+      this._activeSkill = 3; this._fireSkill('R');
+    } else if (this.tickKey.KeyF) {
+      this._activeSkill = 4; this._fireSkill('F');
     }
-    // Slot 5 = empty (intentional no-op)
 
     // ─ Consumable slots 6-8 (Digit6-8 OR Numpad6-8) ─
     if (this.tickKey.Digit6 || this.tickKey.Numpad6) {
@@ -305,8 +335,6 @@ export class ArenaController {
     const rmbHeld = !!this.holdKey._RMB;
     const pressA  = this.holdKey.KeyA || this.holdKey.ArrowLeft;
     const pressD  = this.holdKey.KeyD || this.holdKey.ArrowRight;
-    const isTps = this.controlScheme === 'tps';
-
     if (!isTps) {
       // ── A/D behaviour depends on RMB (WoW standard) ──
       if (!rmbHeld && this.canMove && (pressA || pressD)) {
@@ -334,8 +362,7 @@ export class ArenaController {
     } else {
       if (this.holdKey.KeyW || this.holdKey.ArrowUp) iz -= 1;
       if (this.holdKey.KeyS || this.holdKey.ArrowDown) iz += 1;
-      if (this.holdKey.KeyQ) ix -= 1;
-      if (this.holdKey.KeyE) ix += 1;
+      // Q/E are ability hotkeys (see tickKey above) — strafe via RMB+A/D only.
       if (rmbHeld && pressA) ix -= 1;
       if (rmbHeld && pressD) ix += 1;
     }
@@ -373,7 +400,9 @@ export class ArenaController {
     // XState with events it won't act on anyway.
     const fsmValue = fsm.getSnapshot().value;
 
-    if (this.canMove) {
+    if (this._climbing) {
+      this._updateClimb(delta);
+    } else if (this.canMove) {
       if (hasInput) {
         // Accelerate
         this.currentSpeed = Math.min(
@@ -382,20 +411,48 @@ export class ArenaController {
         );
 
         this.targetYaw = Math.atan2(worldDirX, worldDirZ);
+        this._climbDirX = worldDirX;
+        this._climbDirZ = worldDirZ;
 
-        if (this.groundSampler) {
+        if (this.terrainSystem) {
+          const slopeMult = this.terrainSystem.slopeSpeedMultiplier(
+            this.mesh,
+            worldDirX,
+            worldDirZ,
+          );
+          maxSpeed *= slopeMult;
+          this.currentSpeed = Math.min(this.currentSpeed, maxSpeed);
+        } else if (this.groundSampler) {
           const slopeMult = this._terrainLoco?.slopeSpeedMultiplier(worldDirX, worldDirZ) ?? 1;
           maxSpeed *= slopeMult;
           this.currentSpeed = Math.min(this.currentSpeed, maxSpeed);
         }
 
-        this.mesh.position.x += worldDirX * this.currentSpeed * delta;
-        this.mesh.position.z += worldDirZ * this.currentSpeed * delta;
+        const dx = worldDirX * this.currentSpeed * delta;
+        const dz = worldDirZ * this.currentSpeed * delta;
+        if (this.terrainSystem) {
+          const resolved = this.terrainSystem.resolveMove(
+            this.mesh,
+            dx,
+            dz,
+            worldDirX,
+            worldDirZ,
+          );
+          this.mesh.position.x = resolved.x;
+          this.mesh.position.z = resolved.z;
+          this._lastClimbHint = resolved.climb;
+        } else {
+          this.mesh.position.x += dx;
+          this.mesh.position.z += dz;
+          this._lastClimbHint = null;
+        }
         this._clampPosition();
         this._snapToGround();
 
         const speed01 = maxSpeed > 0 ? Math.min(1, this.currentSpeed / maxSpeed) : 0;
-        const turnRate = (this.mesh.rotation.y - this._prevYaw) / Math.max(delta, 1e-4);
+        const turnRate = isTps
+          ? 0
+          : (this.mesh.rotation.y - this._prevYaw) / Math.max(delta, 1e-4);
         this._terrainLoco?.afterMove(delta, {
           moving: true,
           worldDirX,
@@ -432,15 +489,11 @@ export class ArenaController {
       ? hasInput
       : (hasInput || (!rmbHeld && (pressA || pressD)));
     this.camera.setPlayerMoving?.(isActuallyMoving);
-    this.camera.setAiming?.(rmbHeld);
-
-    if (isTps && this.canMove && !hasInput) {
-      this.targetYaw = lerpAngle(
-        this.targetYaw,
-        this.camera.getYaw(),
-        Math.min(1, delta * 6),
-      );
-    }
+    // TPS: RMB orbits camera only — ADS is driven by LMB (ranged) in ShooterSystem.
+    const aiming = isTps
+      ? !!(this.holdKey._LMB && this.canMove)
+      : rmbHeld;
+    this.camera.setAiming?.(aiming);
 
     // ── Smooth rotation ──
     let diff = this.targetYaw - this.mesh.rotation.y;
@@ -471,6 +524,52 @@ export class ArenaController {
     }
   }
 
+  /** Navmesh, climb detection, obstacle colliders (island sandbox). */
+  setTerrainSystem(system) {
+    this.terrainSystem = system ?? null;
+    if (system?.groundSampler) {
+      this.setGroundSampler(system.groundSampler);
+    }
+  }
+
+  _tryStartClimb() {
+    let hint = this._lastClimbHint;
+    if (!hint?.canClimb && this.terrainSystem) {
+      const fx = Math.sin(this.mesh.rotation.y);
+      const fz = Math.cos(this.mesh.rotation.y);
+      hint = this.terrainSystem.climbDetector.detect(this.mesh, fx, fz);
+    }
+    if (!hint?.canClimb || this._climbing) return false;
+    const len = Math.hypot(this._climbDirX, this._climbDirZ);
+    const fx = len > 0.05 ? this._climbDirX / len : Math.sin(this.mesh.rotation.y);
+    const fz = len > 0.05 ? this._climbDirZ / len : Math.cos(this.mesh.rotation.y);
+    this._climbing = true;
+    this._climbT = 0;
+    this._climbStartY = this.mesh.position.y;
+    this._climbTopY = hint.topY ?? this._climbStartY + 1.2;
+    this._climbDirX = fx;
+    this._climbDirZ = fz;
+    this.currentSpeed = 0;
+    this.animCtrl?.playOnce?.("climb", 1.05);
+    return true;
+  }
+
+  _updateClimb(delta) {
+    this._climbT += delta;
+    const t = Math.min(1, this._climbT / CLIMB_DURATION);
+    const eased = t * t * (3 - 2 * t);
+    this.mesh.position.y =
+      this._climbStartY + (this._climbTopY - this._climbStartY) * eased;
+    this.mesh.position.x += this._climbDirX * CLIMB_FORWARD_SPEED * delta;
+    this.mesh.position.z += this._climbDirZ * CLIMB_FORWARD_SPEED * delta;
+    this._clampPosition();
+    if (t >= 1) {
+      this._climbing = false;
+      this._snapToGround();
+      this._lastClimbHint = null;
+    }
+  }
+
   /**
    * Locomotion driver — baked gait (Grudge6) or directional blend (legacy).
    * Returns true when locomotion was handled this frame.
@@ -478,35 +577,44 @@ export class ArenaController {
   _driveLocomotion(fsmValue, fsm, ix, iz, isSprint, maxSpeed, delta, hasInput) {
     if (this.useBakedLoco && this.animCtrl) {
       const movable = fsmValue === 'idle' || fsmValue === 'run';
+      const isTps = this.controlScheme === "tps";
+      const aimingLoco = isTps
+        ? !!(this.holdKey._LMB && this.canMove)
+        : !!this.holdKey._RMB;
       if (!movable) {
-        this.animCtrl.setDirLocomotion?.(0, 0, 0, false, !!this.holdKey._RMB);
+        this.animCtrl.setDirLocomotion?.(0, 0, 0, false, aimingLoco);
         return false;
       }
       const moving = hasInput || this.currentSpeed > 0.05;
       const speed01 = maxSpeed > 0 ? Math.min(1, this.currentSpeed / maxSpeed) : 0;
-      const rmbHeld = !!this.holdKey._RMB;
       if (this.animCtrl.setDirLocomotion) {
-        const yaw = this.mesh.rotation.y;
-        const sin = Math.sin(yaw);
-        const cos = Math.cos(yaw);
         let lx = 0;
         let lz = 0;
         if (hasInput) {
           const len = Math.sqrt(ix * ix + iz * iz) || 1;
-          const camYaw = this.camera.getYaw();
-          const c = Math.cos(camYaw);
-          const s = Math.sin(camYaw);
-          const wx = (ix / len) * c - (iz / len) * s;
-          const wz = (ix / len) * s + (iz / len) * c;
-          lx = wx * cos - wz * sin;
-          lz = wx * sin + wz * cos;
+          if (isTps) {
+            // TPS: ix/iz are already camera-relative stick — one transform only.
+            lx = ix / len;
+            lz = iz / len;
+          } else {
+            const yaw = this.mesh.rotation.y;
+            const sin = Math.sin(yaw);
+            const cos = Math.cos(yaw);
+            const camYaw = this.camera.getYaw();
+            const c = Math.cos(camYaw);
+            const s = Math.sin(camYaw);
+            const wx = (ix / len) * c - (iz / len) * s;
+            const wz = (ix / len) * s + (iz / len) * c;
+            lx = wx * cos - wz * sin;
+            lz = wx * sin + wz * cos;
+          }
         }
         this.animCtrl.setDirLocomotion(
           lx,
           lz,
           moving ? speed01 : 0,
           isSprint && moving,
-          rmbHeld,
+          aimingLoco,
         );
       } else if (this.animCtrl.setGaitFromSpeed) {
         this.animCtrl.setGaitFromSpeed(moving ? speed01 : 0, isSprint && moving);
@@ -591,7 +699,7 @@ export class ArenaController {
   }
 
   _snapToGround() {
-    if (!this.groundSampler) return;
+    if (this.deferGroundSnap || !this.groundSampler) return;
     this._terrainLoco?.beforeGroundSnap?.();
     this.groundSampler.snapMesh(this.mesh);
   }

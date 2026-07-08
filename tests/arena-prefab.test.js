@@ -27,7 +27,8 @@ describe("arenaPrefab/1.0 manifest", () => {
   it("resolves default D1 loadout from prefab helpers", () => {
     const m = JSON.parse(readFileSync(MANIFEST, "utf8"));
     const loadout = getDefaultD1Loadout(m, "human", "sabres");
-    expect(loadout.armor.body).toBe("A");
+    expect(loadout.armor.body).toBe("C");
+    expect(loadout.armor.head).toBe("D");
     expect(loadout.weapon.rSlot).toBe("sword");
     const prefab = getLoadoutPrefab(m, "human_sabres_default");
     expect(prefab.animPack).toBe("sword_shield");

@@ -50,8 +50,8 @@ export const RACE_ATLAS_FILES = {
   barbarian: "Map__9.png",
   elf: "Map__9.png",
   dwarf: "Map__12.png",
-  orc: "Map__11.webp",
-  undead: "Map__11.webp",
+  orc: "Map__11.png",
+  undead: "Map__11.png",
 };
 
 /** Grudge6 R2 mirror paths for race atlases (fallback after /cdn). */
@@ -135,15 +135,16 @@ export function raceModelFallbackPaths(race) {
 /**
  * Ordered atlas fallback — arena /cdn bake first, grudge6 R2 mirror second.
  */
-export function raceTextureFallbackPaths(race) {
+export function raceTextureFallbackPaths(race, cacheBust) {
   const atlas = RACE_ATLAS_FILES[race];
   if (!atlas) return [];
+  const q = cacheBust ? `?v=${cacheBust}` : "";
   const paths = [
-    charUrl(`${race}/textures/${atlas}`),
-    grudge6AssetUrl(`arena/assets/characters/${race}/textures/${atlas}`),
+    charUrl(`${race}/textures/${atlas}`) + q,
+    grudge6AssetUrl(`arena/assets/characters/${race}/textures/${atlas}`) + q,
   ];
   const cdnWebp = RACE_CDN_ATLAS_WEBP[race];
-  if (cdnWebp) paths.push(grudge6AssetUrl(cdnWebp));
+  if (cdnWebp) paths.push(grudge6AssetUrl(cdnWebp) + q);
   return paths;
 }
 

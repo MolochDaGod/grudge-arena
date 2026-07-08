@@ -284,6 +284,7 @@ function populateClipList(controller, baked) {
 }
 
 function logClipCatalog(controller) {
+  log(`baked clips: ${clipNames.length}`, { kind: "meta" });
   log("— clips (right-click name to rename) —", { kind: "meta" });
   for (const key of clipNames) {
     const { text } = formatClipLogLine(key, controller);

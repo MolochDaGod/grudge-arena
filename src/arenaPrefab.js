@@ -4,6 +4,7 @@
  */
 
 import { modelUrl } from "./assetConfig.js";
+import { getRaceClassArmor } from "./d1SlotCatalog.js";
 
 let _manifestPromise = null;
 let _cached = null;
@@ -69,10 +70,15 @@ export function getDefaultD1Loadout(manifest, heroId, weaponType) {
   if (prefab?.d1) return structuredClone(prefab.d1);
 
   const hero = getHeroPrefab(manifest, heroId);
-  const race = getRacePrefab(manifest, hero?.race || heroId);
+  const raceId = hero?.race || heroId;
+  const race = getRacePrefab(manifest, raceId);
   const mapping = race?.weaponMappings?.[weaponType] || getWeaponMapping(manifest, weaponType);
+  const classId = hero?.classId || "warrior";
   return {
-    armor: { ...(race?.defaultLoadout?.armor || {}) },
+    armor: {
+      ...getRaceClassArmor(raceId, classId),
+      ...(race?.defaultLoadout?.armor || {}),
+    },
     weapon: mapping ? { ...mapping } : {},
     extras: mapping?.extras ? [...mapping.extras] : [],
   };

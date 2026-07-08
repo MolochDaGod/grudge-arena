@@ -3,6 +3,7 @@ import * as THREE from "three";
 import {
   validateCharacterSkeleton,
   validateClipBinding,
+  getAnimationRoot,
   hasD1ModularMeshes,
   D1_REQUIRED_BONES,
   BIP001_D1_BONES,
@@ -42,6 +43,56 @@ describe("skeletonContract", () => {
     const r = validateCharacterSkeleton(root);
     expect(r.ok).toBe(false);
     expect(r.missing.length).toBeGreaterThan(0);
+  });
+
+  it("accepts underscore Bip001 aliases on the rig", () => {
+    const root = new THREE.Group();
+    const arm = new THREE.Bone();
+    arm.name = "Armature";
+    root.add(arm);
+    const aliasMap = {
+      "Bip001 Pelvis": "Bip001_Pelvis",
+      "Bip001 Spine": "Bip001_Spine",
+      "Bip001 Head": "Bip001_Head",
+      "Bip001 L Hand": "Bip001_L_Hand",
+      "Bip001 R Hand": "Bip001_R_Hand",
+      "Bip001 L Foot": "Bip001_L_Foot",
+      "Bip001 R Foot": "Bip001_R_Foot",
+    };
+    for (const name of Object.values(aliasMap)) {
+      const b = new THREE.Bone();
+      b.name = name;
+      arm.add(b);
+    }
+    const r = validateCharacterSkeleton(root);
+    expect(r.ok).toBe(true);
+    expect(r.missing).toEqual([]);
+  });
+
+  it("getAnimationRoot prefers body skinned mesh over decoy armature", () => {
+    const scene = new THREE.Group();
+    const decoyArm = new THREE.Bone();
+    decoyArm.name = "DecoyArmature";
+    scene.add(decoyArm);
+    const decoyPelvis = new THREE.Bone();
+    decoyPelvis.name = "Bip001_Pelvis";
+    decoyArm.add(decoyPelvis);
+
+    const bodyArm = new THREE.Group();
+    bodyArm.name = "BodyArmature";
+    scene.add(bodyArm);
+    const bodyPelvis = new THREE.Bone();
+    bodyPelvis.name = "Bip001 Pelvis";
+    bodyArm.add(bodyPelvis);
+    const skin = new THREE.SkinnedMesh(
+      new THREE.BoxGeometry(),
+      new THREE.MeshBasicMaterial(),
+    );
+    skin.name = "ELF_Units_Body_A";
+    skin.skeleton = new THREE.Skeleton([bodyPelvis]);
+    bodyArm.add(skin);
+
+    expect(getAnimationRoot(scene)).toBe(bodyArm);
   });
 
   it("detects D1 modular meshes", () => {

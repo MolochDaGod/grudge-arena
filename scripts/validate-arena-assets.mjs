@@ -18,6 +18,10 @@ import {
   PROP_MAX_M,
   RACE_HEIGHT_SCALE,
 } from "./lib/glb-scale.mjs";
+import {
+  validateCharacterGlbContract,
+  GLTF_CONTRACT_VERSION,
+} from "./lib/gltf-contract.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, "..");
@@ -38,11 +42,10 @@ const ATLAS = {
   barbarian: "Map__9.png",
   elf: "Map__9.png",
   dwarf: "Map__12.png",
-  orc: "Map__11.webp",
-  undead: "Map__11.webp",
+  orc: "Map__11.png",
+  undead: "Map__11.png",
 };
 
-const REQUIRED_BONES = ["Bip001 Pelvis", "Bip001 Head", "Bip001 L Foot", "Bip001 R Foot"];
 const PLACEHOLDER_BYTES = 1024;
 /** sprint is cloned from run at runtime — validate source clips only */
 const BAKED_LOCO = {
@@ -100,19 +103,18 @@ function auditCharacterGlb(race, fileName) {
     );
   }
 
-  const skins = json.skins || [];
-  const bones = new Set();
-  for (const sk of skins) {
-    for (const jid of sk.joints || []) {
-      const n = json.nodes?.[jid]?.name;
-      if (n) bones.add(n);
-    }
-  }
-  entry.boneCount = bones.size;
-  const missingBones = REQUIRED_BONES.filter((b) => !bones.has(b));
-  if (missingBones.length) {
+  const contract = validateCharacterGlbContract(full, { race, targetHeightM: targetH });
+  entry.contract = contract.contract;
+  entry.sha256 = contract.sha256;
+  entry.boneCount = contract.boneCount;
+  entry.skinnedMeshCount = contract.skinnedMeshCount;
+  entry.skin = contract.skin;
+  for (const e of contract.errors) {
+    if (!entry.errors.includes(e)) entry.errors.push(e);
     entry.ok = false;
-    entry.errors.push(`missing bones: ${missingBones.join(", ")}`);
+  }
+  for (const w of contract.warnings || []) {
+    if (!entry.warnings.includes(w)) entry.warnings.push(w);
   }
 
   const atlasFile = ATLAS[race];
@@ -251,6 +253,39 @@ function main() {
     if (!p.ok) ok = false;
   }
 
+  const pirateManifestPath = join(PUBLIC, "assets", "island", "pirate-kit", "manifest.json");
+  let pirateAudit = { ok: true, errors: [], modelCount: 0 };
+  if (existsSync(pirateManifestPath)) {
+    const pm = JSON.parse(readFileSync(pirateManifestPath, "utf8"));
+    pirateAudit.modelCount = pm.models?.length ?? 0;
+    if (pirateAudit.modelCount < 72) {
+      pirateAudit.ok = false;
+      pirateAudit.errors.push(`only ${pirateAudit.modelCount}/72 models — run npm run ingest:pirate-kit`);
+    }
+    const required = ["ship-pirate-large", "ship-small", "structure-platform-dock", "cannon", "ship-wreck"];
+    for (const id of required) {
+      if (!pm.models?.includes(id)) {
+        pirateAudit.ok = false;
+        pirateAudit.errors.push(`missing ${id}`);
+      }
+    }
+    const colormap = join(PUBLIC, "assets", "island", "pirate-kit", "glb", "Textures", "colormap.png");
+    if (!existsSync(colormap) || statSync(colormap).size < 1000) {
+      pirateAudit.ok = false;
+      pirateAudit.errors.push("colormap missing or placeholder");
+    }
+  } else {
+    pirateAudit.ok = false;
+    pirateAudit.errors.push("pirate-kit manifest missing");
+  }
+  console.log(
+    `  ${pirateAudit.ok ? "✔" : "✖"} pirate-kit (${pirateAudit.modelCount} GLBs, Kenney CC0)`,
+  );
+  if (!pirateAudit.ok) {
+    ok = false;
+    for (const e of pirateAudit.errors) console.log(`      ✖ ${e}`);
+  }
+
   const manifestPath = join(PUBLIC, "models", "characterManifest.json");
   let prefabAudit = { ok: true, errors: [] };
   if (existsSync(manifestPath)) {
@@ -316,9 +351,11 @@ function main() {
       scaleBake: "skinned-root-only — armature scale, vertices+bones bound",
       rootConvention: "feet-midpoint-y0",
       prefabSchema: "arenaPrefab/1.0",
+      gltfContract: GLTF_CONTRACT_VERSION,
     },
     characters,
     islandProps,
+    pirateKit: pirateAudit,
     bakedAnims: baked,
     boxAnimations: boxAnims,
     prefabManifest: prefabAudit,

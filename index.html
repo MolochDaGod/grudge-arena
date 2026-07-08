@@ -7,9 +7,10 @@
   <meta name="description" content="Grudge Arena — 3D PvP combat arena with 6 playable races, 5 weapon classes, and real-time multiplayer. Built on Grudge Studio.">
   <script>
     if (/island-crusade-combat-sandbox/i.test(location.hostname)) {
+      document.documentElement.className = (document.documentElement.className + ' combat-sandbox-host').trim();
       document.title = 'Grudge Warlords: Combat Sandbox';
       const desc = document.querySelector('meta[name="description"]');
-      if (desc) desc.content = 'Island Crusade combat sandbox — TPS movement, weapon skills, full HUD and panels.';
+      if (desc) desc.content = 'Island Crusade combat sandbox — WoW-style controls, weapon skills, full HUD and panels.';
     }
   </script>
   <meta name="theme-color" content="#07070f">
@@ -252,10 +253,23 @@
 
   <!-- Player bars -->
   <div class="hud-bars">
-    <div class="bar-row"><span class="bar-label">Health</span><div class="bar-track"><div class="bar-fill" id="healthBar"></div></div></div>
-    <div class="bar-row"><span class="bar-label">Mana</span><div class="bar-track"><div class="bar-fill" id="manaBar"></div></div></div>
-    <div class="bar-row"><span class="bar-label">Energy</span><div class="bar-track"><div class="bar-fill" id="energyBar"></div></div></div>
-    <div class="bar-row"><span class="bar-label">Rage</span><div class="bar-track"><div class="bar-fill" id="rageBar"></div></div></div>
+    <div class="bar-row" data-resource="health"><span class="bar-label">Health</span><div class="bar-track"><div class="bar-fill bar-fill-hp" id="healthBar"></div></div></div>
+    <div class="bar-row" data-resource="mana"><span class="bar-label">Mana</span><div class="bar-track"><div class="bar-fill bar-fill-mp" id="manaBar"></div></div></div>
+    <div class="bar-row" data-resource="energy"><span class="bar-label">Energy</span><div class="bar-track"><div class="bar-fill bar-fill-en" id="energyBar"></div></div></div>
+    <div class="bar-row" data-resource="rage"><span class="bar-label">Rage</span><div class="bar-track"><div class="bar-fill bar-fill-rg" id="rageBar"></div></div></div>
+  </div>
+
+  <!-- Compact MMORPG status strip (combat sandbox) -->
+  <div id="sandbox-status" class="sandbox-status" hidden>
+    <div id="sb-portrait" class="sb-portrait" title="Character [C]">⚔</div>
+    <div class="sb-info">
+      <div id="sb-name" class="sb-name">Warlord</div>
+      <div id="sb-class" class="sb-class">Lv.42 Warrior</div>
+      <div class="sb-bars">
+        <div class="sb-bar-track sb-bar-hp"><div id="sb-hp" class="sb-bar-fill"></div></div>
+        <div class="sb-bar-track sb-bar-res" id="sb-res-wrap" data-resource="mana"><div id="sb-res" class="sb-bar-fill"></div></div>
+      </div>
+    </div>
   </div>
 
   <!-- Weapons -->
@@ -279,7 +293,7 @@
     <div class="panel-toggles">
       <button class="panel-toggle-btn" data-panel="panel-inv" title="Inventory [I]">I</button>
       <button class="panel-toggle-btn" data-panel="panel-char" title="Character [C]">C</button>
-      <button class="panel-toggle-btn" data-panel="panel-skills" title="Skills [K]">K</button>
+      <button class="panel-toggle-btn" data-panel="panel-skills" title="Spell Book [K]">K</button>
     </div>
     
     <!-- Inventory panel (40-slot grid populated from ECS Inventory component) -->
@@ -294,22 +308,24 @@
       </div>
     </div>
     
-    <!-- Character panel (paper-doll equipment + stats) -->
+    <!-- Character panel (MMORPG sheet + paper-doll equipment) -->
     <div id="panel-char" class="float-panel">
       <div class="fp-header">
         <span class="fp-title">Character</span>
         <span class="fp-close" data-close="panel-char">✕</span>
       </div>
       <div class="fp-body">
+        <div id="char-sheet-header" class="char-sheet-header"></div>
         <div class="equip-doll" id="equip-doll"></div>
+        <div id="char-attr-grid" class="char-attr-grid"></div>
         <div class="equip-stats" id="equip-stats"></div>
       </div>
     </div>
     
-    <!-- Skills panel (9-slot skill bar) -->
+    <!-- Spell book (9-slot ability grid) -->
     <div id="panel-skills" class="float-panel">
       <div class="fp-header">
-        <span class="fp-title">Skills</span>
+        <span class="fp-title">Spell Book</span>
         <span class="fp-close" data-close="panel-skills">✕</span>
       </div>
       <div class="fp-body">
@@ -324,9 +340,15 @@
 <script type="module">
   import { bootRouter, navigate, resolveInitialRoute, ROUTES, parseRoute } from './src/arenaRouter.js';
   import { registerGameFlowHost, handleRoute, exitToDressingRoom, resumePendingRoute } from './src/gameFlow.js';
+  import { bootArenaGame } from './src/arenaBoot.js';
   import { isCombatSandboxMode } from './src/combatSandbox.js';
+  import {
+    applySandboxHostDocument,
+    prepareSandboxLobbyChrome,
+  } from './src/sandboxGameFlow.js';
 
   const COMBAT_SANDBOX_HOST = isCombatSandboxMode();
+  if (COMBAT_SANDBOX_HOST) applySandboxHostDocument();
 
   // ── Grudge Auth ───────────────────────────────────────────────
   // Auth contract: Puter SDK for identity, Phantom for wallet, Guest fallback
@@ -927,6 +949,15 @@
 
   async function showLoggedIn(user) {
     grudgeUser = user;
+    if (COMBAT_SANDBOX_HOST) {
+      prepareSandboxLobbyChrome();
+      document.getElementById('un').textContent = user.displayName || user.username || 'Guest';
+      const resumed = await resumePendingRoute();
+      if (!resumed) {
+        await handleRoute(parseRoute(location.pathname));
+      }
+      return;
+    }
     document.getElementById('auth-gate').style.display = 'none';
     document.getElementById('race-select').classList.add('show');
     document.getElementById('un').textContent = user.displayName || user.username || 'Warlord';
@@ -1413,36 +1444,21 @@
     const playerName = grudgeUser?.username || 'Warlord';
     const raceName = normalizedRace.charAt(0).toUpperCase() + normalizedRace.slice(1);
 
-    setLoadingProgress(10, 'Loading game engine...');
-
     try {
-      const { GrudgeArena } = await import('./game.js');
-      setLoadingProgress(40, 'Initializing arena...');
-
-      const arena = new GrudgeArena({
+      await bootArenaGame({
         container: root,
-        mode: mode === 'danger' ? 'danger' : 'arena',
         race: normalizedRace,
         weapon: normalizedBuild.weapon,
         classId: normalizedBuild.classId,
         buildConfig: normalizedBuild,
-        playerName: playerName,
+        playerName,
         grudgeId: grudgeUser?.grudgeId || localStorage.getItem('grudge_id') || '',
         matchData: matchData || null,
+        mode,
         wsUrl: WS_URL,
         token: getToken(),
+        onProgress: setLoadingProgress,
       });
-
-      // Activate #game-root BEFORE init so its clientWidth/Height are non-zero
-      // when the renderer sizes its drawing buffer. Loading overlay (z-index 90)
-      // still covers it, so the user sees the loading screen until init completes.
-      root.classList.add('active');
-      void root.offsetWidth; // force layout flush
-
-      setLoadingProgress(60, 'Building world...');
-      await arena.init();
-
-      setLoadingProgress(100, 'Ready!');
 
       const hudInfo = document.getElementById('hud-player-info');
       if (hudInfo) hudInfo.textContent = playerName + ' · ' + raceName;
@@ -1451,7 +1467,6 @@
         document.getElementById('loading-overlay').classList.remove('active');
       }, 300);
 
-      window.__grudgeArena = arena;
       console.log('[arena] Game loaded —', raceName);
     } catch (err) {
       console.error('[arena] Failed to load game engine:', err);
@@ -1475,8 +1490,8 @@
   }
 
   registerGameFlowHost({
-    isAuthed: isUserAuthed,
-    isBuildReady: () => getPointsSpent() === ATTRIBUTE_TOTAL,
+    isAuthed: () => COMBAT_SANDBOX_HOST || isUserAuthed(),
+    isBuildReady: () => COMBAT_SANDBOX_HOST || getPointsSpent() === ATTRIBUTE_TOTAL,
     setAuthStatus,
     getBuildConfig: () => normalizeBuildConfig(getCurrentBuildConfig()),
     loadArenaGame,

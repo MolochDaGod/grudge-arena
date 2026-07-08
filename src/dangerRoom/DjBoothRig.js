@@ -3,7 +3,7 @@
  */
 
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { createGLTFLoader } from "../gltfLoader.js";
 import { assetUrl } from "../assetConfig.js";
 import { getDangerRoomMusic } from "./DangerRoomMusic.js";
 
@@ -56,55 +56,56 @@ export function createDjBoothRig(scene) {
   let idleAction = null;
   let currentAction = null;
   let lastPhrase = -1;
-  const loader = new GLTFLoader();
   const disposables = [];
 
   addFallbackBooth(root);
   scene.add(root);
 
-  loader.load(
-    DJ_BOOTH_URL,
-    (gltf) => {
-      const booth = gltf.scene;
-      booth.traverse((ch) => {
+  createGLTFLoader().then((loader) => {
+    loader.load(
+      DJ_BOOTH_URL,
+      (gltf) => {
+        const booth = gltf.scene;
+        booth.traverse((ch) => {
+          if (ch.isMesh) {
+            ch.castShadow = true;
+            ch.receiveShadow = true;
+          }
+        });
+        fitBoothToAlcove(booth);
+        root.add(booth);
+      },
+      undefined,
+      () => addFallbackBooth(root),
+    );
+
+    loader.load(RACALVIN_URL, (gltf) => {
+      const body = gltf.scene;
+      body.traverse((ch) => {
         if (ch.isMesh) {
           ch.castShadow = true;
           ch.receiveShadow = true;
         }
       });
-      fitBoothToAlcove(booth);
-      root.add(booth);
-    },
-    undefined,
-    () => addFallbackBooth(root),
-  );
+      const box = new THREE.Box3().setFromObject(body);
+      const size = box.getSize(new THREE.Vector3());
+      const scale = 1.75 / (size.y || 1);
+      body.scale.setScalar(scale);
+      body.position.set(0, -box.min.y * scale, DJ_STAND_Z);
+      body.rotation.y = Math.PI;
+      root.add(body);
 
-  loader.load(RACALVIN_URL, (gltf) => {
-    const body = gltf.scene;
-    body.traverse((ch) => {
-      if (ch.isMesh) {
-        ch.castShadow = true;
-        ch.receiveShadow = true;
+      if (gltf.animations?.length) {
+        mixer = new THREE.AnimationMixer(body);
+        const clip = gltf.animations[0];
+        danceAction = mixer.clipAction(clip);
+        danceAction.setLoop(THREE.LoopRepeat, Infinity);
+        idleAction = danceAction;
+        currentAction = danceAction;
+        danceAction.play();
       }
+      disposables.push(body);
     });
-    const box = new THREE.Box3().setFromObject(body);
-    const size = box.getSize(new THREE.Vector3());
-    const scale = 1.75 / (size.y || 1);
-    body.scale.setScalar(scale);
-    body.position.set(0, -box.min.y * scale, DJ_STAND_Z);
-    body.rotation.y = Math.PI;
-    root.add(body);
-
-    if (gltf.animations?.length) {
-      mixer = new THREE.AnimationMixer(body);
-      const clip = gltf.animations[0];
-      danceAction = mixer.clipAction(clip);
-      danceAction.setLoop(THREE.LoopRepeat, Infinity);
-      idleAction = danceAction;
-      currentAction = danceAction;
-      danceAction.play();
-    }
-    disposables.push(body);
   });
 
   function update(dt) {

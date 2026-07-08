@@ -117,23 +117,25 @@ export function measureVertexExtents(glbJson, bin) {
   };
 }
 
-/** Max uniform root-node scale multiplier (scene graph export artifact). */
+/** Root-node uniform scale multiplier (scene graph export artifact; may be < 1 after skinned bake). */
 export function measureRootScale(glbJson) {
   const nodes = glbJson.nodes || [];
   const roots = new Set();
   for (const scene of glbJson.scenes || []) {
     for (const nid of scene.nodes || []) roots.add(nid);
   }
-  let maxS = 1;
+  let effectiveS = 1;
   const details = [];
   for (const nid of roots) {
     const n = nodes[nid];
     if (!n?.scale) continue;
     const s = Math.max(Math.abs(n.scale[0]), Math.abs(n.scale[1]), Math.abs(n.scale[2]));
-    if (Math.abs(s - 1) > 0.02) details.push({ name: n.name || `node_${nid}`, scale: n.scale });
-    maxS = Math.max(maxS, s);
+    if (Math.abs(s - 1) > 0.02) {
+      details.push({ name: n.name || `node_${nid}`, scale: n.scale });
+      effectiveS = s;
+    }
   }
-  return { maxS, details };
+  return { maxS: effectiveS, details };
 }
 
 /** Effective world height = vertex height × max root scale. */

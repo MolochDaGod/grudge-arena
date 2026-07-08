@@ -39,5 +39,21 @@ describe("islandAssetUrl", () => {
     expect(islandAssetUrl("assets/island/village/glb/SM_PROP_well.glb")).toBe(
       "/assets/island/village/glb/SM_PROP_well.glb",
     );
+    expect(islandAssetUrl("pirate-kit/glb/ship-pirate-large.glb")).toBe(
+      "/assets/island/pirate-kit/glb/ship-pirate-large.glb",
+    );
+  });
+});
+
+describe("Kenney Pirate Kit", () => {
+  it("ships all 72 GLBs + colormap for island outpost", () => {
+    const manifest = JSON.parse(
+      readFileSync(resolve("public/assets/island/pirate-kit/manifest.json"), "utf8"),
+    );
+    expect(manifest.models).toHaveLength(72);
+    expect(manifest.models).toContain("ship-pirate-large");
+    expect(manifest.models).toContain("chest");
+    const colormap = resolve("public/assets/island/pirate-kit/glb/Textures/colormap.png");
+    expect(readFileSync(colormap).length).toBeGreaterThan(1000);
   });
 });

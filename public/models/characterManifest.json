@@ -1,7 +1,7 @@
 {
   "schema": "arenaPrefab/1.0",
   "version": "3.0.0",
-  "generated": "2026-07-07T03:39:53.789Z",
+  "generated": "2026-07-08T09:16:06.572Z",
   "era": "grudge-warlords",
   "pack": "d1_modular",
   "api": {
@@ -16,7 +16,7 @@
   "weaponMappings": {
     "greatsword": {
       "rSlot": "axe",
-      "rVariant": "A"
+      "rVariant": "B"
     },
     "scythe": {
       "rSlot": "axe",
@@ -337,15 +337,15 @@
         "mace"
       ],
       "heightOffset": 0,
-      "modelPath": "/assets/characters/human/WK_Characters.glb",
+      "modelPath": "/assets/forge/prefabs/human_sabres_default.glb",
       "pack": "d1_modular",
       "prefix": "WK",
       "defaultLoadout": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
+          "head": "D",
+          "body": "C",
+          "arms": "B",
+          "legs": "B",
           "shoulders": "A"
         },
         "weapon": {
@@ -357,7 +357,8 @@
             "quiver"
           ]
         }
-      }
+      },
+      "forgeModelPath": "/assets/forge/prefabs/human_sabres_default.glb"
     },
     "barbarian": {
       "id": "barbarian",
@@ -374,22 +375,23 @@
         "scythe"
       ],
       "heightOffset": 0,
-      "modelPath": "/assets/characters/barbarian/BRB_Characters.glb",
+      "modelPath": "/assets/forge/prefabs/barbarian_mace_default.glb",
       "pack": "d1_modular",
       "prefix": "BRB",
       "defaultLoadout": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
-          "shoulders": "A"
+          "head": "B",
+          "body": "C",
+          "arms": "B",
+          "legs": "B",
+          "shoulders": "B"
         },
         "weapon": {
           "rSlot": "hammer",
           "rVariant": "A"
         }
-      }
+      },
+      "forgeModelPath": "/assets/forge/prefabs/barbarian_mace_default.glb"
     },
     "elf": {
       "id": "elf",
@@ -405,15 +407,15 @@
         "scythe"
       ],
       "heightOffset": 0,
-      "modelPath": "/assets/characters/elf/ELF_Characters.glb",
+      "modelPath": "/assets/forge/prefabs/elf_bow_default.glb",
       "pack": "d1_modular",
       "prefix": "ELF",
       "defaultLoadout": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
+          "head": "C",
+          "body": "B",
+          "arms": "B",
+          "legs": "B",
           "shoulders": "A"
         },
         "weapon": {
@@ -423,7 +425,8 @@
             "quiver"
           ]
         }
-      }
+      },
+      "forgeModelPath": "/assets/forge/prefabs/elf_bow_default.glb"
     },
     "dwarf": {
       "id": "dwarf",
@@ -439,16 +442,16 @@
         "mace"
       ],
       "heightOffset": -0.15,
-      "modelPath": "/assets/characters/dwarf/DWF_Characters.glb",
+      "modelPath": "/assets/forge/prefabs/dwarf_sabres_default.glb",
       "pack": "d1_modular",
       "prefix": "DWF",
       "defaultLoadout": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
-          "shoulders": "A"
+          "head": "G",
+          "body": "C",
+          "arms": "B",
+          "legs": "B",
+          "shoulders": "B"
         },
         "weapon": {
           "rSlot": "sword",
@@ -459,7 +462,8 @@
             "quiver"
           ]
         }
-      }
+      },
+      "forgeModelPath": "/assets/forge/prefabs/dwarf_sabres_default.glb"
     },
     "orc": {
       "id": "orc",
@@ -475,22 +479,23 @@
         "runeblade"
       ],
       "heightOffset": 0,
-      "modelPath": "/assets/characters/orc/ORC_Characters.glb",
+      "modelPath": "/assets/forge/prefabs/orc_greatsword_default.glb",
       "pack": "d1_modular",
       "prefix": "ORC",
       "defaultLoadout": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
-          "shoulders": "A"
+          "head": "E",
+          "body": "C",
+          "arms": "B",
+          "legs": "B",
+          "shoulders": "C"
         },
         "weapon": {
           "rSlot": "axe",
-          "rVariant": "A"
+          "rVariant": "B"
         }
-      }
+      },
+      "forgeModelPath": "/assets/forge/prefabs/orc_greatsword_default.glb"
     },
     "undead": {
       "id": "undead",
@@ -505,22 +510,23 @@
         "runeblade"
       ],
       "heightOffset": 0,
-      "modelPath": "/assets/characters/undead/UD_Characters.glb",
+      "modelPath": "/assets/forge/prefabs/undead_staff_default.glb",
       "pack": "d1_modular",
       "prefix": "UD",
       "defaultLoadout": {
         "armor": {
-          "body": "A",
           "head": "A",
-          "arms": "A",
-          "legs": "A",
+          "body": "G",
+          "arms": "B",
+          "legs": "B",
           "shoulders": "A"
         },
         "weapon": {
           "lSlot": "staff",
           "lVariant": "A"
         }
-      }
+      },
+      "forgeModelPath": "/assets/forge/prefabs/undead_staff_default.glb"
     }
   },
   "prefabs": {
@@ -532,10 +538,10 @@
       "pack": "d1_modular",
       "d1": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
+          "head": "D",
+          "body": "C",
+          "arms": "B",
+          "legs": "B",
           "shoulders": "A"
         },
         "weapon": {
@@ -552,7 +558,10 @@
         ]
       },
       "animPack": "sword_shield",
-      "modelPath": "/assets/characters/human/WK_Characters.glb"
+      "modelPath": "/assets/forge/prefabs/human_sabres_default.glb",
+      "forge": true,
+      "forgeModelPath": "/assets/forge/prefabs/human_sabres_default.glb",
+      "forgeSceneIndex": 2
     },
     "barbarian_mace_default": {
       "kind": "characterLoadout",
@@ -562,11 +571,11 @@
       "pack": "d1_modular",
       "d1": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
-          "shoulders": "A"
+          "head": "B",
+          "body": "C",
+          "arms": "B",
+          "legs": "B",
+          "shoulders": "B"
         },
         "weapon": {
           "rSlot": "hammer",
@@ -575,7 +584,10 @@
         "extras": []
       },
       "animPack": "sword_shield",
-      "modelPath": "/assets/characters/barbarian/BRB_Characters.glb"
+      "modelPath": "/assets/forge/prefabs/barbarian_mace_default.glb",
+      "forge": true,
+      "forgeModelPath": "/assets/forge/prefabs/barbarian_mace_default.glb",
+      "forgeSceneIndex": 6
     },
     "elf_bow_default": {
       "kind": "characterLoadout",
@@ -585,10 +597,10 @@
       "pack": "d1_modular",
       "d1": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
+          "head": "C",
+          "body": "B",
+          "arms": "B",
+          "legs": "B",
           "shoulders": "A"
         },
         "weapon": {
@@ -603,7 +615,10 @@
         ]
       },
       "animPack": "longbow",
-      "modelPath": "/assets/characters/elf/ELF_Characters.glb"
+      "modelPath": "/assets/forge/prefabs/elf_bow_default.glb",
+      "forge": true,
+      "forgeModelPath": "/assets/forge/prefabs/elf_bow_default.glb",
+      "forgeSceneIndex": 28
     },
     "dwarf_sabres_default": {
       "kind": "characterLoadout",
@@ -613,11 +628,11 @@
       "pack": "d1_modular",
       "d1": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
-          "shoulders": "A"
+          "head": "G",
+          "body": "C",
+          "arms": "B",
+          "legs": "B",
+          "shoulders": "B"
         },
         "weapon": {
           "rSlot": "sword",
@@ -633,7 +648,10 @@
         ]
       },
       "animPack": "sword_shield",
-      "modelPath": "/assets/characters/dwarf/DWF_Characters.glb"
+      "modelPath": "/assets/forge/prefabs/dwarf_sabres_default.glb",
+      "forge": true,
+      "forgeModelPath": "/assets/forge/prefabs/dwarf_sabres_default.glb",
+      "forgeSceneIndex": 7
     },
     "orc_greatsword_default": {
       "kind": "characterLoadout",
@@ -643,20 +661,23 @@
       "pack": "d1_modular",
       "d1": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
-          "shoulders": "A"
+          "head": "E",
+          "body": "C",
+          "arms": "B",
+          "legs": "B",
+          "shoulders": "C"
         },
         "weapon": {
           "rSlot": "axe",
-          "rVariant": "A"
+          "rVariant": "B"
         },
         "extras": []
       },
       "animPack": "sword_shield",
-      "modelPath": "/assets/characters/orc/ORC_Characters.glb"
+      "modelPath": "/assets/forge/prefabs/orc_greatsword_default.glb",
+      "forge": true,
+      "forgeModelPath": "/assets/forge/prefabs/orc_greatsword_default.glb",
+      "forgeSceneIndex": 22
     },
     "undead_staff_default": {
       "kind": "characterLoadout",
@@ -666,10 +687,10 @@
       "pack": "d1_modular",
       "d1": {
         "armor": {
-          "body": "A",
           "head": "A",
-          "arms": "A",
-          "legs": "A",
+          "body": "G",
+          "arms": "B",
+          "legs": "B",
           "shoulders": "A"
         },
         "weapon": {
@@ -679,7 +700,40 @@
         "extras": []
       },
       "animPack": "magic",
-      "modelPath": "/assets/characters/undead/UD_Characters.glb"
+      "modelPath": "/assets/forge/prefabs/undead_staff_default.glb",
+      "forge": true,
+      "forgeModelPath": "/assets/forge/prefabs/undead_staff_default.glb",
+      "forgeSceneIndex": 8
+    },
+    "human_greatsword_default": {
+      "kind": "characterLoadout",
+      "forge": true,
+      "forgeModelPath": "/assets/forge/prefabs/human_greatsword_default.glb",
+      "forgeSceneIndex": 4,
+      "race": "human",
+      "weapon": "greatsword",
+      "heroId": "human",
+      "modelPath": "/assets/forge/prefabs/human_greatsword_default.glb"
+    },
+    "human_staff_default": {
+      "kind": "characterLoadout",
+      "forge": true,
+      "forgeModelPath": "/assets/forge/prefabs/human_staff_default.glb",
+      "forgeSceneIndex": 1,
+      "race": "human",
+      "weapon": "staff",
+      "heroId": "human",
+      "modelPath": "/assets/forge/prefabs/human_staff_default.glb"
+    },
+    "dwarf_mace_default": {
+      "kind": "characterLoadout",
+      "forge": true,
+      "forgeModelPath": "/assets/forge/prefabs/dwarf_mace_default.glb",
+      "forgeSceneIndex": 5,
+      "race": "dwarf",
+      "weapon": "mace",
+      "heroId": "dwarf",
+      "modelPath": "/assets/forge/prefabs/dwarf_mace_default.glb"
     }
   },
   "races": {
@@ -710,7 +764,7 @@
           "mimeType": "image/png",
           "role": "bodyAtlas",
           "source": "hero:C:\\Users\\david\\Desktop\\grudge-arena\\public\\assets\\factions\\crusade\\barbarians_warrior.glb",
-          "bytes": 8746603
+          "bytes": 8407712
         }
       ],
       "skeleton": {
@@ -920,7 +974,7 @@
       "weaponMappings": {
         "greatsword": {
           "rSlot": "axe",
-          "rVariant": "A"
+          "rVariant": "B"
         },
         "scythe": {
           "rSlot": "axe",
@@ -966,11 +1020,11 @@
       },
       "defaultLoadout": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
-          "shoulders": "A"
+          "head": "B",
+          "body": "C",
+          "arms": "B",
+          "legs": "B",
+          "shoulders": "B"
         }
       },
       "attachTuning": {
@@ -1517,7 +1571,7 @@
           "mimeType": "image/png",
           "role": "bodyAtlas",
           "source": "hero:C:\\Users\\david\\Desktop\\grudge-arena\\public\\assets\\factions\\fabled\\dwarves_warrior.glb",
-          "bytes": 8054377
+          "bytes": 8128532
         }
       ],
       "skeleton": {
@@ -1727,7 +1781,7 @@
       "weaponMappings": {
         "greatsword": {
           "rSlot": "axe",
-          "rVariant": "A"
+          "rVariant": "B"
         },
         "scythe": {
           "rSlot": "axe",
@@ -1773,11 +1827,11 @@
       },
       "defaultLoadout": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
-          "shoulders": "A"
+          "head": "G",
+          "body": "C",
+          "arms": "B",
+          "legs": "B",
+          "shoulders": "B"
         }
       },
       "attachTuning": {
@@ -2328,7 +2382,7 @@
           "mimeType": "image/png",
           "role": "bodyAtlas",
           "source": "hero:C:\\Users\\david\\Desktop\\grudge-arena\\public\\assets\\factions\\fabled\\high-elves_ranger.glb",
-          "bytes": 9687012
+          "bytes": 9428352
         }
       ],
       "skeleton": {
@@ -2538,7 +2592,7 @@
       "weaponMappings": {
         "greatsword": {
           "rSlot": "axe",
-          "rVariant": "A"
+          "rVariant": "B"
         },
         "scythe": {
           "rSlot": "axe",
@@ -2584,10 +2638,10 @@
       },
       "defaultLoadout": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
+          "head": "C",
+          "body": "B",
+          "arms": "B",
+          "legs": "B",
           "shoulders": "A"
         }
       },
@@ -3135,7 +3189,7 @@
           "mimeType": "image/png",
           "role": "bodyAtlas",
           "source": "hero:C:\\Users\\david\\Desktop\\grudge-arena\\public\\assets\\factions\\crusade\\western-kingdoms_warrior.glb",
-          "bytes": 8429410
+          "bytes": 8225652
         }
       ],
       "skeleton": {
@@ -3335,7 +3389,7 @@
       "weaponMappings": {
         "greatsword": {
           "rSlot": "axe",
-          "rVariant": "A"
+          "rVariant": "B"
         },
         "scythe": {
           "rSlot": "axe",
@@ -3381,10 +3435,10 @@
       },
       "defaultLoadout": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
+          "head": "D",
+          "body": "C",
+          "arms": "B",
+          "legs": "B",
           "shoulders": "A"
         }
       },
@@ -3871,11 +3925,11 @@
       "textures": [
         {
           "name": "Map #11",
-          "file": "/assets/characters/orc/textures/Map__11.webp",
-          "mimeType": "image/webp",
+          "file": "/assets/characters/orc/textures/Map__11.png",
+          "mimeType": "image/png",
           "role": "bodyAtlas",
-          "source": "cdn:https://assets.grudge-studio.com/assets/orcs/textures/ORC_StandardUnits.webp",
-          "bytes": 4595498
+          "source": "hero:C:\\Users\\david\\Desktop\\grudge-arena\\public\\assets\\factions\\legion\\orcs_warrior.glb",
+          "bytes": 8711848
         }
       ],
       "skeleton": {
@@ -4087,7 +4141,7 @@
       "weaponMappings": {
         "greatsword": {
           "rSlot": "axe",
-          "rVariant": "A"
+          "rVariant": "B"
         },
         "scythe": {
           "rSlot": "axe",
@@ -4133,11 +4187,11 @@
       },
       "defaultLoadout": {
         "armor": {
-          "body": "A",
-          "head": "A",
-          "arms": "A",
-          "legs": "A",
-          "shoulders": "A"
+          "head": "E",
+          "body": "C",
+          "arms": "B",
+          "legs": "B",
+          "shoulders": "C"
         }
       },
       "attachTuning": {
@@ -4713,11 +4767,11 @@
       "textures": [
         {
           "name": "Map #11",
-          "file": "/assets/characters/undead/textures/Map__11.webp",
-          "mimeType": "image/webp",
+          "file": "/assets/characters/undead/textures/Map__11.png",
+          "mimeType": "image/png",
           "role": "bodyAtlas",
-          "source": "cdn:https://assets.grudge-studio.com/assets/undead/textures/UD_Standard_Units.webp",
-          "bytes": 4799856
+          "source": "hero:C:\\Users\\david\\Desktop\\grudge-arena\\public\\assets\\factions\\legion\\undead_warrior.glb",
+          "bytes": 8874660
         }
       ],
       "skeleton": {
@@ -4927,7 +4981,7 @@
       "weaponMappings": {
         "greatsword": {
           "rSlot": "axe",
-          "rVariant": "A"
+          "rVariant": "B"
         },
         "scythe": {
           "rSlot": "axe",
@@ -4973,10 +5027,10 @@
       },
       "defaultLoadout": {
         "armor": {
-          "body": "A",
           "head": "A",
-          "arms": "A",
-          "legs": "A",
+          "body": "G",
+          "arms": "B",
+          "legs": "B",
           "shoulders": "A"
         }
       },
@@ -5609,5 +5663,11 @@
       "equipment": {},
       "defaultAnimPack": "magic"
     }
+  },
+  "forge": {
+    "source": "30grudge6characters.glb",
+    "masterGlb": "/assets/forge/30grudge6characters.glb",
+    "manifest": "/assets/forge/forge-prefab-manifest.json",
+    "combatSandboxDefault": true
   }
 }

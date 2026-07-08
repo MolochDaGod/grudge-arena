@@ -1,0 +1,146 @@
+{
+  "version": 1,
+  "contract": "arenaGltf/1.0",
+  "generated": "2026-07-08T09:17:21.501Z",
+  "ok": true,
+  "characters": {
+    "human": {
+      "contract": "arenaGltf/1.0",
+      "path": "C:\\Users\\david\\Desktop\\grudge-arena\\public\\assets\\characters\\human\\WK_Characters.glb",
+      "race": "human",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "sha256": "3a42158751b3ef135e5a339b617a7820ffae222e2adf0dc9857223f3cf0a9f7d",
+      "worldHeightM": 1.75,
+      "vertexHeightM": 0.411,
+      "rootScale": 4.257815862375984,
+      "boneCount": 18,
+      "skinnedMeshCount": 23,
+      "skin": {
+        "skinCount": 23,
+        "boundSkins": 23,
+        "totalJoints": 148,
+        "nullJoints": 0,
+        "nullRatio": 0
+      },
+      "scaleMode": "skinned-root-only",
+      "targetHeightM": 1.75
+    },
+    "barbarian": {
+      "contract": "arenaGltf/1.0",
+      "path": "C:\\Users\\david\\Desktop\\grudge-arena\\public\\assets\\characters\\barbarian\\BRB_Characters.glb",
+      "race": "barbarian",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "sha256": "cb7d940edef5edd745aef04da76d09c97473591eec8a07002e467ba7ffa9b548",
+      "worldHeightM": 1.96,
+      "vertexHeightM": 0.3553,
+      "rootScale": 5.516550650957672,
+      "boneCount": 18,
+      "skinnedMeshCount": 27,
+      "skin": {
+        "skinCount": 27,
+        "boundSkins": 27,
+        "totalJoints": 180,
+        "nullJoints": 0,
+        "nullRatio": 0
+      },
+      "scaleMode": "skinned-root-only",
+      "targetHeightM": 1.9600000000000002
+    },
+    "elf": {
+      "contract": "arenaGltf/1.0",
+      "path": "C:\\Users\\david\\Desktop\\grudge-arena\\public\\assets\\characters\\elf\\ELF_Characters.glb",
+      "race": "elf",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "sha256": "87af169adf7be35aa7a80942e3e1d379303980803ae53ac810af27bd16c1e0ec",
+      "worldHeightM": 1.8375,
+      "vertexHeightM": 0.6049,
+      "rootScale": 3.037463951333395,
+      "boneCount": 18,
+      "skinnedMeshCount": 31,
+      "skin": {
+        "skinCount": 31,
+        "boundSkins": 31,
+        "totalJoints": 160,
+        "nullJoints": 0,
+        "nullRatio": 0
+      },
+      "scaleMode": "skinned-root-only",
+      "targetHeightM": 1.8375000000000001
+    },
+    "dwarf": {
+      "contract": "arenaGltf/1.0",
+      "path": "C:\\Users\\david\\Desktop\\grudge-arena\\public\\assets\\characters\\dwarf\\DWF_Characters.glb",
+      "race": "dwarf",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "sha256": "a0bc31dd5fcd359b04d5ffb4ec62143cb5cb4a25e2fbed5aac8e3a5e80e8cd11",
+      "worldHeightM": 1.4875,
+      "vertexHeightM": 0.3634,
+      "rootScale": 4.093081408846387,
+      "boneCount": 18,
+      "skinnedMeshCount": 28,
+      "skin": {
+        "skinCount": 28,
+        "boundSkins": 28,
+        "totalJoints": 178,
+        "nullJoints": 0,
+        "nullRatio": 0
+      },
+      "scaleMode": "skinned-root-only",
+      "targetHeightM": 1.4875
+    },
+    "orc": {
+      "contract": "arenaGltf/1.0",
+      "path": "C:\\Users\\david\\Desktop\\grudge-arena\\public\\assets\\characters\\orc\\ORC_Characters.glb",
+      "race": "orc",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "sha256": "1a5c3ab7a400dd0a6d29ac9a67093d7adadb632c7178168474278558825528ec",
+      "worldHeightM": 1.89,
+      "vertexHeightM": 0.4765,
+      "rootScale": 3.9660528082417112,
+      "boneCount": 20,
+      "skinnedMeshCount": 30,
+      "skin": {
+        "skinCount": 30,
+        "boundSkins": 30,
+        "totalJoints": 197,
+        "nullJoints": 0,
+        "nullRatio": 0
+      },
+      "scaleMode": "skinned-root-only",
+      "targetHeightM": 1.8900000000000001
+    },
+    "undead": {
+      "contract": "arenaGltf/1.0",
+      "path": "C:\\Users\\david\\Desktop\\grudge-arena\\public\\assets\\characters\\undead\\UD_Characters.glb",
+      "race": "undead",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "sha256": "59d9f2c73074021d4d2afb3b88de25e5be0e346ee01635ecf620284c4282a8db",
+      "worldHeightM": 1.6625,
+      "vertexHeightM": 0.4083,
+      "rootScale": 4.072163586618506,
+      "boneCount": 18,
+      "skinnedMeshCount": 32,
+      "skin": {
+        "skinCount": 32,
+        "boundSkins": 32,
+        "totalJoints": 264,
+        "nullJoints": 0,
+        "nullRatio": 0
+      },
+      "scaleMode": "skinned-root-only",
+      "targetHeightM": 1.6624999999999999
+    }
+  }
+}

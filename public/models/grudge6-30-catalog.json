@@ -1,0 +1,921 @@
+{
+  "schema": "grudge6-30/1.0",
+  "generated": "2026-07-08T09:13:43.872Z",
+  "source": "D:\\.downloads\\30grudge6characters.glb",
+  "sourceSha256": "750056ad73b19690acdbdebf618a5a56ca179765caa0fada110dea323ef7f1e7",
+  "races": {
+    "human": {
+      "prefix": "WK",
+      "kitFolder": "western-kingdoms",
+      "modularGlb": "/assets/characters/human/WK_Characters.glb",
+      "meshCount": 22,
+      "meshes": [
+        "WK_Shield_B",
+        "WK_Units_Arms_A",
+        "WK_Units_Arms_B",
+        "WK_Units_Arms_D",
+        "WK_Units_Body_A",
+        "WK_Units_Body_B",
+        "WK_Units_Body_C",
+        "WK_Units_Body_E",
+        "WK_Units_Legs_A",
+        "WK_Units_Legs_B",
+        "WK_Units_Legs_C",
+        "WK_Units_head_A",
+        "WK_Units_head_C",
+        "WK_Units_head_D",
+        "WK_Units_head_F",
+        "WK_Units_shoulderpads_A",
+        "WK_Units_shoulderpads_B",
+        "WK_Xtra_quiver",
+        "WK_weapon_Bow",
+        "WK_weapon_axe_B",
+        "WK_weapon_staff_C",
+        "WK_weapon_sword_B"
+      ],
+      "atlas": {
+        "prefix": "WK",
+        "pngSha256": "81a66cb0b81c350d115521cce0511224dee04980b6007654f62678572f3c3dcb",
+        "webpSha256": "d158ad9748e5befb4027484878819df5e260a9317e93a901da6a28d2d2b0f657",
+        "pngBytes": 8225652,
+        "webpBytes": 4422098,
+        "cdnKey": "assets/western-kingdoms/textures/WK_Standard_Units.webp",
+        "kitPath": "/assets/western-kingdoms/textures/WK_Standard_Units.webp"
+      }
+    },
+    "barbarian": {
+      "prefix": "BRB",
+      "kitFolder": "barbarians",
+      "modularGlb": "/assets/characters/barbarian/BRB_Characters.glb",
+      "meshCount": 23,
+      "meshes": [
+        "BRB_Shield_B",
+        "BRB_Xtra_quiver",
+        "BRB_arms_A",
+        "BRB_arms_B",
+        "BRB_arms_C",
+        "BRB_body_A",
+        "BRB_body_B",
+        "BRB_body_C",
+        "BRB_body_F",
+        "BRB_head_A",
+        "BRB_head_B",
+        "BRB_head_C",
+        "BRB_head_F",
+        "BRB_legs_A",
+        "BRB_legs_B",
+        "BRB_legs_C",
+        "BRB_shoulderpads_A",
+        "BRB_shoulderpads_B",
+        "BRB_shoulderpads_C",
+        "BRB_weapon_Bow",
+        "BRB_weapon_axe_C",
+        "BRB_weapon_staff_C",
+        "BRB_weapon_sword_B"
+      ],
+      "atlas": {
+        "prefix": "BRB",
+        "pngSha256": "f907d11e6f5dce52a42278efa9cb729862b651c4bff49b2a1113dd60be6dc86f",
+        "webpSha256": "69fa08ffdeaeda3146fc850ff518291aaa906ba0842134ed992ea6f32b05a2c9",
+        "pngBytes": 8407712,
+        "webpBytes": 4631794,
+        "cdnKey": "assets/barbarians/textures/BRB_StandardUnits_texture.webp",
+        "kitPath": "/assets/barbarians/textures/BRB_StandardUnits_texture.webp"
+      }
+    },
+    "dwarf": {
+      "prefix": "DWF",
+      "kitFolder": "dwarves",
+      "modularGlb": "/assets/characters/dwarf/DWF_Characters.glb",
+      "meshCount": 23,
+      "meshes": [
+        "DWF_Shield_B",
+        "DWF_Units_Arms_A",
+        "DWF_Units_Arms_B",
+        "DWF_Units_Arms_C",
+        "DWF_Units_Body_A",
+        "DWF_Units_Body_B",
+        "DWF_Units_Body_C",
+        "DWF_Units_Body_D",
+        "DWF_Units_Head_A",
+        "DWF_Units_Head_C",
+        "DWF_Units_Head_F",
+        "DWF_Units_Head_G",
+        "DWF_Units_Legs_A",
+        "DWF_Units_Legs_B",
+        "DWF_Units_Legs_C",
+        "DWF_Units_Shoulderpads_A",
+        "DWF_Units_Shoulderpads_B",
+        "DWF_Units_Shoulderpads_C",
+        "DWF_Weapon_axe_C",
+        "DWF_Weapon_bow",
+        "DWF_Weapon_staff_B",
+        "DWF_Weapon_sword_B",
+        "DWF_Xtra_quiver"
+      ],
+      "atlas": {
+        "prefix": "DWF",
+        "pngSha256": "3c41451be0062cb59e7a42f414af7e39d130092716678d2b561f12312f6df178",
+        "webpSha256": "e35e2f3cdbf60ca2fe4cd67642f7a321a7891a642dc971a3d2b1ef6e5b7dc9ce",
+        "pngBytes": 8128532,
+        "webpBytes": 4364880,
+        "cdnKey": "assets/dwarves/textures/DWF_Standard_Units.webp",
+        "kitPath": "/assets/dwarves/textures/DWF_Standard_Units.webp"
+      }
+    },
+    "elf": {
+      "prefix": "ELF",
+      "kitFolder": "elves",
+      "modularGlb": "/assets/characters/elf/ELF_Characters.glb",
+      "meshCount": 24,
+      "meshes": [
+        "ELF_Units_Arms_A",
+        "ELF_Units_Arms_B",
+        "ELF_Units_Arms_C",
+        "ELF_Units_Body_A",
+        "ELF_Units_Body_B",
+        "ELF_Units_Body_C",
+        "ELF_Units_Body_E",
+        "ELF_Units_Head_A",
+        "ELF_Units_Head_B",
+        "ELF_Units_Head_C",
+        "ELF_Units_Head_D",
+        "ELF_Units_Head_G",
+        "ELF_Units_Legs_A",
+        "ELF_Units_Legs_B",
+        "ELF_Units_Legs_C",
+        "ELF_Units_Shoulderpads_A",
+        "ELF_Units_Shoulderpads_B",
+        "ELF_Units_Shoulderpads_C",
+        "ELF_Xtra_quiver",
+        "ELF_shield_B",
+        "ELF_weapon_bow",
+        "ELF_weapon_spear",
+        "ELF_weapon_staff_C",
+        "ELF_weapon_sword_B"
+      ],
+      "atlas": {
+        "prefix": "ELF",
+        "pngSha256": "22d8f374c7898b042a0bf5f7cb4a7cd95e5f59318db4e39e51f7f8406300f35b",
+        "webpSha256": "2db4ff6a797f55071dbc43afd78c59eb27b283321033a0d106b996d272a1db28",
+        "pngBytes": 9428352,
+        "webpBytes": 5380650,
+        "cdnKey": "assets/elves/textures/ELF_HighElves_Texture.webp",
+        "kitPath": "/assets/elves/textures/ELF_HighElves_Texture.webp"
+      }
+    },
+    "orc": {
+      "prefix": "ORC",
+      "kitFolder": "orcs",
+      "modularGlb": "/assets/characters/orc/ORC_Characters.glb",
+      "meshCount": 23,
+      "meshes": [
+        "ORC_Shield_C",
+        "ORC_Units_Arms_A",
+        "ORC_Units_Arms_B",
+        "ORC_Units_Arms_C",
+        "ORC_Units_Body_A",
+        "ORC_Units_Body_B",
+        "ORC_Units_Body_C",
+        "ORC_Units_Body_F",
+        "ORC_Units_Head_A",
+        "ORC_Units_Head_B",
+        "ORC_Units_Head_E",
+        "ORC_Units_Head_G",
+        "ORC_Units_Legs_A",
+        "ORC_Units_Legs_B",
+        "ORC_Units_Legs_C",
+        "ORC_Units_Shoulderpads_A",
+        "ORC_Units_Shoulderpads_C",
+        "ORC_Units_Shoulderpads_F",
+        "ORC_Xtra_quiver",
+        "ORC_weapon_Axe_B",
+        "ORC_weapon_Axe_C",
+        "ORC_weapon_Bow",
+        "ORC_weapon_staff_C"
+      ],
+      "atlas": {
+        "prefix": "ORC",
+        "pngSha256": "b0dc2bcb4b4e6807be4386bf1eb63fd87573a14cb81138424066cd3bd2ae384a",
+        "webpSha256": "605451ab25da05dfd82727739c08759a8f19b15354d93eff463a20075b558c70",
+        "pngBytes": 8711848,
+        "webpBytes": 4687926,
+        "cdnKey": "assets/orcs/textures/ORC_StandardUnits.webp",
+        "kitPath": "/assets/orcs/textures/ORC_StandardUnits.webp"
+      }
+    },
+    "undead": {
+      "prefix": "UD",
+      "kitFolder": "undead",
+      "modularGlb": "/assets/characters/undead/UD_Characters.glb",
+      "meshCount": 25,
+      "meshes": [
+        "UD_Shield_C",
+        "UD_Units_arms_A",
+        "UD_Units_arms_B",
+        "UD_Units_arms_C",
+        "UD_Units_arms_D",
+        "UD_Units_body_B",
+        "UD_Units_body_D",
+        "UD_Units_body_F",
+        "UD_Units_body_G",
+        "UD_Units_head_A",
+        "UD_Units_head_C",
+        "UD_Units_head_F",
+        "UD_Units_head_G",
+        "UD_Units_legs_A",
+        "UD_Units_legs_B",
+        "UD_Units_legs_C",
+        "UD_Units_legs_D",
+        "UD_Units_shoulderpads_A",
+        "UD_Units_shoulderpads_B",
+        "UD_Units_shoulderpads_C",
+        "UD_Xtra_Quiver",
+        "UD_weapon_Axe_B",
+        "UD_weapon_Bow",
+        "UD_weapon_Sword_B",
+        "UD_weapon_staff_D"
+      ],
+      "atlas": {
+        "prefix": "UD",
+        "pngSha256": "3427d33954491ad7406da13d3233aef6edd583b3ab4cebf96bd06f2411401d9c",
+        "webpSha256": "13cc21978a2144c3cca135187bdf6779cd4e868745db0a5b3c6097047fd4d07e",
+        "pngBytes": 8874660,
+        "webpBytes": 4887760,
+        "cdnKey": "assets/undead/textures/UD_Standard_Units.webp",
+        "kitPath": "/assets/undead/textures/UD_Standard_Units.webp"
+      }
+    }
+  },
+  "presets": [
+    {
+      "id": "human_unarmed",
+      "arenaRace": "human",
+      "kitFolder": "western-kingdoms",
+      "faction": "crusade",
+      "preset": "unarmed",
+      "glb": "/assets/characters/presets/western-kingdoms_unarmed.glb",
+      "visibleMeshes": [
+        "WK_Units_Arms_A",
+        "WK_Units_Body_B",
+        "WK_Units_Legs_A",
+        "WK_Units_head_A"
+      ],
+      "atlasSha256": "81a66cb0b81c350d115521cce0511224dee04980b6007654f62678572f3c3dcb",
+      "glbSha256": "ce77cee346f2634c3bc0f86db2725f7c51411bf319f9f97beb6c1fe90918c178",
+      "glbBytes": 8319108
+    },
+    {
+      "id": "human_mage",
+      "arenaRace": "human",
+      "kitFolder": "western-kingdoms",
+      "faction": "crusade",
+      "preset": "mage",
+      "glb": "/assets/factions/crusade/western-kingdoms_mage.glb",
+      "visibleMeshes": [
+        "WK_Units_Arms_A",
+        "WK_Units_Body_A",
+        "WK_Units_Legs_A",
+        "WK_Units_head_A",
+        "WK_weapon_staff_C"
+      ],
+      "atlasSha256": "81a66cb0b81c350d115521cce0511224dee04980b6007654f62678572f3c3dcb",
+      "glbSha256": "2bf565939986526dc3626384c0ac6ef55508869a87f66b7c8ee6e0c8acb7bcf3",
+      "glbBytes": 8325264
+    },
+    {
+      "id": "human_knight",
+      "arenaRace": "human",
+      "kitFolder": "western-kingdoms",
+      "faction": "crusade",
+      "preset": "knight",
+      "glb": "/assets/factions/crusade/western-kingdoms_knight.glb",
+      "visibleMeshes": [
+        "WK_Shield_B",
+        "WK_Units_Arms_D",
+        "WK_Units_Body_E",
+        "WK_Units_Legs_C",
+        "WK_Units_head_F",
+        "WK_Units_shoulderpads_B",
+        "WK_weapon_sword_B"
+      ],
+      "atlasSha256": "81a66cb0b81c350d115521cce0511224dee04980b6007654f62678572f3c3dcb",
+      "glbSha256": "83bc9311b9be940280af972d702b59264e8727f5cb73a90f5e60eb7a53887cef",
+      "glbBytes": 8361116
+    },
+    {
+      "id": "human_ranger",
+      "arenaRace": "human",
+      "kitFolder": "western-kingdoms",
+      "faction": "crusade",
+      "preset": "ranger",
+      "glb": "/assets/factions/crusade/western-kingdoms_ranger.glb",
+      "visibleMeshes": [
+        "WK_Units_Arms_B",
+        "WK_Units_Body_B",
+        "WK_Units_Legs_B",
+        "WK_Units_head_C",
+        "WK_Xtra_quiver",
+        "WK_weapon_Bow"
+      ],
+      "atlasSha256": "81a66cb0b81c350d115521cce0511224dee04980b6007654f62678572f3c3dcb",
+      "glbSha256": "78e61db3506e9eaa92c1695490f2d608b934f0bbce803e0572e923d2fbec8826",
+      "glbBytes": 8338644
+    },
+    {
+      "id": "human_warrior",
+      "arenaRace": "human",
+      "kitFolder": "western-kingdoms",
+      "faction": "crusade",
+      "preset": "warrior",
+      "glb": "/assets/factions/crusade/western-kingdoms_warrior.glb",
+      "visibleMeshes": [
+        "WK_Units_Arms_B",
+        "WK_Units_Body_C",
+        "WK_Units_Legs_B",
+        "WK_Units_head_D",
+        "WK_Units_shoulderpads_A",
+        "WK_weapon_axe_B"
+      ],
+      "atlasSha256": "81a66cb0b81c350d115521cce0511224dee04980b6007654f62678572f3c3dcb",
+      "glbSha256": "5d768908bf33dc11c0690472fefe037bf8169867bd73a389f5e689280b188ce3",
+      "glbBytes": 8340788
+    },
+    {
+      "id": "dwarf_warrior",
+      "arenaRace": "dwarf",
+      "kitFolder": "dwarves",
+      "faction": "fabled",
+      "preset": "warrior",
+      "glb": "/assets/factions/fabled/dwarves_warrior.glb",
+      "visibleMeshes": [
+        "DWF_Units_Arms_B",
+        "DWF_Units_Body_C",
+        "DWF_Units_Head_G",
+        "DWF_Units_Legs_B",
+        "DWF_Units_Shoulderpads_B",
+        "DWF_Weapon_axe_C"
+      ],
+      "atlasSha256": "3c41451be0062cb59e7a42f414af7e39d130092716678d2b561f12312f6df178",
+      "glbSha256": "f3c7adccf75d43b25eeb1a13602c56b2423e5f549355d41d1c7dd401398d986b",
+      "glbBytes": 8258032
+    },
+    {
+      "id": "barbarian_warrior",
+      "arenaRace": "barbarian",
+      "kitFolder": "barbarians",
+      "faction": "crusade",
+      "preset": "warrior",
+      "glb": "/assets/factions/crusade/barbarians_warrior.glb",
+      "visibleMeshes": [
+        "BRB_arms_B",
+        "BRB_body_C",
+        "BRB_head_B",
+        "BRB_legs_B",
+        "BRB_shoulderpads_B",
+        "BRB_weapon_axe_C"
+      ],
+      "atlasSha256": "f907d11e6f5dce52a42278efa9cb729862b651c4bff49b2a1113dd60be6dc86f",
+      "glbSha256": "1a6a116a9d2b5a488f6e57dc30f90f146362b16c32184356c703c5fcadfa3100",
+      "glbBytes": 8531696
+    },
+    {
+      "id": "dwarf_knight",
+      "arenaRace": "dwarf",
+      "kitFolder": "dwarves",
+      "faction": "fabled",
+      "preset": "knight",
+      "glb": "/assets/factions/fabled/dwarves_knight.glb",
+      "visibleMeshes": [
+        "DWF_Shield_B",
+        "DWF_Units_Arms_C",
+        "DWF_Units_Body_D",
+        "DWF_Units_Head_F",
+        "DWF_Units_Legs_C",
+        "DWF_Units_Shoulderpads_C",
+        "DWF_Weapon_sword_B"
+      ],
+      "atlasSha256": "3c41451be0062cb59e7a42f414af7e39d130092716678d2b561f12312f6df178",
+      "glbSha256": "e600ec883b1d1569198ddd12498d777782757aa1ad839d72ebb96159a6dbcc08",
+      "glbBytes": 8269548
+    },
+    {
+      "id": "undead_mage",
+      "arenaRace": "undead",
+      "kitFolder": "undead",
+      "faction": "legion",
+      "preset": "mage",
+      "glb": "/assets/factions/legion/undead_mage.glb",
+      "visibleMeshes": [
+        "UD_Units_arms_B",
+        "UD_Units_body_G",
+        "UD_Units_head_A",
+        "UD_Units_legs_B",
+        "UD_weapon_staff_D"
+      ],
+      "atlasSha256": "3427d33954491ad7406da13d3233aef6edd583b3ab4cebf96bd06f2411401d9c",
+      "glbSha256": "ec14bf3f22b5f93d4969f3b10a43d130a59ffb744543c39933f41f40cd7514c3",
+      "glbBytes": 8998084
+    },
+    {
+      "id": "barbarian_ranger",
+      "arenaRace": "barbarian",
+      "kitFolder": "barbarians",
+      "faction": "crusade",
+      "preset": "ranger",
+      "glb": "/assets/factions/crusade/barbarians_ranger.glb",
+      "visibleMeshes": [
+        "BRB_Xtra_quiver",
+        "BRB_arms_B",
+        "BRB_body_B",
+        "BRB_head_C",
+        "BRB_legs_B",
+        "BRB_shoulderpads_A",
+        "BRB_weapon_Bow"
+      ],
+      "atlasSha256": "f907d11e6f5dce52a42278efa9cb729862b651c4bff49b2a1113dd60be6dc86f",
+      "glbSha256": "eacd9d69b88241333304104ae45e9d2db207c73009e1a31c1920e8cf54078c02",
+      "glbBytes": 8533544
+    },
+    {
+      "id": "barbarian_knight",
+      "arenaRace": "barbarian",
+      "kitFolder": "barbarians",
+      "faction": "crusade",
+      "preset": "knight",
+      "glb": "/assets/factions/crusade/barbarians_knight.glb",
+      "visibleMeshes": [
+        "BRB_Shield_B",
+        "BRB_arms_C",
+        "BRB_body_F",
+        "BRB_head_F",
+        "BRB_legs_C",
+        "BRB_shoulderpads_C",
+        "BRB_weapon_sword_B"
+      ],
+      "atlasSha256": "f907d11e6f5dce52a42278efa9cb729862b651c4bff49b2a1113dd60be6dc86f",
+      "glbSha256": "51f2f5fe20ec39af49faa231fd5e89e55aba2b52af87cad87e12df331c2058fd",
+      "glbBytes": 8591992
+    },
+    {
+      "id": "barbarian_unarmed",
+      "arenaRace": "barbarian",
+      "kitFolder": "barbarians",
+      "faction": "crusade",
+      "preset": "unarmed",
+      "glb": "/assets/characters/presets/barbarians_unarmed.glb",
+      "visibleMeshes": [
+        "BRB_arms_A",
+        "BRB_body_B",
+        "BRB_head_A",
+        "BRB_legs_A"
+      ],
+      "atlasSha256": "f907d11e6f5dce52a42278efa9cb729862b651c4bff49b2a1113dd60be6dc86f",
+      "glbSha256": "a0990fe61078ba3edc3abee90ab4c7addfeefa8fbd141081cdc1ec0457d1d39f",
+      "glbBytes": 8501904
+    },
+    {
+      "id": "undead_warrior",
+      "arenaRace": "undead",
+      "kitFolder": "undead",
+      "faction": "legion",
+      "preset": "warrior",
+      "glb": "/assets/factions/legion/undead_warrior.glb",
+      "visibleMeshes": [
+        "UD_Units_arms_C",
+        "UD_Units_body_D",
+        "UD_Units_head_G",
+        "UD_Units_legs_C",
+        "UD_Units_shoulderpads_B",
+        "UD_weapon_Axe_B"
+      ],
+      "atlasSha256": "3427d33954491ad7406da13d3233aef6edd583b3ab4cebf96bd06f2411401d9c",
+      "glbSha256": "788c2f2be971b1941ff4d89adb30db06b4a929a74fc3c9b03a4c37ff2325f6bc",
+      "glbBytes": 8991308
+    },
+    {
+      "id": "orc_ranger",
+      "arenaRace": "orc",
+      "kitFolder": "orcs",
+      "faction": "legion",
+      "preset": "ranger",
+      "glb": "/assets/factions/legion/orcs_ranger.glb",
+      "visibleMeshes": [
+        "ORC_Units_Arms_B",
+        "ORC_Units_Body_B",
+        "ORC_Units_Head_B",
+        "ORC_Units_Legs_B",
+        "ORC_Units_Shoulderpads_A",
+        "ORC_Xtra_quiver",
+        "ORC_weapon_Bow"
+      ],
+      "atlasSha256": "b0dc2bcb4b4e6807be4386bf1eb63fd87573a14cb81138424066cd3bd2ae384a",
+      "glbSha256": "5a5d294fdd3f1c9f867d30da843eb8244da15425db0c2d999b35e944026f6dd5",
+      "glbBytes": 8842796
+    },
+    {
+      "id": "elf_warrior",
+      "arenaRace": "elf",
+      "kitFolder": "elves",
+      "faction": "fabled",
+      "preset": "warrior",
+      "glb": "/assets/factions/fabled/high-elves_warrior.glb",
+      "visibleMeshes": [
+        "ELF_Units_Arms_B",
+        "ELF_Units_Body_C",
+        "ELF_Units_Head_D",
+        "ELF_Units_Legs_B",
+        "ELF_Units_Shoulderpads_B",
+        "ELF_weapon_spear"
+      ],
+      "atlasSha256": "22d8f374c7898b042a0bf5f7cb4a7cd95e5f59318db4e39e51f7f8406300f35b",
+      "glbSha256": "7539f7b0298b09b8d92f766143f0772ec8ab8000beacb49da719b55ae140396e",
+      "glbBytes": 9548392
+    },
+    {
+      "id": "dwarf_ranger",
+      "arenaRace": "dwarf",
+      "kitFolder": "dwarves",
+      "faction": "fabled",
+      "preset": "ranger",
+      "glb": "/assets/factions/fabled/dwarves_ranger.glb",
+      "visibleMeshes": [
+        "DWF_Units_Arms_B",
+        "DWF_Units_Body_B",
+        "DWF_Units_Head_C",
+        "DWF_Units_Legs_B",
+        "DWF_Units_Shoulderpads_A",
+        "DWF_Weapon_bow",
+        "DWF_Xtra_quiver"
+      ],
+      "atlasSha256": "3c41451be0062cb59e7a42f414af7e39d130092716678d2b561f12312f6df178",
+      "glbSha256": "0c58249365ed093a205bff05eef1bc29844ef26a77528ba2b17f438c6850d29f",
+      "glbBytes": 8266744
+    },
+    {
+      "id": "undead_unarmed",
+      "arenaRace": "undead",
+      "kitFolder": "undead",
+      "faction": "legion",
+      "preset": "unarmed",
+      "glb": "/assets/characters/presets/undead_unarmed.glb",
+      "visibleMeshes": [
+        "UD_Units_arms_A",
+        "UD_Units_body_B",
+        "UD_Units_head_A",
+        "UD_Units_legs_A"
+      ],
+      "atlasSha256": "3427d33954491ad7406da13d3233aef6edd583b3ab4cebf96bd06f2411401d9c",
+      "glbSha256": "262c8484d106c80ff459a632ae89e298bf7a5be3f46bf6700ce77891a977da5c",
+      "glbBytes": 8967940
+    },
+    {
+      "id": "barbarian_mage",
+      "arenaRace": "barbarian",
+      "kitFolder": "barbarians",
+      "faction": "crusade",
+      "preset": "mage",
+      "glb": "/assets/factions/crusade/barbarians_mage.glb",
+      "visibleMeshes": [
+        "BRB_arms_A",
+        "BRB_body_A",
+        "BRB_head_A",
+        "BRB_legs_A",
+        "BRB_weapon_staff_C"
+      ],
+      "atlasSha256": "f907d11e6f5dce52a42278efa9cb729862b651c4bff49b2a1113dd60be6dc86f",
+      "glbSha256": "8c9e7a26003675159f507510a653624a0d26d03f452d19ecb9ff89fd60dd6ff4",
+      "glbBytes": 8519280
+    },
+    {
+      "id": "orc_mage",
+      "arenaRace": "orc",
+      "kitFolder": "orcs",
+      "faction": "legion",
+      "preset": "mage",
+      "glb": "/assets/factions/legion/orcs_mage.glb",
+      "visibleMeshes": [
+        "ORC_Units_Arms_A",
+        "ORC_Units_Body_A",
+        "ORC_Units_Head_A",
+        "ORC_Units_Legs_A",
+        "ORC_weapon_staff_C"
+      ],
+      "atlasSha256": "b0dc2bcb4b4e6807be4386bf1eb63fd87573a14cb81138424066cd3bd2ae384a",
+      "glbSha256": "c97aa52f1ea4bebbd27d402656fb36f327207d371eaa63827f16a4d9de65334f",
+      "glbBytes": 8830840
+    },
+    {
+      "id": "undead_knight",
+      "arenaRace": "undead",
+      "kitFolder": "undead",
+      "faction": "legion",
+      "preset": "knight",
+      "glb": "/assets/factions/legion/undead_knight.glb",
+      "visibleMeshes": [
+        "UD_Shield_C",
+        "UD_Units_arms_D",
+        "UD_Units_body_F",
+        "UD_Units_head_F",
+        "UD_Units_legs_D",
+        "UD_Units_shoulderpads_C",
+        "UD_weapon_Sword_B"
+      ],
+      "atlasSha256": "3427d33954491ad7406da13d3233aef6edd583b3ab4cebf96bd06f2411401d9c",
+      "glbSha256": "809306a965813a05cd7c888656a1753a3aaa47be65ecfe4d4d955dfa4594d899",
+      "glbBytes": 8995996
+    },
+    {
+      "id": "dwarf_unarmed",
+      "arenaRace": "dwarf",
+      "kitFolder": "dwarves",
+      "faction": "fabled",
+      "preset": "unarmed",
+      "glb": "/assets/characters/presets/dwarves_unarmed.glb",
+      "visibleMeshes": [
+        "DWF_Units_Arms_A",
+        "DWF_Units_Body_B",
+        "DWF_Units_Head_A",
+        "DWF_Units_Legs_A"
+      ],
+      "atlasSha256": "3c41451be0062cb59e7a42f414af7e39d130092716678d2b561f12312f6df178",
+      "glbSha256": "3de3b3cdb56c1335692dea47d3b6de813fda4875492acb3e62f50ea48819cc3a",
+      "glbBytes": 8228840
+    },
+    {
+      "id": "dwarf_mage",
+      "arenaRace": "dwarf",
+      "kitFolder": "dwarves",
+      "faction": "fabled",
+      "preset": "mage",
+      "glb": "/assets/factions/fabled/dwarves_mage.glb",
+      "visibleMeshes": [
+        "DWF_Units_Arms_A",
+        "DWF_Units_Body_A",
+        "DWF_Units_Head_A",
+        "DWF_Units_Legs_A",
+        "DWF_Weapon_staff_B"
+      ],
+      "atlasSha256": "3c41451be0062cb59e7a42f414af7e39d130092716678d2b561f12312f6df178",
+      "glbSha256": "e370734b99c1760e154ecf40006a8116a145366e5d7b48c79374abdb30cd4fef",
+      "glbBytes": 8242232
+    },
+    {
+      "id": "orc_knight",
+      "arenaRace": "orc",
+      "kitFolder": "orcs",
+      "faction": "legion",
+      "preset": "knight",
+      "glb": "/assets/factions/legion/orcs_knight.glb",
+      "visibleMeshes": [
+        "ORC_Shield_C",
+        "ORC_Units_Arms_C",
+        "ORC_Units_Body_F",
+        "ORC_Units_Head_G",
+        "ORC_Units_Legs_C",
+        "ORC_Units_Shoulderpads_F",
+        "ORC_weapon_Axe_C"
+      ],
+      "atlasSha256": "b0dc2bcb4b4e6807be4386bf1eb63fd87573a14cb81138424066cd3bd2ae384a",
+      "glbSha256": "5317d78890ec52680c703cf4f2e214f30d1f648594ca44dc2ad96032d99b1b25",
+      "glbBytes": 8858128
+    },
+    {
+      "id": "orc_unarmed",
+      "arenaRace": "orc",
+      "kitFolder": "orcs",
+      "faction": "legion",
+      "preset": "unarmed",
+      "glb": "/assets/characters/presets/orcs_unarmed.glb",
+      "visibleMeshes": [
+        "ORC_Units_Arms_A",
+        "ORC_Units_Body_A",
+        "ORC_Units_Head_A",
+        "ORC_Units_Legs_A"
+      ],
+      "atlasSha256": "b0dc2bcb4b4e6807be4386bf1eb63fd87573a14cb81138424066cd3bd2ae384a",
+      "glbSha256": "a38b9d85e17ebcdfa4c079cf57abc5cc71c2e9b399da85f34c6f7fc5c28d8b4f",
+      "glbBytes": 8810508
+    },
+    {
+      "id": "elf_knight",
+      "arenaRace": "elf",
+      "kitFolder": "elves",
+      "faction": "fabled",
+      "preset": "knight",
+      "glb": "/assets/factions/fabled/high-elves_knight.glb",
+      "visibleMeshes": [
+        "ELF_Units_Arms_C",
+        "ELF_Units_Body_E",
+        "ELF_Units_Head_G",
+        "ELF_Units_Legs_C",
+        "ELF_Units_Shoulderpads_C",
+        "ELF_shield_B",
+        "ELF_weapon_sword_B"
+      ],
+      "atlasSha256": "22d8f374c7898b042a0bf5f7cb4a7cd95e5f59318db4e39e51f7f8406300f35b",
+      "glbSha256": "828ba392907232cea9095ede718f3e2ad9f78589582de20ee5940e5547be5ab4",
+      "glbBytes": 9565576
+    },
+    {
+      "id": "orc_warrior",
+      "arenaRace": "orc",
+      "kitFolder": "orcs",
+      "faction": "legion",
+      "preset": "warrior",
+      "glb": "/assets/factions/legion/orcs_warrior.glb",
+      "visibleMeshes": [
+        "ORC_Units_Arms_B",
+        "ORC_Units_Body_C",
+        "ORC_Units_Head_E",
+        "ORC_Units_Legs_B",
+        "ORC_Units_Shoulderpads_C",
+        "ORC_weapon_Axe_B"
+      ],
+      "atlasSha256": "b0dc2bcb4b4e6807be4386bf1eb63fd87573a14cb81138424066cd3bd2ae384a",
+      "glbSha256": "c9913c1b827cfd01d16b4b085b1076e4501aca3b82b22772c3851687b24d153c",
+      "glbBytes": 8838624
+    },
+    {
+      "id": "elf_mage",
+      "arenaRace": "elf",
+      "kitFolder": "elves",
+      "faction": "fabled",
+      "preset": "mage",
+      "glb": "/assets/factions/fabled/high-elves_mage.glb",
+      "visibleMeshes": [
+        "ELF_Units_Arms_A",
+        "ELF_Units_Body_A",
+        "ELF_Units_Head_B",
+        "ELF_Units_Legs_A",
+        "ELF_weapon_staff_C"
+      ],
+      "atlasSha256": "22d8f374c7898b042a0bf5f7cb4a7cd95e5f59318db4e39e51f7f8406300f35b",
+      "glbSha256": "bc650201283d23209d9e88410d83d71527ed707656bdcbf2dd37f6b71102f62c",
+      "glbBytes": 9548808
+    },
+    {
+      "id": "undead_ranger",
+      "arenaRace": "undead",
+      "kitFolder": "undead",
+      "faction": "legion",
+      "preset": "ranger",
+      "glb": "/assets/factions/legion/undead_ranger.glb",
+      "visibleMeshes": [
+        "UD_Units_arms_B",
+        "UD_Units_body_B",
+        "UD_Units_head_C",
+        "UD_Units_legs_B",
+        "UD_Units_shoulderpads_A",
+        "UD_Xtra_Quiver",
+        "UD_weapon_Bow"
+      ],
+      "atlasSha256": "3427d33954491ad7406da13d3233aef6edd583b3ab4cebf96bd06f2411401d9c",
+      "glbSha256": "7363d92128d4653c1696bffbf38624a6ab71a9948bd60401c63a33d6e7c50b3e",
+      "glbBytes": 9002832
+    },
+    {
+      "id": "elf_ranger",
+      "arenaRace": "elf",
+      "kitFolder": "elves",
+      "faction": "fabled",
+      "preset": "ranger",
+      "glb": "/assets/factions/fabled/high-elves_ranger.glb",
+      "visibleMeshes": [
+        "ELF_Units_Arms_B",
+        "ELF_Units_Body_B",
+        "ELF_Units_Head_C",
+        "ELF_Units_Legs_B",
+        "ELF_Units_Shoulderpads_A",
+        "ELF_Xtra_quiver",
+        "ELF_weapon_bow"
+      ],
+      "atlasSha256": "22d8f374c7898b042a0bf5f7cb4a7cd95e5f59318db4e39e51f7f8406300f35b",
+      "glbSha256": "6b5a9519dab4c898251321e15d250d557b03a2f0f58b95047cead988a04c0253",
+      "glbBytes": 9558880
+    },
+    {
+      "id": "elf_unarmed",
+      "arenaRace": "elf",
+      "kitFolder": "elves",
+      "faction": "fabled",
+      "preset": "unarmed",
+      "glb": "/assets/characters/presets/high-elves_unarmed.glb",
+      "visibleMeshes": [
+        "ELF_Units_Arms_A",
+        "ELF_Units_Body_B",
+        "ELF_Units_Head_A",
+        "ELF_Units_Legs_A"
+      ],
+      "atlasSha256": "22d8f374c7898b042a0bf5f7cb4a7cd95e5f59318db4e39e51f7f8406300f35b",
+      "glbSha256": "330d0ad59ce18194a36be173029035af7eed240caeb4929a837091aa2b6c3600",
+      "glbBytes": 9541804
+    }
+  ],
+  "atlases": {
+    "human": {
+      "prefix": "WK",
+      "pngSha256": "81a66cb0b81c350d115521cce0511224dee04980b6007654f62678572f3c3dcb",
+      "webpSha256": "d158ad9748e5befb4027484878819df5e260a9317e93a901da6a28d2d2b0f657",
+      "pngBytes": 8225652,
+      "webpBytes": 4422098,
+      "cdnKey": "assets/western-kingdoms/textures/WK_Standard_Units.webp",
+      "kitPath": "/assets/western-kingdoms/textures/WK_Standard_Units.webp"
+    },
+    "barbarian": {
+      "prefix": "BRB",
+      "pngSha256": "f907d11e6f5dce52a42278efa9cb729862b651c4bff49b2a1113dd60be6dc86f",
+      "webpSha256": "69fa08ffdeaeda3146fc850ff518291aaa906ba0842134ed992ea6f32b05a2c9",
+      "pngBytes": 8407712,
+      "webpBytes": 4631794,
+      "cdnKey": "assets/barbarians/textures/BRB_StandardUnits_texture.webp",
+      "kitPath": "/assets/barbarians/textures/BRB_StandardUnits_texture.webp"
+    },
+    "dwarf": {
+      "prefix": "DWF",
+      "pngSha256": "3c41451be0062cb59e7a42f414af7e39d130092716678d2b561f12312f6df178",
+      "webpSha256": "e35e2f3cdbf60ca2fe4cd67642f7a321a7891a642dc971a3d2b1ef6e5b7dc9ce",
+      "pngBytes": 8128532,
+      "webpBytes": 4364880,
+      "cdnKey": "assets/dwarves/textures/DWF_Standard_Units.webp",
+      "kitPath": "/assets/dwarves/textures/DWF_Standard_Units.webp"
+    },
+    "elf": {
+      "prefix": "ELF",
+      "pngSha256": "22d8f374c7898b042a0bf5f7cb4a7cd95e5f59318db4e39e51f7f8406300f35b",
+      "webpSha256": "2db4ff6a797f55071dbc43afd78c59eb27b283321033a0d106b996d272a1db28",
+      "pngBytes": 9428352,
+      "webpBytes": 5380650,
+      "cdnKey": "assets/elves/textures/ELF_HighElves_Texture.webp",
+      "kitPath": "/assets/elves/textures/ELF_HighElves_Texture.webp"
+    },
+    "orc": {
+      "prefix": "ORC",
+      "pngSha256": "b0dc2bcb4b4e6807be4386bf1eb63fd87573a14cb81138424066cd3bd2ae384a",
+      "webpSha256": "605451ab25da05dfd82727739c08759a8f19b15354d93eff463a20075b558c70",
+      "pngBytes": 8711848,
+      "webpBytes": 4687926,
+      "cdnKey": "assets/orcs/textures/ORC_StandardUnits.webp",
+      "kitPath": "/assets/orcs/textures/ORC_StandardUnits.webp"
+    },
+    "undead": {
+      "prefix": "UD",
+      "pngSha256": "3427d33954491ad7406da13d3233aef6edd583b3ab4cebf96bd06f2411401d9c",
+      "webpSha256": "13cc21978a2144c3cca135187bdf6779cd4e868745db0a5b3c6097047fd4d07e",
+      "pngBytes": 8874660,
+      "webpBytes": 4887760,
+      "cdnKey": "assets/undead/textures/UD_Standard_Units.webp",
+      "kitPath": "/assets/undead/textures/UD_Standard_Units.webp"
+    }
+  },
+  "outputs": {
+    "modularGlbs": [
+      "/assets/characters/human/WK_Characters.glb",
+      "/assets/characters/barbarian/BRB_Characters.glb",
+      "/assets/characters/dwarf/DWF_Characters.glb",
+      "/assets/characters/elf/ELF_Characters.glb",
+      "/assets/characters/orc/ORC_Characters.glb",
+      "/assets/characters/undead/UD_Characters.glb"
+    ],
+    "presetGlbs": [
+      "/assets/characters/presets/western-kingdoms_unarmed.glb",
+      "/assets/factions/crusade/western-kingdoms_mage.glb",
+      "/assets/factions/crusade/western-kingdoms_knight.glb",
+      "/assets/factions/crusade/western-kingdoms_ranger.glb",
+      "/assets/factions/crusade/western-kingdoms_warrior.glb",
+      "/assets/factions/fabled/dwarves_warrior.glb",
+      "/assets/factions/crusade/barbarians_warrior.glb",
+      "/assets/factions/fabled/dwarves_knight.glb",
+      "/assets/factions/legion/undead_mage.glb",
+      "/assets/factions/crusade/barbarians_ranger.glb",
+      "/assets/factions/crusade/barbarians_knight.glb",
+      "/assets/characters/presets/barbarians_unarmed.glb",
+      "/assets/factions/legion/undead_warrior.glb",
+      "/assets/factions/legion/orcs_ranger.glb",
+      "/assets/factions/fabled/high-elves_warrior.glb",
+      "/assets/factions/fabled/dwarves_ranger.glb",
+      "/assets/characters/presets/undead_unarmed.glb",
+      "/assets/factions/crusade/barbarians_mage.glb",
+      "/assets/factions/legion/orcs_mage.glb",
+      "/assets/factions/legion/undead_knight.glb",
+      "/assets/characters/presets/dwarves_unarmed.glb",
+      "/assets/factions/fabled/dwarves_mage.glb",
+      "/assets/factions/legion/orcs_knight.glb",
+      "/assets/characters/presets/orcs_unarmed.glb",
+      "/assets/factions/fabled/high-elves_knight.glb",
+      "/assets/factions/legion/orcs_warrior.glb",
+      "/assets/factions/fabled/high-elves_mage.glb",
+      "/assets/factions/legion/undead_ranger.glb",
+      "/assets/factions/fabled/high-elves_ranger.glb",
+      "/assets/characters/presets/high-elves_unarmed.glb"
+    ],
+    "webpAtlases": [
+      "assets/western-kingdoms/textures/WK_Standard_Units.webp",
+      "assets/barbarians/textures/BRB_StandardUnits_texture.webp",
+      "assets/dwarves/textures/DWF_Standard_Units.webp",
+      "assets/elves/textures/ELF_HighElves_Texture.webp",
+      "assets/orcs/textures/ORC_StandardUnits.webp",
+      "assets/undead/textures/UD_Standard_Units.webp"
+    ]
+  }
+}

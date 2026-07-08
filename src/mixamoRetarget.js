@@ -7,6 +7,7 @@
  */
 
 import * as THREE from "three";
+import { getAnimationRoot } from "./characterScale.js";
 
 export const MIXAMO_PREFIXES = [
   "mixamorig10:",
@@ -129,14 +130,24 @@ export function toRotationOnlyClip(clip) {
  * Build lookup: normalized bone key → actual scene bone name.
  * @param {THREE.Object3D} scene
  */
+function indexBoneName(lookup, name) {
+  if (!name) return;
+  lookup.set(name, name);
+  lookup.set(bip001UnderscoreToGltf(name), name);
+  lookup.set(name.replace(/ /g, "_"), name);
+}
+
 export function buildSceneBoneLookup(scene) {
   const lookup = new Map();
-  scene.traverse((node) => {
-    if (!node.isBone) return;
-    lookup.set(node.name, node.name);
-    lookup.set(bip001UnderscoreToGltf(node.name), node.name);
-    lookup.set(node.name.replace(/ /g, "_"), node.name);
-  });
+  const visit = (node) => {
+    if (node?.isBone) indexBoneName(lookup, node.name);
+    if (node?.isSkinnedMesh?.skeleton?.bones) {
+      for (const bone of node.skeleton.bones) {
+        indexBoneName(lookup, bone.name);
+      }
+    }
+  };
+  scene.traverse(visit);
   return lookup;
 }
 
@@ -153,7 +164,7 @@ function resolveBoneName(bone, sceneLookup) {
  * @param {THREE.Object3D} [scene] — when set, track names match loaded rig
  */
 export function remapMixamoClip(clip, scene = null) {
-  const sceneLookup = scene ? buildSceneBoneLookup(scene) : null;
+  const sceneLookup = scene ? buildSceneBoneLookup(getAnimationRoot(scene)) : null;
 
   for (const track of clip.tracks) {
     const dotIdx = track.name.indexOf(".");
@@ -172,7 +183,11 @@ export function remapMixamoClip(clip, scene = null) {
     }
 
     bare = resolveBoneName(bare, sceneLookup);
-    if (bare.startsWith("Bip001_")) bare = bip001UnderscoreToGltf(bare);
+    // When a rig is loaded, keep its actual bone names (spaced or underscore).
+    // Only normalize underscore → spaced for offline / no-scene remaps.
+    if (!sceneLookup?.has(bare) && bare.startsWith("Bip001_")) {
+      bare = bip001UnderscoreToGltf(bare);
+    }
     track.name = bare + prop;
   }
 
@@ -189,7 +204,7 @@ export function isValidBip001Bone(name) {
 }
 
 export function filterClipToValidBones(clip, scene = null) {
-  const sceneBones = scene ? buildSceneBoneLookup(scene) : null;
+  const sceneBones = scene ? buildSceneBoneLookup(getAnimationRoot(scene)) : null;
   clip.tracks = clip.tracks.filter((track) => {
     const dot = track.name.indexOf(".");
     if (dot === -1) return true;

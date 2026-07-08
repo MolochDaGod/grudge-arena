@@ -4,7 +4,18 @@
  */
 
 import { ROUTES, navigate, parseRoute } from "./arenaRouter.js";
-import { isCombatSandboxMode, COMBAT_SANDBOX_PRESET } from "./combatSandbox.js";
+import { teardownArenaGame } from "./arenaBoot.js";
+import { getActiveArena, setSessionRoute } from "./arenaSessionStore.js";
+import {
+  isCombatSandboxMode,
+  COMBAT_SANDBOX_PRESET,
+  COMBAT_SANDBOX_ANIM_OVERDRIVE,
+} from "./combatSandbox.js";
+import {
+  isSandboxAutoStartRoute,
+  prepareSandboxLobbyChrome,
+  showSandboxBootLoading,
+} from "./sandboxGameFlow.js";
 
 const PENDING_ROUTE_KEY = "grudge_pending_route";
 
@@ -68,14 +79,7 @@ function showGameLoading() {
 }
 
 export async function stopActiveGame() {
-  const arena = window.__grudgeArena;
-  if (!arena) return;
-  if (arena.dangerMode) {
-    const { teardownDangerRoom } = await import("./dangerRoom/DangerRoomMode.js");
-    teardownDangerRoom(arena);
-  }
-  arena.dispose?.();
-  window.__grudgeArena = null;
+  await teardownArenaGame();
 }
 
 export async function exitToDressingRoom() {
@@ -89,7 +93,7 @@ async function applyDangerPresetFromUrl(route) {
   if (route?.combatSandbox || isCombatSandboxMode()) {
     setCombatSandboxUi(true);
     setRoomPreset(COMBAT_SANDBOX_PRESET);
-    setAnimOverdrive(2);
+    setAnimOverdrive(COMBAT_SANDBOX_ANIM_OVERDRIVE);
     return;
   }
   const preset = new URLSearchParams(location.search).get("preset");
@@ -101,6 +105,12 @@ async function applyDangerPresetFromUrl(route) {
  * @param {import('./arenaRouter.js').ArenaRoute} route
  */
 export async function handleRoute(route) {
+  setSessionRoute(route);
+
+  if (isSandboxAutoStartRoute(route)) {
+    prepareSandboxLobbyChrome();
+  }
+
   if (route.redirect) {
     const q = location.search || "";
     if (route.id === "anim-test" && host?.openAnimTest) {
@@ -122,8 +132,9 @@ export async function handleRoute(route) {
 
   if (!route.autoStart) return;
 
-  const activeMode = window.__grudgeArena?.dangerMode ? "danger" : "arena";
-  if (window.__grudgeArena && route.gameMode === activeMode) return;
+  const activeArena = getActiveArena();
+  const activeMode = activeArena?.dangerMode ? "danger" : "arena";
+  if (activeArena && route.gameMode === activeMode) return;
 
   const sandbox = route.combatSandbox || isCombatSandboxMode();
   if (!host?.isAuthed?.() && !sandbox) {
@@ -159,6 +170,10 @@ export async function handleRoute(route) {
   }
 
   await stopActiveGame();
-  showGameLoading();
+  if (isSandboxAutoStartRoute(route)) {
+    showSandboxBootLoading();
+  } else {
+    showGameLoading();
+  }
   await host.loadArenaGame(build.race, null, build, route.gameMode || "arena");
 }
