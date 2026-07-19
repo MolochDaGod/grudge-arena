@@ -328,9 +328,11 @@ export function applyWorldBodyScaleFix(scene, race, targetH, state = {}) {
   let source = state.source ?? "unknown";
   let resolvedH = state.resolvedH ?? targetH;
 
-  if (worldBodyH > targetH * 1.35) {
+  // Synty / unbaked grudge6 GLBs often land at ~30–100× real size (cm as m).
+  // Allow aggressive downscale (was clamped to ≥0.12 which blocked 100× fixes).
+  if (worldBodyH > targetH * 1.25) {
     const fix = targetH / worldBodyH;
-    if (fix >= 0.12 && fix <= 1) {
+    if (fix >= 0.005 && fix <= 1.05) {
       scene.scale.multiplyScalar(fix);
       scene.updateMatrixWorld(true);
       worldBodyFix = fix;
@@ -376,17 +378,30 @@ export async function applyCharacterScale(scene, race, opts = {}) {
   let appliedScale = 1;
   let source = "manifest-skip";
 
-  if (raceEntry?.scaleMode === "skinned-root-only") {
-    // Import-time bake already set armature root scale — never re-scale from bbox drift.
+  // Prefer world-space body vertices (truth for on-screen size) over bone estimates.
+  // Unbaked arena CDN kits are often 30–100× too tall when root scale was lost.
+  const worldBefore = measureWorldBodyHeight(scene);
+  const measureH =
+    worldBefore > MAX_HUMANOID_H * 1.5
+      ? worldBefore
+      : before.height > 0.001
+        ? before.height
+        : worldBefore;
+
+  if (raceEntry?.scaleMode === "skinned-root-only" && measureH > 0.001 && measureH <= MAX_HUMANOID_H * 1.15) {
+    // Bake looks good — skip soft drift correction only.
     appliedScale = 1;
     source = "manifest-baked";
-  } else if (before.height > 0.001) {
-    const delta = Math.abs(before.height - targetH) / targetH;
-    if (delta > MANIFEST_TOLERANCE) {
-      appliedScale = targetH / before.height;
-      appliedScale = Math.min(2, Math.max(0.5, appliedScale));
+  } else if (measureH > 0.001) {
+    const delta = Math.abs(measureH - targetH) / targetH;
+    // Always correct gross oversize (cm-as-m); allow soft correct within tolerance otherwise.
+    const grosslyOversized = measureH > targetH * 1.35 || measureH > MAX_HUMANOID_H;
+    if (grosslyOversized || delta > MANIFEST_TOLERANCE) {
+      appliedScale = targetH / measureH;
+      // Allow 100× downscale for unbaked Synty / grudge6 kits
+      appliedScale = Math.min(2.5, Math.max(0.005, appliedScale));
       scene.scale.multiplyScalar(appliedScale);
-      source = "measured-correct";
+      source = grosslyOversized ? "force-downscale" : "measured-correct";
     }
   } else {
     log(`[characterScale] ${race}: could not measure height — using target ${targetH.toFixed(2)}m`);

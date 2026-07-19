@@ -117,7 +117,10 @@ export function measureVertexExtents(glbJson, bin) {
   };
 }
 
-/** Root-node uniform scale multiplier (scene graph export artifact; may be < 1 after skinned bake). */
+/**
+ * Effective armature/export scale (scene roots + Bip001).
+ * Synty D1 often puts cm→m on Bip001 (≈0.0254), not the GLTF scene root.
+ */
 export function measureRootScale(glbJson) {
   const nodes = glbJson.nodes || [];
   const roots = new Set();
@@ -126,14 +129,19 @@ export function measureRootScale(glbJson) {
   }
   let effectiveS = 1;
   const details = [];
-  for (const nid of roots) {
-    const n = nodes[nid];
-    if (!n?.scale) continue;
+  const consider = (n, nid) => {
+    if (!n?.scale) return;
     const s = Math.max(Math.abs(n.scale[0]), Math.abs(n.scale[1]), Math.abs(n.scale[2]));
     if (Math.abs(s - 1) > 0.02) {
       details.push({ name: n.name || `node_${nid}`, scale: n.scale });
-      effectiveS = s;
+      // Prefer the smallest non-1 scale (cm→m) when multiple exist
+      if (s < effectiveS || effectiveS === 1) effectiveS = s;
     }
+  };
+  for (const nid of roots) consider(nodes[nid], nid);
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (n?.name === "Bip001" || n?.name === "Bip001 ") consider(n, i);
   }
   return { maxS: effectiveS, details };
 }
@@ -163,20 +171,49 @@ function updateAccessorBounds(accessors, accIdx, min, max) {
 export function normalizeSkinnedGlbRootScale(glbJson, bin, targetWorldHeightM) {
   const json = structuredClone(glbJson);
   const before = effectiveWorldHeight(json, bin);
-  const rootScale =
-    before.height > 0.001 ? targetWorldHeightM / before.height : 1;
+  // Use world height (verts × existing root/Bip001 scale), not raw verts alone.
+  // Raw verts may be ~70 (cm) while Bip001 already has ×0.0254 → world ~1.8m.
+  // Dividing target by raw verts would re-apply cm→m and double-scale.
+  const currentWorld =
+    before.worldHeight > 0.001
+      ? before.worldHeight
+      : before.height > 0.001
+        ? before.height
+        : 1;
+  const factor = targetWorldHeightM / currentWorld;
 
   const roots = new Set();
   for (const scene of json.scenes || []) {
     for (const nid of scene.nodes || []) roots.add(nid);
   }
-  for (const nid of roots) {
-    const node = json.nodes[nid];
-    if (node) node.scale = [rootScale, rootScale, rootScale];
+  // Prefer scaling the existing armature root (Bip001) if present
+  let scaled = false;
+  for (const node of json.nodes || []) {
+    if (!node?.name) continue;
+    if (node.name === "Bip001" || /^Bip001$/i.test(node.name)) {
+      const prev = node.scale
+        ? Math.max(Math.abs(node.scale[0]), Math.abs(node.scale[1]), Math.abs(node.scale[2]))
+        : 1;
+      const next = prev * factor;
+      node.scale = [next, next, next];
+      scaled = true;
+      break;
+    }
+  }
+  if (!scaled) {
+    for (const nid of roots) {
+      const node = json.nodes[nid];
+      if (!node) continue;
+      const prev = node.scale
+        ? Math.max(Math.abs(node.scale[0]), Math.abs(node.scale[1]), Math.abs(node.scale[2]))
+        : 1;
+      const next = prev * factor;
+      node.scale = [next, next, next];
+    }
   }
 
   const after = effectiveWorldHeight(json, bin);
-  return { json, bin, scaleFactor: rootScale, before, after };
+  return { json, bin, scaleFactor: factor, before, after };
 }
 
 /**
