@@ -343,23 +343,58 @@ export async function loadBakedPackClips(weaponType, scene = null) {
     }
   }
 
-  // Sprint = run clone sped up (SPRINT_CLIP faces backward — see /world GameCharacter).
-  const runClip = clips.get('run');
-  if (runClip) {
-    const sprintClip = runClip.clone();
-    sprintClip.name = 'sprint';
-    clips.set('sprint', sprintClip);
-  }
-
-  for (const [name] of rels) {
-    if (!clips.has(name) && REQUIRED_BAKED_LOCO.includes(name)) {
-      skipped.push(name);
+  // Universal locomotion fallbacks if pack-specific files 404
+  const LOCO_FALLBACKS = {
+    idle: ["locomotion/idle", "locomotion/walking", "unarmed/fight_idle"],
+    walk: ["locomotion/walking", "locomotion/idle"],
+    run: ["locomotion/running", "locomotion/walking", "locomotion/idle"],
+  };
+  for (const [name, fallbackRels] of Object.entries(LOCO_FALLBACKS)) {
+    if (clips.has(name)) continue;
+    for (const rel of fallbackRels) {
+      try {
+        const clip = await loadBakedClip(rel, scene);
+        clip.name = name;
+        clips.set(name, clip);
+        clipSources.set(name, rel);
+        console.warn(`[bakedAnim] ${packName}: ${name} ← fallback ${rel}`);
+        break;
+      } catch {
+        /* try next */
+      }
     }
   }
-  if (!clips.has('sprint')) skipped.push('sprint');
+  // Clone chain if still missing (idle → walk → run)
+  if (!clips.has("walk") && clips.has("idle")) {
+    const c = clips.get("idle").clone();
+    c.name = "walk";
+    clips.set("walk", c);
+  }
+  if (!clips.has("run") && clips.has("walk")) {
+    const c = clips.get("walk").clone();
+    c.name = "run";
+    clips.set("run", c);
+  }
+  if (!clips.has("idle") && clips.has("walk")) {
+    const c = clips.get("walk").clone();
+    c.name = "idle";
+    clips.set("idle", c);
+  }
+
+  // Sprint = run clone sped up (SPRINT_CLIP faces backward — see /world GameCharacter).
+  const runClip = clips.get("run");
+  if (runClip && !clips.has("sprint")) {
+    const sprintClip = runClip.clone();
+    sprintClip.name = "sprint";
+    clips.set("sprint", sprintClip);
+  }
+
+  for (const name of REQUIRED_BAKED_LOCO) {
+    if (!clips.has(name)) skipped.push(name);
+  }
   if (skipped.length) {
     console.warn(
-      `[bakedAnim] ${packName}: missing core clips [${skipped.join(", ")}] — check /api/assets/anims/baked/`,
+      `[bakedAnim] ${packName}: missing core clips [${skipped.join(", ")}] — check /anims/baked/`,
     );
   }
   return { packName, clips, clipSources, skipped };

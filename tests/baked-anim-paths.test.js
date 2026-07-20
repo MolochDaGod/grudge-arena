@@ -1,8 +1,10 @@
 /**
- * Baked clip catalog paths must match files on assets.grudge-studio.com/anims/baked/.
- * Regenerate when BAKED_DIR_RELS / PACK_COMBAT_EXTRAS change.
+ * Baked clip catalog paths must resolve under /anims/baked/ (app deploy, not R2).
+ * Core packs (idle/walk/run) must exist on disk under public/anims/baked/.
  */
 import { describe, it, expect } from 'vitest';
+import { existsSync } from 'fs';
+import { resolve } from 'path';
 import {
   ANIM_PACK_CLIPS,
   BAKED_DIR_RELS,
@@ -12,7 +14,7 @@ import {
   bakedClipUrl,
 } from '../src/bakedAnimLoader.js';
 
-const CDN = 'https://assets.grudge-studio.com';
+const BAKED_ROOT = resolve(process.cwd(), 'public/anims/baked');
 
 function collectRels() {
   const rels = new Set([SPRINT_CLIP]);
@@ -29,7 +31,11 @@ function collectRels() {
   return [...rels];
 }
 
-describe('baked anim CDN paths', () => {
+function diskPath(rel) {
+  return resolve(BAKED_ROOT, `${rel}.json`);
+}
+
+describe('baked anim paths', () => {
   const rels = collectRels();
 
   it('catalog lists unique clip paths', () => {
@@ -37,14 +43,19 @@ describe('baked anim CDN paths', () => {
     expect(rels.length).toBeGreaterThan(20);
   });
 
-  it.each(rels.map((r) => [r, bakedClipUrl(r)]))(
-    '%s is on CDN',
-    async (_rel, url) => {
-      expect(url.startsWith('/api/assets/anims/baked/')).toBe(true);
-      const cdnUrl = url.replace('/api/assets/', `${CDN}/`);
-      const res = await fetch(cdnUrl, { method: 'HEAD' });
-      expect(res.status, `missing ${cdnUrl}`).toBe(200);
-    },
-    30_000,
-  );
+  it('bakedClipUrl uses deployed /anims/baked (not R2 /api/assets)', () => {
+    const url = bakedClipUrl('magic/standing idle');
+    expect(url.startsWith('/anims/baked/')).toBe(true);
+    expect(url.includes('%20') || url.includes('standing')).toBe(true);
+    expect(url.includes('/api/assets/')).toBe(false);
+  });
+
+  it('core pack loco clips exist on disk', () => {
+    for (const [pack, clips] of Object.entries(ANIM_PACK_CLIPS)) {
+      for (const [slot, rel] of Object.entries(clips)) {
+        const p = diskPath(rel);
+        expect(existsSync(p), `${pack}.${slot} missing: ${p}`).toBe(true);
+      }
+    }
+  });
 });

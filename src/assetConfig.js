@@ -101,11 +101,22 @@ export function islandAssetUrl(path) {
 }
 
 /**
- * Baked Bip001 JSON clips — bundled under /anims/baked on sandbox/dev, CDN proxy in prod.
- * @param {string} rel - e.g. 'locomotion/walking' (no .json)
+ * Baked Bip001 JSON clips.
+ *
+ * Always serve from the app deploy (`/anims/baked/...`) — Vite copies public/anims.
+ * Do NOT use `/api/assets/anims/baked` in prod: that rewrites to R2 root and 404s
+ * on spaced filenames (magic/standing idle, sword and shield *, etc.), which hard-fails
+ * Danger Room (staff/magic missing idle/run/sprint).
+ *
+ * @param {string} rel - e.g. 'locomotion/walking' or 'magic/standing idle' (no .json)
  */
 export function bakedAnimUrl(rel) {
-  const p = rel.startsWith("/") ? rel.slice(1) : rel;
-  if (useBundledArenaAssets()) return `/anims/baked/${p}.json`;
-  return `/api/assets/anims/baked/${p}.json`;
+  const p = (rel.startsWith("/") ? rel.slice(1) : rel).replace(/\.json$/i, "");
+  // Encode each segment so spaces / parentheses are valid URLs; keep path slashes
+  const encoded = p
+    .split("/")
+    .filter(Boolean)
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+  return `/anims/baked/${encoded}.json`;
 }

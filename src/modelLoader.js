@@ -22,6 +22,7 @@ import {
   CharacterLoadError,
   raceModelFallbackPaths,
   raceTextureFallbackPaths,
+  MODULAR_GLB_MAX_BYTES,
   isValidRace,
   auditCharacterMaterials,
   textureHealth,
@@ -727,7 +728,7 @@ async function loadRaceTextureMap(race) {
       (cacheBust ? `?v=${cacheBust}` : "")
     : null;
   const directPaths = raceTextureFallbackPaths(race, cacheBust);
-  const paths = [...directPaths, manifestPath].filter(Boolean);
+  const paths = [manifestPath, ...directPaths].filter(Boolean);
 
   const texFailures = [];
   for (const texPath of paths) {
@@ -916,6 +917,17 @@ async function loadFBX(path) {
   return { scene: cached, animations: cached.animations || [], path, format: 'fbx' };
 }
 
+async function headContentLength(url) {
+  try {
+    const res = await fetch(url, { method: "HEAD", cache: "no-store" });
+    if (!res.ok) return null;
+    const len = res.headers.get("content-length");
+    return len ? Number(len) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadModelWithFallback(paths, { race } = {}) {
   const failures = [];
   for (const path of paths) {
@@ -923,12 +935,30 @@ async function loadModelWithFallback(paths, { race } = {}) {
       if (/\.fbx$/i.test(path)) {
         return await loadFBX(path);
       }
+      if (/_Characters\.glb/i.test(path)) {
+        const bytes = await headContentLength(path);
+        if (bytes != null && bytes > MODULAR_GLB_MAX_BYTES) {
+          console.warn(
+            `[modelLoader] skip bloated modular GLB (${(bytes / 1e6).toFixed(1)}MB): ${path}`,
+          );
+          failures.push({
+            path,
+            message: `oversized modular GLB (${bytes} bytes)`,
+          });
+          continue;
+        }
+      }
       let gltf = gltfCache.get(path);
       if (!gltf) {
         gltf = await new Promise((resolve, reject) => {
           gltfLoader.load(path, resolve, undefined, reject);
         });
         gltfCache.set(path, gltf);
+      }
+      if (race && !isD1ModularScene(gltf.scene) && /_Characters\.glb/i.test(path)) {
+        failures.push({ path, message: "loaded GLB is not D1 modular" });
+        console.warn(`[modelLoader] skip non-D1 mesh ${path}`);
+        continue;
       }
       return { ...gltf, path, format: "glb" };
     } catch (err) {
@@ -1874,22 +1904,31 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
   assertBakedScaleMetrics(metrics, race, requireD1);
   validateSkinnedBindings(scene, race, { strict: requireD1 });
 
-  const { packName, clips, clipSources } = await loadBakedPackClips(
+  const { packName, clips, clipSources, skipped } = await loadBakedPackClips(
     resolvedWeapon,
     scene,
   );
+  // Soft-validate: fill-ins in loadBakedPackClips usually complete loco.
+  // Only hard-fail when even locomotion/idle fallbacks failed (true asset outage).
   try {
     validateBakedLocoClips(clips, resolvedWeapon, packName);
   } catch (err) {
     if (err instanceof BakedAnimLoadError) {
-      throw new CharacterLoadError(err.message, {
-        code: err.code,
-        race,
-        missing: err.missing,
-        cause: err,
-      });
+      const hasAnyLoco = clips.has("idle") || clips.has("walk") || clips.has("run");
+      if (requireD1 && !hasAnyLoco) {
+        throw new CharacterLoadError(err.message, {
+          code: err.code,
+          race,
+          missing: err.missing,
+          cause: err,
+        });
+      }
+      console.warn(
+        `[modelLoader] ${race}/${resolvedWeapon}: incomplete loco [${err.missing?.join(",") || skipped?.join(",")}] — continuing with available clips`,
+      );
+    } else {
+      throw err;
     }
-    throw err;
   }
   const idle = clips.get("idle");
   const walk = clips.get("walk");
