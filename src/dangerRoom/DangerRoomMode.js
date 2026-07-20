@@ -83,32 +83,40 @@ export async function applyNeutralExamineIdle(units) {
   }
 }
 
-/** Training dummies — enemy team targets that don't chase the player. */
+/** Island NPCs — neutrals that idle around the hub (foragers / traders). */
 export function getDangerNeutralTeams() {
   return [
     { race: "human", weapon: "staff", isPlayer: false, tier: 1, displayName: "Island Forager", neutral: true },
     { race: "dwarf", weapon: "mace", isPlayer: false, tier: 1, displayName: "Rock Trader", neutral: true },
     { race: "elf", weapon: "bow", isPlayer: false, tier: 1, displayName: "Wood Gatherer", neutral: true },
+    { race: "barbarian", weapon: "greatsword", isPlayer: false, tier: 1, displayName: "Dock Hand", neutral: true },
+    { race: "orc", weapon: "mace", isPlayer: false, tier: 1, displayName: "Shore Scout", neutral: true },
+    { race: "undead", weapon: "staff", isPlayer: false, tier: 1, displayName: "Harbor Mage", neutral: true },
   ];
 }
 
 export function getDangerTrainingTeams(playerRace, playerWeapon, buildConfig) {
+  // Game-ready default: Grudge6 human warrior + greatsword
+  const race = playerRace && playerRace !== "default" ? playerRace : "human";
+  const weapon = playerWeapon || "greatsword";
   const playerProfile = buildConfig || {};
   const TEAM_A = [
     {
-      heroId: DefaultHeroForRace[playerRace] || "human",
-      race: playerRace,
-      weapon: playerWeapon,
+      heroId: DefaultHeroForRace[race] || "human",
+      race,
+      weapon,
       isPlayer: true,
       tier: 3,
-      displayName: buildConfig?.displayName || "Champion",
+      displayName: buildConfig?.displayName || "Human Champion",
       profile: playerProfile,
     },
   ];
+  // Training dummies + race variety for combat practice
   const TEAM_B = [
     { race: "orc", weapon: "greatsword", isPlayer: false, tier: 1, displayName: "Training Dummy" },
     { race: "elf", weapon: "bow", isPlayer: false, tier: 1, displayName: "Archer Dummy" },
     { race: "undead", weapon: "staff", isPlayer: false, tier: 1, displayName: "Mage Dummy" },
+    { race: "dwarf", weapon: "mace", isPlayer: false, tier: 1, displayName: "Shield Dummy" },
   ];
   return { TEAM_A, TEAM_B };
 }
@@ -137,10 +145,16 @@ export function getDangerSpawnPosition(teamId, slot, teamSize) {
     return new THREE.Vector3(x, spawnY(x, z), z);
   }
   if (teamId === "N") {
+    // Spread NPCs around village / dock / fort for island showcase
     const spots = [
       [10, 6],
       [-11, 4],
       [5, -12],
+      [14, -6],
+      [-8, 10],
+      [8, 12],
+      [-20, 18],
+      [22, 4],
     ];
     const s = spots[slot % spots.length];
     return new THREE.Vector3(s[0], spawnY(s[0], s[1]), s[1]);
@@ -205,7 +219,9 @@ export function bootstrapDangerRoom(arena) {
   arena._terrainMeshes = arena._dangerEnv.terrainMeshes;
 
   mountDangerRoomHud();
-  if (isCombatSandboxUi()) mountBoatDockPanel();
+  // Island showcase: boat dock UI always on island (not only combat-sandbox host)
+  const island = needsIslandTerrain() || state.presetId === "island";
+  if (island || isCombatSandboxUi()) mountBoatDockPanel();
   mountDangerRoomDock({
     onWeaponPick: (weapon) => {
       setD1Weapon(weapon);
@@ -241,15 +257,38 @@ export function bootstrapDangerRoom(arena) {
   mountHarvestForArena(arena);
   if (needsIslandTerrain()) {
     setIslandSpawnHeights(true);
-    arena._dangerEnv?.terrainLoadPromise?.then(async (island) => {
-      applyIslandTerrainLoaded(arena, island);
+    arena._dangerEnv?.terrainLoadPromise?.then(async (islandData) => {
+      applyIslandTerrainLoaded(arena, islandData);
+      // Production physics: register prop colliders + re-snap player after island ready
+      try {
+        if (arena.physicsWorld && !arena._dangerPhysicsInited) {
+          arena._initPhysicsBodies?.();
+          arena._dangerPhysicsInited = true;
+        }
+      } catch (err) {
+        console.warn("[danger] physics init:", err?.message || err);
+      }
       const outdoor = await loadIslandOutdoorSky(arena.renderer, arena.scene);
       if (outdoor?.envMap && arena._dangerEnv?.root) {
         applyIslandEnvMap(arena._dangerEnv.root, outdoor.envMap);
         arena.renderer.toneMappingExposure = 1.15;
       }
+      // Mount parade (cavalry showcase) — non-blocking
+      try {
+        const { spawnIslandMountShowcase } = await import("./IslandMountShowcase.js");
+        await spawnIslandMountShowcase(arena);
+      } catch (err) {
+        console.warn("[danger] mount showcase:", err?.message || err);
+      }
       if (arena.playerUnit?.mesh) {
         arena.orbitCamera?.snapBehind?.();
+        arena._terrainSystem?.snapMesh?.(arena.playerUnit.mesh);
+      }
+      // Pointer lock / focus canvas so WASD works immediately
+      try {
+        arena.renderer?.domElement?.focus?.();
+      } catch {
+        /* ignore */
       }
     });
   }
@@ -359,6 +398,14 @@ export function tickDangerRoomSystems(arena, delta = 0.016) {
   tickHarvestForArena(arena, delta);
   tickBoatDockPanel(arena);
   tickDangerRoomHud(arena, delta);
+  // Mount parade idle loops
+  for (const m of arena._mountMixers || []) {
+    try {
+      m.update(delta);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /** Per-frame danger room HUD updates. */

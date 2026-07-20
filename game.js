@@ -147,10 +147,10 @@ class GrudgeArena {
 
     this.world = new World();
     this.collisionSystem = new CollisionSystem();
-    this.physicsWorld = null;       // cannon-es or RapierPhysicsWorld (sandbox)
-    this._cannonHitbox = null;      // cannon-es world for melee hitboxes when using Rapier
-    this._usingRapier = false;
-    this.hitboxManager = null;      // HitboxManager (weapon hitboxes)
+    this.physicsWorld = null;       // Rapier PhysicsWorld
+    this._cannonHitbox = null;      // deprecated
+    this._usingRapier = true;
+    this.hitboxManager = null;      // HitboxManager (weapon volumes)
     this.particleSystem = null;
     this.spriteSystem = null;
     this.orbitCamera = null;
@@ -216,18 +216,28 @@ class GrudgeArena {
     this.particleSystem = new ParticleSystem(this.scene);
     this.spriteSystem = new SpriteSystem(this.scene);
 
-    // Physics — Rapier heightfield + capsules on island preset; cannon-es on flat chambers
+    // Physics — Rapier only (Warlords-era SSOT). Island uses heightfield; flat arenas use plane.
+    this._usingRapier = true;
+    this._cannonHitbox = null;
     if (needsIslandTerrain()) {
-      const { RapierPhysicsWorld } = await import("./src/engine/RapierPhysicsWorld.js");
-      this.physicsWorld = await RapierPhysicsWorld.create();
-      this._usingRapier = true;
-      this._cannonHitbox = new PhysicsWorld();
-      this._cannonHitbox.world.gravity.set(0, 0, 0);
-      this.hitboxManager = new HitboxManager(this._cannonHitbox.world);
+      try {
+        const { islandHeight, ISLAND_SIZE, ISLAND_SEGMENTS } = await import(
+          "./src/dangerRoom/IslandTerrain.js"
+        );
+        this.physicsWorld = await PhysicsWorld.create({
+          flat: false,
+          size: ISLAND_SIZE,
+          segments: ISLAND_SEGMENTS,
+          heightFn: islandHeight,
+        });
+      } catch {
+        this.physicsWorld = await PhysicsWorld.create({ flat: true });
+      }
     } else {
-      this.physicsWorld = new PhysicsWorld();
-      this.hitboxManager = new HitboxManager(this.physicsWorld.world);
+      this.physicsWorld = await PhysicsWorld.create({ flat: true });
     }
+    this.hitboxManager = new HitboxManager(this);
+    this.hitboxManager.setGame(this);
 
     await this._createArena();
     if (!this.dangerMode) {
@@ -523,14 +533,19 @@ class GrudgeArena {
         }
       }
 
-      if (this.dangerMode && !needsIslandTerrain()) {
-        this._initPhysicsBodies();
+      // Physics for chamber + island (island also re-registers props after terrain load)
+      if (this.dangerMode) {
+        try {
+          this._initPhysicsBodies();
+          this._dangerPhysicsInited = true;
+        } catch (err) {
+          console.warn("[arena] physics bodies:", err?.message || err);
+        }
       }
 
       if (this.dangerMode) {
-        if (isCombatSandboxMode()) {
-          await applyNeutralExamineIdle(this.allUnits);
-        }
+        // Island NPCs use neutral idle (all danger-room, not only combat-sandbox host)
+        await applyNeutralExamineIdle(this.allUnits);
         for (const u of this.allUnits) {
           if (u.team === "N" && isCombatSandboxMode()) continue;
           if (u.controller?.director?.primeLocomotion) {
@@ -991,12 +1006,17 @@ class GrudgeArena {
 
     controller?.setWeaponType?.(resolvedWeapon);
 
+    const proceduralRig = this._groundSampler
+      ? createCharacterProceduralRig(mesh, this._groundSampler)
+      : null;
+
     return {
       entity,
       mesh,
       mixer,
       controller,
       equipment: equipment || null,
+      proceduralRig,
       team: teamId,
       isPlayer: !!comp.isPlayer,
       weaponDef: actualWeaponDef,
@@ -1140,7 +1160,7 @@ class GrudgeArena {
   }
 
   /**
-   * Create cannon-es physics bodies, hitboxes, AI detectors, and behavior FSMs
+   * Create Rapier character bodies, hitboxes, AI detectors, and behavior FSMs
    * for all loaded units. Called once after all units are loaded.
    */
   _capsuleCenterY(mesh, phys) {
@@ -1169,7 +1189,8 @@ class GrudgeArena {
       const phys = physicsSizeFromMetrics(metrics);
       const spawnPos = unit.mesh.position;
       const bodyY = this._capsuleCenterY(unit.mesh, phys);
-      const meshDriven = !this._usingRapier;
+      // Player mesh-driven kinematic; AI dynamic/kinematic follow via sync helpers
+      const meshDriven = !!unit.isPlayer;
       const body = pw.createCharacterBody(
         { x: spawnPos.x, y: bodyY, z: spawnPos.z },
         phys.radius,
@@ -1178,17 +1199,8 @@ class GrudgeArena {
         mask,
         { kinematic: meshDriven },
       );
-      let cannonProxy = null;
-      if (this._usingRapier && this._cannonHitbox) {
-        cannonProxy = this._cannonHitbox.createCharacterBody(
-          { x: spawnPos.x, y: bodyY, z: spawnPos.z },
-          phys.radius,
-          phys.height,
-          group,
-          mask,
-        );
-      }
       unit.physicsSize = phys;
+      unit.cannonProxyBody = null;
       body.belongTo = {
         unit,
         isPlayer: isTeamA,
@@ -1220,20 +1232,16 @@ class GrudgeArena {
         },
       };
       unit.physicsBody = body;
-      unit.cannonProxyBody = cannonProxy;
 
-      // Hitbox (weapon collider) — melee hits cannon proxy bodies on _hitboxWorld
+      // Hitbox (weapon volume — distance resolve, no second engine)
       this.hitboxManager.register(unit);
 
       // AI-only: detector + behavior FSM
-      const detectorWorld = this._cannonHitbox?.world ?? pw.world;
-      const detectorBody = cannonProxy || body;
       if (!unit.isPlayer) {
         const detectorRadius = (unit.weaponDef?.range ?? 0) > 5 ? 20 : 12;
-        const targetGroup = isTeamA ? GROUP_ENEMY : GROUP_PLAYER;
-        const detector = new AIDetector(detectorWorld, detectorBody, {
+        const detector = new AIDetector(unit, body, {
           radius: detectorRadius,
-          targetGroup,
+          ownerTeam: unit.team,
         });
         unit.aiDetector = detector;
 
@@ -2407,29 +2415,48 @@ class GrudgeArena {
 
   /** Foot IK, hip recenter, weapon aim IK — after mixer, before camera. */
   _updateProceduralRig(delta) {
-    const rig = this._proceduralRig;
-    const ctrl = this.playerController;
-    if (!rig || !ctrl || !this.playerUnit) return;
+    for (const u of this.allUnits) {
+      const rig = u.isPlayer ? this._proceduralRig : u.proceduralRig;
+      if (!rig) continue;
 
-    const weaponType = this._getWeaponTypeKey?.() ?? 'greatsword';
-    const weapon = this.getCurrentWeapon?.();
-    const aiming = isCombatSandboxMode()
-      ? !!(this._autoAttackOn || ctrl.holdKey?._LMB)
-      : !!(this._autoAttackOn || ctrl.holdKey?._RMB);
-    const snapVal = ctrl._fsmService?.getSnapshot?.()?.value;
-    const stateStr = typeof snapVal === 'string' ? snapVal : JSON.stringify(snapVal ?? '');
+      const ctrl = u.isPlayer ? this.playerController : null;
+      const weaponType = u.isPlayer
+        ? (this._getWeaponTypeKey?.() ?? 'greatsword')
+        : (u.resolvedWeapon ?? 'greatsword');
+      const weapon = u.isPlayer ? this.getCurrentWeapon?.() : u.weaponDef;
+      let aiming = false;
+      let climbing = false;
+      let dashing = false;
+      let speed01 = 0;
 
-    rig.update({
-      dt: delta,
-      camera: this.camera,
-      grounded: !ctrl._climbing,
-      climbing: !!ctrl._climbing,
-      dashing: stateStr.includes('dash'),
-      aiming: aiming && weapon?.range > 5,
-      hipFiring: false,
-      weaponType,
-      speed01: Math.min(1, (ctrl.currentSpeed || 0) / 5.5),
-    });
+      if (ctrl) {
+        aiming = isCombatSandboxMode()
+          ? !!(this._autoAttackOn || ctrl.holdKey?._LMB)
+          : !!(this._autoAttackOn || ctrl.holdKey?._RMB);
+        const snapVal = ctrl._fsmService?.getSnapshot?.()?.value;
+        const stateStr = typeof snapVal === 'string' ? snapVal : JSON.stringify(snapVal ?? '');
+        climbing = !!ctrl._climbing;
+        dashing = stateStr.includes('dash');
+        speed01 = Math.min(1, (ctrl.currentSpeed || 0) / 5.5);
+      } else if (u._lastPos) {
+        const dx = u.mesh.position.x - u._lastPos.x;
+        const dz = u.mesh.position.z - u._lastPos.z;
+        speed01 = Math.min(1, Math.hypot(dx, dz) / (delta * 5.5));
+      }
+      u._lastPos = u.mesh.position.clone();
+
+      rig.update({
+        dt: delta,
+        camera: u.isPlayer ? this.camera : null,
+        grounded: !climbing,
+        climbing,
+        dashing,
+        aiming: aiming && weapon?.range > 5,
+        hipFiring: false,
+        weaponType,
+        speed01,
+      });
+    }
   }
 
   // ── Game loop ──
@@ -2465,46 +2492,36 @@ class GrudgeArena {
     this._updateProceduralRig(delta);
     this._snapUnitsToGround();
 
-    // ── Physics step & sync (after posed + grounded meshes) ──
+    // ── Physics step & sync (Rapier only) ──
     if (this.physicsWorld) {
       const off = (u) => u.physicsSize?.offset ?? 0.9;
-      const meshAuthoritative = !this._usingRapier;
 
+      // Player mesh drives kinematic body; step; AI bodies drive meshes
       for (const u of this.allUnits) {
-        if (!u.physicsBody) continue;
-        if (meshAuthoritative || u.isPlayer || this._usingRapier) {
+        if (!u.physicsBody || !u.mesh) continue;
+        if (u.isPlayer) {
           this.physicsWorld.syncBodyToMesh(u.physicsBody, u.mesh, off(u));
-        }
-        if (u.cannonProxyBody) {
-          this._cannonHitbox?.syncBodyToMesh(
-            u.cannonProxyBody,
-            u.mesh,
-            off(u),
-          );
         }
       }
 
       this.physicsWorld.step(delta);
-      if (this._cannonHitbox) {
-        this._cannonHitbox.step(delta);
-      }
 
-      if (!meshAuthoritative) {
-        for (const u of this.allUnits) {
-          if (!u.isPlayer && u.physicsBody) {
-            this.physicsWorld.syncMeshToBody(u.mesh, u.physicsBody, off(u));
-          }
+      for (const u of this.allUnits) {
+        if (!u.isPlayer && u.physicsBody && u.mesh) {
+          this.physicsWorld.syncMeshToBody(u.mesh, u.physicsBody, off(u));
         }
       }
 
       for (const u of this.allUnits) {
-        if (u.aiDetector) u.aiDetector.update();
+        if (u.aiDetector) u.aiDetector.update(this.allUnits);
       }
 
-      this.hitboxManager?.update();
+      this.hitboxManager?.update(this.allUnits);
 
       for (let i = physicsProjectiles.length - 1; i >= 0; i--) {
-        physicsProjectiles[i].update(delta);
+        const p = physicsProjectiles[i];
+        if (!p.getUnits) p.getUnits = () => this.allUnits;
+        p.update(delta);
       }
 
       updateSplashes(delta);
