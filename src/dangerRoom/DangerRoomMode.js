@@ -49,7 +49,6 @@ import {
 } from "../engine/CombatFeedback.js";
 import {
   getSoftLockHudState,
-  cycleTabTarget,
 } from "../engine/SoftLockSystem.js";
 import {
   cyclePlayerTarget,
