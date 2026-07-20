@@ -21,6 +21,16 @@ import { mapUrl, assetUrl } from "./src/assetConfig.js";
 import { physicsSizeFromMetrics, placeCharacterOnGround } from "./src/characterScale.js";
 import { OrbitCamera } from './src/engine/OrbitCamera.js';
 import { ArenaController } from './src/engine/ArenaController.js';
+import {
+  UNIVERSAL_CONTROL_SCHEME,
+  createPlayerControlStack,
+  setupPlayerPointerInput,
+  teardownPlayerPointerInput,
+  wirePlayerCombatCallbacks,
+  tickPlayerAimSystems,
+  ensureCombatAimHudShell,
+  cyclePlayerTarget,
+} from './src/engine/PlayerControlStack.js';
 import { SpriteSystem, createSkybox } from './src/engine/SpriteSystem.js';
 import { GameTimerSystem } from './src/engine/GameTimer.js';
 import { inventorySystem } from "./src/inventorySystem.js";
@@ -65,7 +75,7 @@ import {
   setD1Weapon,
 } from './src/d1LoadoutStore.js';
 import { syncGearCatalog } from './src/dangerRoom/dangerRoomLoadoutPanel.js';
-import { setRawMouse } from './src/engine/SoftLockSystem.js';
+
 import { AbilityQueue } from './src/engine/AbilityQueue.js';
 import {
   deriveCombatTiming,
@@ -334,7 +344,7 @@ class GrudgeArena {
       this.playerUnit = this.allUnits.find((u) => u.isPlayer);
       this.playerEntity = this.playerUnit?.entity;
 
-      const strictQuality = true;
+      // Strict on player only — NPC scale/texture drift must never brick Teidland boot/HUD.
       const rosterPayload = this.allUnits.map((u) => ({
         scene: u.mesh,
         mesh: u.mesh,
@@ -346,19 +356,27 @@ class GrudgeArena {
         isPlayer: u.isPlayer,
       }));
       this._qualityReport = verifyArenaRoster(rosterPayload, {
-        strict: strictQuality,
-        playerOnly: isCombatSandboxMode(),
+        strict: false,
+        playerOnly: true,
       });
+      if (typeof window !== "undefined") {
+        window.__grudgeArena = window.__grudgeArena || this;
+        window.__grudgeArena._qualityReport = this._qualityReport;
+      }
       if (!this._qualityReport.ok) {
         const failed = this._qualityReport.units.filter((x) => !x.ok);
+        const playerFailed = failed.filter((x) => x.isPlayer);
         console.error(
           `[arena] quality gate: ${failed.map((x) => `${x.label}: ${x.issues.join("; ")}`).join(" | ")}`,
         );
-        if (strictQuality) {
+        if (playerFailed.length) {
           throw new Error(
-            `[arena] quality gate failed for ${failed.map((x) => x.label).join(", ")}`,
+            `[arena] quality gate failed for player: ${playerFailed.map((x) => x.issues.join("; ")).join(" | ")}`,
           );
         }
+        console.warn(
+          `[arena] quality gate: ${failed.length} NPC(s) below bar — continuing (HUD/physics still load)`,
+        );
       } else {
         console.log(
           `[arena] quality gate OK — ${this._qualityReport.unitCount} units verified`,
@@ -429,91 +447,31 @@ class GrudgeArena {
       }
       this.match.registerTeams(teamAUnits, teamBUnits);
 
-      // Wire up OrbitCamera + ArenaController for the player unit
+      // Universal player stack (Teidland / island / arena / queue / sandbox):
+      // OrbitCamera TPS + ArenaController TPS + SoftLock + weapon skills.
       if (this.playerUnit) {
-        const useTps = true;
-        this.orbitCamera = new OrbitCamera(
-          this.camera,
-          this.renderer.domElement,
-        );
-        this.orbitCamera.setControlMode(useTps ? 'tps' : 'wow');
-        this.orbitCamera.setTarget(this.playerUnit.mesh);
-        // Register arena obstacles for souls-like camera wall collision
-        if (this._obstacleMeshes?.length) {
-          this.orbitCamera.setCollisionMeshes(this._obstacleMeshes);
-        }
-        // Snap camera to sit behind the player immediately on spawn.
-        this.orbitCamera.snapBehind();
-
-        this.playerController = new ArenaController(
-          this.playerUnit.mesh,
-          this.playerUnit.controller,
-          this.orbitCamera,
-        );
-        this.playerController.controlScheme = useTps ? 'tps' : 'wow';
-        this.playerController.targetYaw = this.playerUnit.mesh.rotation.y;
-        if (this._groundSampler) {
-          if (this.playerController.setGroundSampler) {
-            this.playerController.setGroundSampler(this._groundSampler);
-          } else {
-            this.playerController.groundSampler = this._groundSampler;
-          }
-        }
-        if (this.dangerMode && this._dangerClampRadius) {
-          this.playerController.clampRadius = this._dangerClampRadius;
-        } else if (!this.dangerMode) {
-          this.playerController.clampRadius = ARENA_CLAMP_RADIUS;
-        }
-        this.playerUnit?.controller?.setWeaponType?.(
-          this.playerUnit.resolvedWeapon || this._getWeaponTypeKey?.(),
-        );
-        // Wire combat callbacks. RMB toggles auto-attack (WoW-style) —
-        // _performAttack is driven by _updateAutoAttack each frame.
-        this.playerController.onAttack = (_type) => this._toggleAutoAttack();
-
-        // onAbility receives:
-        //   'Q' | 'E' | 'R' | 'F'  → skill slots 1-4 (mapped to weapon ability keys)
-        //   '6' | '7' | '8'         → consumable slots 6-8 (hotbar positions)
-        this.playerController.onAbility = (slotKey) => {
-          if (['Q','E','R','F'].includes(slotKey)) {
-            // Skill slots 1-4 — slotKey is the ability map key used by WeaponDefinitions
-            this.useAbility(slotKey);
-          } else if (['6','7','8'].includes(slotKey)) {
-            // Consumable slots — route to inventory system's use-item handler
-            const idx = parseInt(slotKey, 10);  // 6, 7, or 8
-            this.inventoryUI?.useConsumableSlot?.(idx - 5);  // slot index 1-3
-          }
-        };
-
-        // Tab → cycle to next enemy target (WoW-style)
-        // TargetSystem.cycleEnemies() already handles Tab natively via its own
-        // _setupInput() listener; this callback lets ArenaController's onTarget
-        // also trigger it programmatically (e.g. from gamepad or custom binds).
-        this.playerController.onTarget = () => {
-          if (this.dangerMode) {
-            dangerRoomCycleTarget(this);
-          } else {
-            this.targeting?.cycleEnemies();
-          }
-        };
-
-        this.playerController.onDash = () => {
-          const fwd = this.playerController.getForward();
-          const dashFeel = getWeaponFeel(this._getWeaponTypeKey?.() ?? "greatsword");
-          const dashColor = dashFeel?.accent ? new THREE.Color(dashFeel.accent) : new THREE.Color(0x3366ff);
-          this.particleSystem?.emit({
-            position: this.playerUnit.mesh.position
-              .clone()
-              .add(new THREE.Vector3(0, 0.5, 0)),
-            color: dashColor,
-            count: dashFeel?.title === "ASSASSIN" ? 28 : 20,
-            velocity: fwd.clone().multiplyScalar(-4),
-            spread: 1.5,
-            lifetime: 0.4,
-            size: 0.2,
-          });
-          this._playSFX?.(this._weaponSfx?.ui?.dash, 0.35);
-        };
+        const weaponType =
+          this.playerUnit.resolvedWeapon || this._getWeaponTypeKey?.() || "greatsword";
+        const clamp =
+          this.dangerMode && this._dangerClampRadius
+            ? this._dangerClampRadius
+            : ARENA_CLAMP_RADIUS;
+        const stack = createPlayerControlStack({
+          camera: this.camera,
+          domElement: this.renderer.domElement,
+          mesh: this.playerUnit.mesh,
+          animCtrl: this.playerUnit.controller,
+          obstacleMeshes: this._obstacleMeshes,
+          clampRadius: clamp,
+          groundSampler: this._groundSampler,
+          terrainSystem: this._terrainSystem,
+          weaponType,
+        });
+        this.orbitCamera = stack.orbitCamera;
+        this.playerController = stack.playerController;
+        wirePlayerCombatCallbacks(this, this.playerController);
+        setupPlayerPointerInput(this);
+        ensureCombatAimHudShell();
 
         // Wire animation finished → FSM 'finish' event for combo chains
         if (this.playerUnit.mixer) {
@@ -559,6 +517,7 @@ class GrudgeArena {
         this._groundSampler = new GroundSampler();
         if (needsIslandTerrain()) {
           this._groundSampler.setHeightSampleFn(sampleIslandHeight);
+          this._groundSampler.setPreferHeightFn(true);
           this._terrainSystem = new ArenaTerrainSystem({
             groundSampler: this._groundSampler,
             collisionSystem: this.collisionSystem,
@@ -639,7 +598,7 @@ class GrudgeArena {
       if (gameUI) gameUI.style.display = "block";
       setProgress(100, "Ready!");
       if (this.dangerMode) {
-        console.log("[arena] Danger Room training loaded — race:", race);
+        console.log("[arena] Teidland training loaded — race:", race);
       } else {
         this.match.start();
         console.log("[arena] 3v3 Arena loaded — race:", race);
@@ -689,40 +648,13 @@ class GrudgeArena {
     });
   }
 
+  /** Soft-lock + TPS pointer — all character play modes (not danger-only). */
   _setupSoftLockInput() {
-    if (this._softLockMove) return;
-    this._softLockMove = (e) => setRawMouse(e.clientX, e.clientY);
-    window.addEventListener("mousemove", this._softLockMove, { passive: true });
-    const rect = this.renderer?.domElement?.getBoundingClientRect?.();
-    if (rect) {
-      setRawMouse(rect.left + rect.width * 0.5, rect.top + rect.height * 0.5);
-    }
-    if (!this._dangerMouseDown) {
-      this._dangerMouseDown = (e) => {
-        if (
-          e.button === 0 &&
-          this.playerController?.controlScheme === 'tps'
-        ) {
-          this.playerController.holdKey._LMB = true;
-        }
-      };
-      this._dangerMouseUp = (e) => {
-        if (e.button === 0 && this.playerController) {
-          const tps = this.playerController.controlScheme === "tps";
-          if (tps) {
-            this.playerController.holdKey._LMB = false;
-            if (this._harvest?.isActive?.()) {
-              this.playerController.tickKey._LMB = true;
-            } else {
-              this.playerController.tickKey._LMBAttack = true;
-            }
-          } else {
-            this.playerController.tickKey._LMB = true;
-          }
-        }
-      };
+    setupPlayerPointerInput(this);
+    ensureCombatAimHudShell();
+    if (!this._dangerReloadKey) {
       this._dangerReloadKey = (e) => {
-        if (e.code === "KeyR" && !e.repeat && this.dangerMode) {
+        if (e.code === "KeyR" && !e.repeat) {
           if (this._harvest?.isActive?.() || isCombatSandboxMode()) return;
           const wt = this._getWeaponTypeKey?.() ?? "";
           if (wt === "bow" || wt === "rifle") {
@@ -731,8 +663,6 @@ class GrudgeArena {
           }
         }
       };
-      window.addEventListener("mousedown", this._dangerMouseDown);
-      window.addEventListener("mouseup", this._dangerMouseUp);
       window.addEventListener("keydown", this._dangerReloadKey);
     }
   }
@@ -783,7 +713,7 @@ class GrudgeArena {
       this._terrainMeshes = [];
       this._obstacleMeshes = [];
       this.aoeIndicator = new AoEIndicator(this.scene, this._terrainMeshes);
-      console.log('[arena] Danger Room mode — chamber builds after character load');
+      console.log('[arena] Teidland mode — island builds after character load');
       return;
     }
 
@@ -1139,7 +1069,7 @@ class GrudgeArena {
     console.log(`[arena] Danger player reloaded — ${st.race} / ${unitResult.resolvedWeapon}`);
   }
 
-  /** Flat PvP arena — terrain snap, foot IK, TPS camera parity with danger room. */
+  /** Flat PvP arena — same control stack as Teidland (TPS + soft lock + skills). */
   _bootstrapClassicArena() {
     if (this.dangerMode) return;
     this._groundSampler = new GroundSampler();
@@ -1148,14 +1078,27 @@ class GrudgeArena {
     for (const u of this.allUnits) {
       this._groundSampler.snapMesh(u.mesh);
     }
+    if (this.playerController) {
+      if (this.playerController.setGroundSampler) {
+        this.playerController.setGroundSampler(this._groundSampler);
+      } else {
+        this.playerController.groundSampler = this._groundSampler;
+      }
+      this.playerController.controlScheme = UNIVERSAL_CONTROL_SCHEME;
+      this.playerController.useBakedLoco = !!this.playerUnit?.controller?.useBakedLoco;
+    }
+    this._setupSoftLockInput();
+    ensureCombatAimHudShell();
     if (this.targeting && !this.targeting.currentTarget) {
       const enemy = this.allUnits.find(
         (u) => u.team === "B" && !u.entity?.hasTag("dead"),
       );
       if (enemy) this.targeting.select(enemy);
     }
+    this.orbitCamera?.setControlMode?.(UNIVERSAL_CONTROL_SCHEME);
+    this.orbitCamera?.snapBehind?.();
     console.log(
-      `[arena] Classic arena grounded — ${this.allUnits.length} units snapped to floor`,
+      `[arena] Classic arena grounded — universal TPS stack · ${this.allUnits.length} units`,
     );
   }
 
@@ -1164,10 +1107,15 @@ class GrudgeArena {
    * for all loaded units. Called once after all units are loaded.
    */
   _capsuleCenterY(mesh, phys) {
-    const terrainY = this._groundSampler
-      ? this._groundSampler.sampleY(mesh.position.x, mesh.position.z, mesh.position.y)
+    // Capsule center = ground sole Y + pelvis offset (mesh root ≈ soles after snap).
+    const soleY = this._groundSampler
+      ? this._groundSampler.sampleY(
+          mesh.position.x,
+          mesh.position.z,
+          mesh.position.y,
+        )
       : mesh.position.y;
-    return terrainY + (phys?.offset ?? 0.9);
+    return soleY + (phys?.offset ?? 0.9);
   }
 
   _initPhysicsBodies() {
@@ -1175,6 +1123,11 @@ class GrudgeArena {
     const pw = this.physicsWorld;
 
     for (const unit of this.allUnits) {
+      // Re-init safe: drop previous capsule so we don't stack ghost bodies.
+      if (unit.physicsBody) {
+        pw.removeBody(unit.physicsBody);
+        unit.physicsBody = null;
+      }
       const isTeamA = unit.team === 'A';
       const group = isTeamA ? GROUP_PLAYER : GROUP_ENEMY;
       const mask  = GROUP_SCENE
@@ -1189,15 +1142,17 @@ class GrudgeArena {
       const phys = physicsSizeFromMetrics(metrics);
       const spawnPos = unit.mesh.position;
       const bodyY = this._capsuleCenterY(unit.mesh, phys);
-      // Player mesh-driven kinematic; AI dynamic/kinematic follow via sync helpers
-      const meshDriven = !!unit.isPlayer;
+      // Island / Teidland: ALL units mesh-driven kinematic. Terrain snap owns Y;
+      // dynamic capsules fight ground sample and leave AI floating/sinking.
+      // Flat PvP arena keeps player kinematic + AI dynamic for knockback later.
+      const meshDriven = !!unit.isPlayer || !!this.dangerMode;
       const body = pw.createCharacterBody(
         { x: spawnPos.x, y: bodyY, z: spawnPos.z },
         phys.radius,
         phys.height,
         group,
         mask,
-        { kinematic: meshDriven },
+        { kinematic: meshDriven, heightOffset: phys.offset },
       );
       unit.physicsSize = phys;
       unit.cannonProxyBody = null;
@@ -2400,16 +2355,17 @@ class GrudgeArena {
     }
   }
 
-  /** Stick all unit roots to terrain after IK (feet-midpoint Y=0 convention). */
+  /**
+   * Stick soles to terrain after mixer + foot IK.
+   * Uses sole-contact correction (not root-Y=0 assumption) so idle poses don't float.
+   */
   _snapUnitsToGround() {
     if (!this._groundSampler) return;
     for (const u of this.allUnits) {
       if (!u.mesh) continue;
-      if (this._terrainSystem) {
-        this._terrainSystem.snapMesh(u.mesh);
-      } else {
-        this._groundSampler.snapMesh(u.mesh);
-      }
+      // Skip mid-climb — climb controller owns Y.
+      if (u.isPlayer && this.playerController?._climbing) continue;
+      this._groundSampler.snapMesh(u.mesh, 0, { soleCorrect: true });
     }
   }
 
@@ -2469,6 +2425,10 @@ class GrudgeArena {
     const combatActive = this.dangerMode ? true : (this.match?.isCombatActive() ?? true);
     const active = combatActive;
     if (this.playerController) this.playerController.update(delta);
+    // Soft/hard lock + camera assist — every character-play mode
+    if (this.playerController) {
+      tickPlayerAimSystems(this, delta);
+    }
     this._updateCooldowns(delta);
     if (active) {
       this._processAbilityQueue();
@@ -2485,10 +2445,15 @@ class GrudgeArena {
       this.arenaAI.update(delta, this.allUnits, active);
     }
 
-    // ── Animation mixer (pose skeleton before IK / ground / physics) ──
+    // ── Animation → ground → foot IK → sole lock (physical plant order) ──
+    // 1) Mixer poses skeleton (may lift feet off root convention)
+    // 2) Root/sole snap to heightfield so feet live near ground
+    // 3) Foot IK + hip recenter fine-plant on terrain normals
+    // 4) Sole lock again so IK can't leave boots floating
     for (const u of this.allUnits) {
       u.controller?.update?.(delta);
     }
+    this._snapUnitsToGround();
     this._updateProceduralRig(delta);
     this._snapUnitsToGround();
 
@@ -2496,10 +2461,12 @@ class GrudgeArena {
     if (this.physicsWorld) {
       const off = (u) => u.physicsSize?.offset ?? 0.9;
 
-      // Player mesh drives kinematic body; step; AI bodies drive meshes
+      // Mesh-driven kinematics (player always; all units in Teidland/danger):
+      // ground snap owns feet Y → push capsule to mesh. Dynamic AI only in flat PvP.
       for (const u of this.allUnits) {
         if (!u.physicsBody || !u.mesh) continue;
-        if (u.isPlayer) {
+        const kinematic = u.isPlayer || this.dangerMode || u.physicsBody.rapierBody?.isKinematic?.();
+        if (kinematic) {
           this.physicsWorld.syncBodyToMesh(u.physicsBody, u.mesh, off(u));
         }
       }
@@ -2507,7 +2474,8 @@ class GrudgeArena {
       this.physicsWorld.step(delta);
 
       for (const u of this.allUnits) {
-        if (!u.isPlayer && u.physicsBody && u.mesh) {
+        if (!u.physicsBody || !u.mesh || u.isPlayer || this.dangerMode) continue;
+        if (!u.physicsBody.rapierBody?.isKinematic?.()) {
           this.physicsWorld.syncMeshToBody(u.mesh, u.physicsBody, off(u));
         }
       }
@@ -2699,9 +2667,10 @@ class GrudgeArena {
       this._invHotkeysBound = false;
     }
 
-    if (this._softLockMove) {
-      window.removeEventListener("mousemove", this._softLockMove);
-      this._softLockMove = null;
+    teardownPlayerPointerInput(this);
+    if (this._dangerReloadKey) {
+      window.removeEventListener("keydown", this._dangerReloadKey);
+      this._dangerReloadKey = null;
     }
 
     // Dispose subsystems

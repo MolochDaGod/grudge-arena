@@ -48,13 +48,13 @@ import {
   getHitMarkerId,
 } from "../engine/CombatFeedback.js";
 import {
-  updateSoftLock,
   getSoftLockHudState,
-  hardLockCameraAssistRate,
-  lockedTargetWorld,
-  syncTargetLockFromTargeting,
   cycleTabTarget,
 } from "../engine/SoftLockSystem.js";
+import {
+  cyclePlayerTarget,
+  UNIVERSAL_CONTROL_SCHEME,
+} from "../engine/PlayerControlStack.js";
 import {
   mountHarvestForArena,
   teardownHarvestForArena,
@@ -366,29 +366,6 @@ export async function applyDangerLiveLoadout(arena) {
   syncGearCatalog(unit.equipment);
 }
 
-const _toTarget = new THREE.Vector3();
-
-function applyCameraAssist(arena, dt, weaponType, aiming) {
-  const cam = arena.orbitCamera;
-  if (!cam) return;
-  const rate = hardLockCameraAssistRate(aiming, weaponType);
-  if (rate <= 0) {
-    cam.setCameraAssist(null, null, 0);
-    return;
-  }
-  const world = lockedTargetWorld(arena.targeting);
-  if (!world) {
-    cam.setCameraAssist(null, null, 0);
-    return;
-  }
-  _toTarget.copy(world).sub(arena.camera.position);
-  if (_toTarget.lengthSq() < 1e-6) return;
-  _toTarget.normalize();
-  const yaw = Math.atan2(_toTarget.x, _toTarget.z);
-  const pitch = Math.asin(Math.max(-1, Math.min(1, _toTarget.y)));
-  cam.setCameraAssist(yaw, pitch, rate);
-}
-
 /** Per-frame danger room systems (music, DJ, shooter, HUD). */
 export function tickDangerRoomSystems(arena, delta = 0.016) {
   getDangerRoomMusic().setIntensityTarget(0.35);
@@ -408,10 +385,20 @@ export function tickDangerRoomSystems(arena, delta = 0.016) {
   }
 }
 
-/** Per-frame danger room HUD updates. */
+/** Per-frame danger room HUD updates (soft lock via universal PlayerControlStack). */
 export function tickDangerRoomHud(arena, delta = 0.016) {
   if (!arena.playerController) return;
   const ctrl = arena.playerController;
+  // Enforce universal TPS stack on Teidland / island / sandbox
+  if (ctrl.controlScheme !== UNIVERSAL_CONTROL_SCHEME) {
+    ctrl.controlScheme = UNIVERSAL_CONTROL_SCHEME;
+  }
+  if (arena.orbitCamera?.controlMode !== UNIVERSAL_CONTROL_SCHEME) {
+    arena.orbitCamera?.setControlMode?.(UNIVERSAL_CONTROL_SCHEME);
+  }
+
+  // Aim systems ticked once from game.js for all modes (avoid double soft-lock)
+
   const speed = ctrl.currentSpeed || 0;
   const sprint = ctrl.holdKey?.ShiftLeft || ctrl.holdKey?.ShiftRight;
   const snap = ctrl._fsmService?.getSnapshot?.();
@@ -455,15 +442,6 @@ export function tickDangerRoomHud(arena, delta = 0.016) {
     }
   }
 
-  const canvas = arena.renderer?.domElement;
-
-  if (canvas) {
-    const rect = canvas.getBoundingClientRect();
-    syncTargetLockFromTargeting(arena.targeting);
-    updateSoftLock(delta, arena.camera, rect, arena.targeting, aiming, lockWeapon);
-    applyCameraAssist(arena, delta, lockWeapon, aiming);
-  }
-
   const crosshairBase = getDangerRoomState().crosshairBase ?? 10;
   const metrics = arena.playerUnit?.characterMetrics || arena.playerUnit?.mesh?.userData?.characterMetrics;
   const measuredH = metrics?.measuredHeight ?? metrics?.targetHeight;
@@ -482,15 +460,7 @@ export function tickDangerRoomHud(arena, delta = 0.016) {
   syncAbilityBarFlash();
 }
 
-/** Tab cycle with soft-lock zone (danger room). */
+/** Tab cycle with soft-lock zone — all play modes. */
 export function dangerRoomCycleTarget(arena) {
-  const canvas = arena.renderer?.domElement;
-  if (!canvas) return;
-  const rect = canvas.getBoundingClientRect();
-  const weaponType = arena._getWeaponTypeKey?.() ?? "greatsword";
-  if (!arena.targeting) return;
-  cycleTabTarget(arena.camera, rect, arena.targeting, weaponType);
-  arena.orbitCamera?.nudgeToward?.(
-    arena.targeting.currentTarget?.mesh?.position ?? new THREE.Vector3(),
-  );
+  cyclePlayerTarget(arena);
 }
