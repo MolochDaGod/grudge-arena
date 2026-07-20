@@ -1,7 +1,12 @@
 /**
  * Hip recenter — ease the body back to centered between planted feet after mixer pose.
- * Ported from arpg-game collisionMath.ts + HeavyRig.tsx recenter loop.
- * Applies offset on the pelvis bone (no child reparenting — preserves equipment/skin bind).
+ *
+ * XZ system (horizontal): residual pelvis drift from rotation-only clips is eased
+ * back to rest so feet plant under the root. Character root XZ is owned by
+ * ArenaController — never write mesh.position.x/z here.
+ *
+ * Y system (vertical): preserve hips.position.y so FootIk / ground snap can drop
+ * the pelvis this frame without fighting recenter.
  */
 
 import * as THREE from "three";

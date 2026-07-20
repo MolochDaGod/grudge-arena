@@ -1930,17 +1930,22 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
       throw err;
     }
   }
-  const idle = clips.get("idle");
-  const walk = clips.get("walk");
-  const run = clips.get("run");
-  const sprint = clips.get("sprint");
-
   const animRoot = getAnimationRoot(scene);
-  const mixer = new THREE.AnimationMixer(animRoot);
+  // One mixer per character on armature root — XZ/Y driven outside the mixer
+  const { createCharacterMixer, ensureLocoClips: ensureLoco } = await import(
+    "./engine/AnimClipSanitize.js"
+  );
+  const mixer = createCharacterMixer(animRoot);
+  const loco = ensureLoco(clips, {
+    idle: clips.get("idle"),
+    walk: clips.get("walk"),
+    run: clips.get("run"),
+    sprint: clips.get("sprint"),
+  });
   const controller = createBakedController(
     mixer,
     animRoot,
-    { idle, walk, run, sprint },
+    loco,
     clips,
     resolvedWeapon,
     { clipSources },
@@ -2052,7 +2057,19 @@ export { formatCharacterLoadError };
  * @param {Object} [opts] - { tier: 1-8 }
  * @returns {{ scene, mixer, controller: AnimationController, raceConfig }}
  */
+/**
+ * @deprecated Prefer createBakedGrudge6Unit — production D1 + Bip001 baked clips.
+ * Legacy Mixamo packs do not bind to CDN Grudge6 skeletons (0% track bind / T-pose).
+ * This wrapper routes to baked unless opts.forceLegacy === true (debug only).
+ */
 export async function createAnimatedUnit(race, weaponType, opts = {}) {
+  if (opts.forceLegacy !== true) {
+    console.info(
+      `[modelLoader] createAnimatedUnit → createBakedGrudge6Unit (${race}/${weaponType}) — legacy Mixamo retired`,
+    );
+    return createBakedGrudge6Unit(race, weaponType, opts);
+  }
+
   const raceConfig = getRaceConfig(race);
   const factionColors = getRaceFactionColors(race);
   const tier = opts.tier || 1;

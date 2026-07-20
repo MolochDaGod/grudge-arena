@@ -4,6 +4,7 @@
  */
 
 import * as THREE from 'three';
+import { clipActionOnRoot, sanitizeClipInPlace } from './engine/AnimClipSanitize.js';
 
 const BANDS = [
   { state: 'idle', at: 0 },
@@ -29,9 +30,12 @@ export class AnimationDirector {
   /**
    * @param {THREE.AnimationMixer} mixer
    * @param {{ idle: THREE.AnimationClip, walk: THREE.AnimationClip, run: THREE.AnimationClip, sprint: THREE.AnimationClip }} clips
+   * @param {THREE.Object3D} [animRoot] — armature root (mixer root). Prefer always set.
    */
-  constructor(mixer, clips) {
+  constructor(mixer, clips, animRoot = null) {
     this.mixer = mixer;
+    /** @type {THREE.Object3D|null} */
+    this.animRoot = animRoot || mixer.getRoot?.() || null;
     this.gait = 0;
     this.gaitTarget = 0;
     this.overlay = null;
@@ -58,7 +62,10 @@ export class AnimationDirector {
     this.idleVarietyPaused = false;
 
     const mk = (clip) => {
-      const a = mixer.clipAction(clip);
+      sanitizeClipInPlace(clip);
+      const a = this.animRoot
+        ? clipActionOnRoot(mixer, clip, this.animRoot)
+        : mixer.clipAction(clip);
       a.setLoop(THREE.LoopRepeat, Infinity);
       a.enabled = true;
       a.setEffectiveWeight(0);
@@ -76,6 +83,7 @@ export class AnimationDirector {
     this.onFinished = this._onFinished.bind(this);
     this.mixer.addEventListener('finished', this.onFinished);
     this.idleVarietyTimer = this._scheduleIdleVariety();
+    // Evaluate first pose so character isn't T-pose before first frame
     this.mixer.update(0);
   }
 
@@ -106,16 +114,19 @@ export class AnimationDirector {
     if (this.omniKeys[state] === rel && this.omniBands[state]) return;
     const prev = this.omniBands[state];
     if (prev) {
+      prev.fadeOut(fade);
       prev.stop();
-      this.mixer.uncacheAction(prev.getClip());
+      this.mixer.uncacheAction(prev.getClip(), this.animRoot || undefined);
     }
-    const a = this.mixer.clipAction(clip);
+    sanitizeClipInPlace(clip);
+    const a = this.animRoot
+      ? clipActionOnRoot(this.mixer, clip, this.animRoot)
+      : this.mixer.clipAction(clip);
     a.setLoop(THREE.LoopRepeat, Infinity);
     a.enabled = true;
     a.setEffectiveWeight(0);
     a.timeScale = this.locoTimeScale[state] ?? 1;
     a.play();
-    if (prev && prev !== a) prev.fadeOut(fade);
     this.omniKeys[state] = rel;
     this.omniBands[state] = a;
   }
@@ -209,9 +220,12 @@ export class AnimationDirector {
     let c = this.overlayClones.get(clip.uuid);
     if (!c) {
       c = clip.clone();
+      sanitizeClipInPlace(c);
       this.overlayClones.set(clip.uuid, c);
     }
-    return this.mixer.clipAction(c);
+    return this.animRoot
+      ? clipActionOnRoot(this.mixer, c, this.animRoot)
+      : this.mixer.clipAction(c);
   }
 
   playOneShot(clip, opts = {}) {
@@ -321,7 +335,7 @@ export class AnimationDirector {
       this.overlayInf = 0;
     }
 
-    const locoScale = 1 - this.overlayInf;
+    const locoScale = Math.max(0, 1 - this.overlayInf);
     const omniReady = BANDS.some(({ state }) => this.omniBands[state] !== undefined);
     const useOmni = this.omniEnabled && omniReady && !this.externalLoco;
 
@@ -355,6 +369,18 @@ export class AnimationDirector {
           }
         }
       }
+      // Normalize loco weights so quaternion blend stays unit-sum (Three.js best practice)
+      if (locoSum > 1.001) {
+        const inv = 1 / locoSum;
+        for (const { state } of BANDS) {
+          const a = useOmni && this.omniBands[state] ? this.omniBands[state] : this.loco[state];
+          a.setEffectiveWeight(a.getEffectiveWeight() * inv);
+        }
+        if (this.idleAltActive) {
+          this.idleAltActive.setEffectiveWeight(this.idleAltActive.getEffectiveWeight() * inv);
+        }
+        locoSum = 1;
+      }
       if (useOmni && locoSum < LOCO_WEIGHT_FLOOR && this.gait < 0.08) {
         this.loco.idle.setEffectiveWeight(locoScale);
         locoSum = locoScale;
@@ -367,6 +393,7 @@ export class AnimationDirector {
     if (this.overlay) this.overlay.setEffectiveWeight(this.overlayInf);
 
     this._tickIdleVariety(delta);
+    // Single mixer.update — pose skeleton; game then applies Y ground + XZ root
     this.mixer.update(delta);
   }
 

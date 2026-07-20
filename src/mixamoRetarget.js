@@ -8,6 +8,7 @@
 
 import * as THREE from "three";
 import { getAnimationRoot } from "./characterScale.js";
+import { sanitizeClipInPlace } from "./engine/AnimClipSanitize.js";
 
 export const MIXAMO_PREFIXES = [
   "mixamorig10:",
@@ -117,13 +118,8 @@ export function bip001UnderscoreToGltf(name) {
 }
 
 export function toRotationOnlyClip(clip) {
-  clip.tracks = clip.tracks.filter((track) => {
-    const dot = track.name.indexOf(".");
-    if (dot === -1) return true;
-    const prop = track.name.substring(dot + 1);
-    return prop === "quaternion" || prop === "rotation";
-  });
-  return clip;
+  // Strips position (XZ root motion + Y float) & scale — game drives XZ/Y on root
+  return sanitizeClipInPlace(clip);
 }
 
 /**

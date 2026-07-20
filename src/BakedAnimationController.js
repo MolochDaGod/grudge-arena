@@ -14,6 +14,11 @@ import { getAnimOverdrive } from './dangerRoom/dangerRoomStore.js';
 import { bakedPathForState } from './animCatalog.js';
 import { classifyOmniDir } from './omniLoco.js';
 import { bindOmniBands } from './omniLocoBinder.js';
+import {
+  ensureLocoClips,
+  sanitizeClipInPlace,
+  clipActionOnRoot,
+} from './engine/AnimClipSanitize.js';
 
 const LOCO_STATES = new Set(['idle', 'walk', 'run', 'sprint', 'running', 'walking']);
 
@@ -29,6 +34,10 @@ const PLAY_FALLBACKS = {
   dodgeBack: ['dodge', 'roll', 'jump'],
   roll: ['dodge', 'dodgeBack', 'jump'],
   climb: ['jump', 'idle'],
+  swim: ['swimIdle', 'crawl', 'walk'],
+  swimIdle: ['swim', 'idle'],
+  swimToLedge: ['climb', 'jump', 'swim'],
+  treadingWater: ['swimIdle', 'swim', 'idle'],
   sneak: ['walk', 'crouch', 'idle'],
   fall: ['fallLoop', 'jump', 'idle'],
   fallLoop: ['fall', 'jump', 'idle'],
@@ -82,7 +91,10 @@ export class BakedAnimationController {
 
     this.actions = new Map();
     for (const [name, clip] of clips) {
-      const action = mixer.clipAction(clip, root);
+      if (!clip) continue;
+      sanitizeClipInPlace(clip);
+      // Same clip+root as director → shared action (no double-weight fight)
+      const action = clipActionOnRoot(mixer, clip, root);
       this.actions.set(name, action);
       if (name === 'running') this.actions.set('run', action);
       if (name === 'walking') this.actions.set('walk', action);
@@ -315,8 +327,14 @@ export class BakedAnimationController {
 }
 
 export function createBakedController(mixer, root, locoClips, allClips, weaponType = 'greatsword', opts = {}) {
-  const director = new AnimationDirector(mixer, locoClips);
-  const ctrl = new BakedAnimationController(mixer, root, director, allClips, {
+  const clipMap =
+    allClips instanceof Map
+      ? allClips
+      : new Map(Object.entries(allClips || {}));
+  // Ensure non-null loco set (rotation-only) before director binds actions
+  const safeLoco = ensureLocoClips(clipMap, locoClips);
+  const director = new AnimationDirector(mixer, safeLoco, root);
+  const ctrl = new BakedAnimationController(mixer, root, director, clipMap, {
     ...opts,
     worldLoco: opts.worldLoco !== false,
   });

@@ -4,7 +4,7 @@
  */
 
 import * as THREE from 'three';
-import { bakedAnimUrl } from './assetConfig.js';
+import { bakedAnimUrl, bakedAnimUrlCandidates } from './assetConfig.js';
 import { applyBoxAnimOverrides } from './boxAnimRegistry.js';
 import {
   normalizeBakedBip001Clip,
@@ -15,6 +15,13 @@ import {
   MIN_CLIP_BIND_RATIO,
 } from './skeletonContract.js';
 import { getAnimationRoot } from './characterScale.js';
+import {
+  sanitizeClipInPlace,
+  ensureLocoClips,
+  createCharacterMixer,
+} from './engine/AnimClipSanitize.js';
+
+export { sanitizeClipInPlace, ensureLocoClips, createCharacterMixer };
 
 /** @typedef {'magic'|'sword_shield'|'longbow'|'rifle'|'pistol'|'unarmed'} AnimPack */
 
@@ -88,28 +95,28 @@ export const WeaponToBakedPack = {
  */
 export const BAKED_DIR_RELS = {
   unarmed: {
-    walkBack: 'longbow/standing walk back',
+    walkBack: 'longbow/standing aim walk back',
     runBack: 'longbow/standing aim walk back',
     strafeLeft: 'locomotion/left strafe walking',
     strafeRight: 'locomotion/right strafe walking',
   },
   magic: {
-    walkBack: 'longbow/standing walk back',
+    walkBack: 'longbow/standing aim walk back',
     runBack: 'longbow/standing aim walk back',
     strafeLeft: 'locomotion/left strafe walking',
     strafeRight: 'locomotion/right strafe walking',
   },
   sword_shield: {
-    walkBack: 'longbow/standing walk back',
+    walkBack: 'longbow/standing aim walk back',
     runBack: 'longbow/standing aim walk back',
     strafeLeft: 'locomotion/left strafe walking',
     strafeRight: 'locomotion/right strafe walking',
   },
   longbow: {
-    walkBack: 'longbow/standing walk back',
-    runBack: 'longbow/standing run back',
-    strafeLeft: 'longbow/standing walk left',
-    strafeRight: 'longbow/standing walk right',
+    walkBack: 'longbow/standing aim walk back',
+    runBack: 'longbow/standing aim walk back',
+    strafeLeft: 'longbow/standing aim walk left',
+    strafeRight: 'longbow/standing aim walk right',
   },
   rifle: {
     walkBack: 'rifle/walk backward',
@@ -165,12 +172,12 @@ export const PACK_COMBAT_EXTRAS = {
 export const BAKED_COMBAT_EXTRAS = {
   attack2: 'sword_shield/sword and shield slash',
   attack3: 'sword_shield/sword and shield attack (2)',
-  attack4: 'sword/one hand sword combo',
+  attack4: 'boxanimations/sword_shield/One Hand Sword Combo',
   combo1: 'sword_shield/sword and shield attack',
   combo2: 'sword_shield/sword and shield slash',
   combo3: 'sword_shield/sword and shield attack (2)',
   slash3: 'sword_shield/sword and shield attack (2)',
-  swing: 'sword/great sword attack',
+  swing: 'sword_shield/sword and shield attack',
   block: 'sword_shield/sword and shield block',
   aoe: 'magic/standing 1h cast spell 01',
   aoe2: 'magic/standing 2h cast spell 01',
@@ -253,8 +260,7 @@ export function bakedClipUrl(rel) {
 }
 
 export function toRotationOnlyClip(clip) {
-  const tracks = clip.tracks.filter((t) => t.name.endsWith('.quaternion'));
-  return new THREE.AnimationClip(clip.name, clip.duration, tracks);
+  return sanitizeClipInPlace(clip);
 }
 
 function sceneCacheTag(scene) {
@@ -268,13 +274,44 @@ export async function loadBakedClip(rel, scene = null) {
   const cached = clipCache.get(cacheKey);
   if (cached) return cached.clone();
 
-  const url = bakedClipUrl(rel);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`[bakedAnim] ${url} HTTP ${res.status}`);
-  const json = await res.json();
-  let clip = toRotationOnlyClip(THREE.AnimationClip.parse(json));
-  // Scene-aware remap filters tracks to the primary body armature only.
+  const candidates = bakedAnimUrlCandidates(rel);
+  let lastErr = null;
+  let json = null;
+  let usedUrl = candidates[0];
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        lastErr = new Error(`[bakedAnim] ${url} HTTP ${res.status}`);
+        continue;
+      }
+      const ct = res.headers.get("content-type") || "";
+      if (ct.includes("text/html")) {
+        lastErr = new Error(`[bakedAnim] ${url} returned HTML (SPA miss)`);
+        continue;
+      }
+      json = await res.json();
+      usedUrl = url;
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (!json) {
+    throw lastErr || new Error(`[bakedAnim] ${rel} failed all mirrors`);
+  }
+  if (usedUrl !== candidates[0]) {
+    console.warn(`[bakedAnim] ${rel} via mirror ${usedUrl}`);
+  }
+  let clip = THREE.AnimationClip.parse(json);
+  // Scene-aware remap + rotation-only (strip XZ root motion & Y float on bones)
   clip = normalizeBakedBip001Clip(clip, scene);
+  sanitizeClipInPlace(clip);
+  if (!clip.tracks.length) {
+    throw new Error(
+      `[bakedAnim] ${rel}: 0 tracks after Bip001 normalize — skeleton mismatch (scene bones?)`,
+    );
+  }
   clipCache.set(cacheKey, clip);
   return clip.clone();
 }
