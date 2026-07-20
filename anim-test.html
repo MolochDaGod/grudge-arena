@@ -3,27 +3,27 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Grudge Arena · Character Showcase</title>
+  <title>Grudge Arena · Combat Studio · Production Controls</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background: #0a0a0f;
       color: #e8dcc8;
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       overflow: hidden;
     }
     #toolbar {
       position: fixed;
       top: 0; left: 0; right: 0;
-      z-index: 10;
+      z-index: 20;
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       align-items: center;
       padding: 8px 12px;
-      background: rgba(0, 0, 0, 0.82);
-      border-bottom: 1px solid rgba(201, 168, 76, 0.3);
-      backdrop-filter: blur(8px);
+      background: linear-gradient(180deg, rgba(8,8,14,0.94), rgba(8,8,14,0.78));
+      border-bottom: 1px solid rgba(201, 168, 76, 0.35);
+      backdrop-filter: blur(10px);
     }
     #toolbar a {
       color: #c9a84c;
@@ -33,7 +33,7 @@
       text-transform: uppercase;
     }
     #toolbar select, #toolbar button {
-      background: rgba(20, 20, 30, 0.9);
+      background: rgba(20, 20, 30, 0.92);
       color: #e8dcc8;
       border: 1px solid rgba(201, 168, 76, 0.4);
       border-radius: 4px;
@@ -44,7 +44,7 @@
     }
     #toolbar select:hover, #toolbar button:hover { border-color: #c9a84c; }
     #toolbar .label {
-      color: rgba(232, 220, 200, 0.6);
+      color: rgba(232, 220, 200, 0.55);
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.1em;
@@ -52,148 +52,278 @@
     #toolbar .spacer { flex: 1; }
     #status-pill {
       font-size: 10px;
-      padding: 4px 8px;
+      padding: 4px 10px;
       border-radius: 999px;
       border: 1px solid rgba(92, 207, 122, 0.5);
       color: #5fcf7a;
     }
-    #stage { position: fixed; inset: 52px 0 0 0; display: flex; flex-direction: row; }
+    #stage {
+      position: fixed;
+      inset: 48px 0 0 0;
+      display: flex;
+      flex-direction: row;
+    }
     #log {
-      width: 40%;
-      min-width: 280px;
-      padding: 14px;
+      width: min(320px, 28vw);
+      min-width: 220px;
+      padding: 10px 12px;
       font-family: ui-monospace, Consolas, monospace;
-      font-size: 10.5px;
+      font-size: 10px;
       color: #5fcf7a;
-      background: #06060a;
+      background: rgba(6, 6, 10, 0.92);
       overflow-y: auto;
       border-right: 1px solid rgba(201, 168, 76, 0.2);
+      z-index: 5;
     }
-    .log-line { margin: 2px 0; line-height: 1.45; white-space: pre-wrap; }
-    .log-clip { cursor: context-menu; padding: 2px 4px; border-radius: 3px; }
-    .log-clip:hover { background: rgba(201, 168, 76, 0.12); }
+    .log-line { margin: 2px 0; line-height: 1.4; white-space: pre-wrap; }
     .log-error { color: #ff8a8a; }
-    .log-meta { color: rgba(232, 220, 200, 0.55); }
-    #canvas-wrap { flex: 1; position: relative; }
-    #canvas-wrap canvas { display: block; }
-    #gait-row {
-      position: fixed;
-      bottom: 12px;
-      right: 16px;
-      z-index: 11;
+    .log-meta { color: rgba(232, 220, 200, 0.5); }
+    .log-clip { color: #9fd4ff; }
+    #canvas-wrap { flex: 1; position: relative; min-width: 0; }
+    #canvas-wrap canvas { display: block; width: 100%; height: 100%; }
+
+    /* ── Production combat HUD (danger-room style) ── */
+    #combat-hud {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 12;
+    }
+    #combat-hud .mm-panel {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
       display: flex;
-      gap: 8px;
+      gap: 10px;
       align-items: center;
-      background: rgba(0,0,0,0.7);
-      padding: 8px 12px;
-      border-radius: 6px;
-      border: 1px solid rgba(201,168,76,0.3);
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.72);
+      border: 1px solid rgba(201,168,76,0.35);
       font-size: 11px;
-    }
-    #gait-row input { width: 120px; }
-    #studio-panel {
-      width: 300px;
-      min-width: 260px;
-      padding: 12px;
-      overflow-y: auto;
-      background: #08080e;
-      border-left: 1px solid rgba(201, 168, 76, 0.2);
-      font-size: 11px;
-    }
-    #studio-panel h3, #studio-panel h4 {
-      font-size: 11px;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
-      color: #c9a84c;
-      margin: 0 0 8px;
     }
-    #studio-panel h4 { margin-top: 14px; color: rgba(201,168,76,0.75); }
-    .studio-row {
+    #combat-hud .mm-panel .val { color: #c9a84c; font-weight: 700; }
+    #combat-hud .aim-layer { position: absolute; inset: 0; }
+    #combat-hud .softlock-zone {
+      position: absolute;
+      border: 1px solid rgba(201,168,76,0.35);
+      border-radius: 50%;
+      box-shadow: 0 0 20px rgba(201,168,76,0.12);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    #combat-hud .softlock-zone[hidden] { display: none; }
+    #combat-hud .target-pip {
+      position: absolute;
+      width: 10px; height: 10px;
+      border: 2px solid #ff6b6b;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 8px rgba(255,107,107,0.6);
+    }
+    #combat-hud .target-pip[hidden] { display: none; }
+    #combat-hud .crosshair {
+      position: absolute;
+      width: 28px; height: 28px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    #combat-hud .crosshair .arm {
+      position: absolute;
+      background: rgba(232,220,200,0.85);
+    }
+    #combat-hud .crosshair .arm-t { left: 13px; top: 0; width: 2px; height: 8px; }
+    #combat-hud .crosshair .arm-b { left: 13px; bottom: 0; width: 2px; height: 8px; }
+    #combat-hud .crosshair .arm-l { top: 13px; left: 0; height: 2px; width: 8px; }
+    #combat-hud .crosshair .arm-r { top: 13px; right: 0; height: 2px; width: 8px; }
+    #combat-hud .crosshair .dot {
+      position: absolute;
+      left: 12px; top: 12px;
+      width: 4px; height: 4px;
+      border-radius: 50%;
+      background: #c9a84c;
+    }
+    #combat-hud .crosshair.hard .dot { background: #ff6b6b; box-shadow: 0 0 8px #ff6b6b; }
+    #ability-bar {
+      position: absolute;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
       display: flex;
       gap: 8px;
-      align-items: center;
-      margin-bottom: 6px;
+      pointer-events: auto;
     }
-    .studio-label { min-width: 36px; color: rgba(232,220,200,0.55); }
-    .studio-val { min-width: 32px; text-align: right; color: #5fcf7a; }
-    .studio-meta { color: rgba(232,220,200,0.45); font-size: 10px; }
-    .skill-list { display: flex; flex-direction: column; gap: 6px; }
-    .skill-row {
-      display: grid;
-      grid-template-columns: 24px 1fr 100px 28px;
-      gap: 4px;
-      align-items: center;
-    }
-    .skill-slot { color: #c9a84c; font-weight: 600; }
-    .skill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .skill-play {
-      padding: 2px 6px;
-      background: rgba(20,20,30,0.9);
-      border: 1px solid rgba(201,168,76,0.35);
+    #ability-bar .slot {
+      width: 54px;
+      min-height: 54px;
+      border-radius: 8px;
+      border: 1px solid rgba(201,168,76,0.4);
+      background: linear-gradient(180deg, rgba(30,28,40,0.92), rgba(12,12,18,0.95));
       color: #e8dcc8;
-      border-radius: 3px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
       cursor: pointer;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.45);
     }
-    #studio-panel select, #studio-panel button, #studio-panel input[type="range"] {
+    #ability-bar .slot:hover { border-color: #c9a84c; }
+    #ability-bar .slot .key {
+      color: #c9a84c;
+      font-weight: 800;
+      font-size: 11px;
+    }
+    #ability-bar .slot .name {
+      max-width: 48px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: center;
+    }
+    #ability-bar .slot.cd { opacity: 0.45; }
+    #controls-hint {
+      position: absolute;
+      bottom: 88px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
       font-size: 10px;
+      color: rgba(232,220,200,0.55);
+      line-height: 1.55;
+      text-shadow: 0 1px 3px #000;
     }
-    #studio-panel button {
-      margin-top: 8px;
-      width: 100%;
-      padding: 6px;
-      background: rgba(20,20,30,0.9);
-      color: #e8dcc8;
+    #controls-hint kbd {
+      display: inline-block;
+      padding: 1px 5px;
+      margin: 0 1px;
+      border-radius: 3px;
       border: 1px solid rgba(201,168,76,0.35);
-      border-radius: 4px;
-      cursor: pointer;
+      background: rgba(0,0,0,0.55);
+      color: #e8dcc8;
+      font-size: 9px;
+    }
+    #resource-strip {
+      position: absolute;
+      bottom: 148px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(360px, 70vw);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    #resource-strip .bar {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+    #resource-strip .bar > i {
+      display: block;
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #3a6ea8, #6aa9ff);
+    }
+    #resource-strip .bar.hp > i { background: linear-gradient(90deg, #8b1e1e, #e85d5d); }
+    #resource-strip .bar.res > i { background: linear-gradient(90deg, #8a5a12, #c9a84c); }
+    #resource-strip .labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: rgba(232,220,200,0.7);
     }
     #coord-pill {
-      position: fixed;
-      bottom: 12px;
-      left: 42%;
-      z-index: 11;
+      position: absolute;
+      top: 12px;
+      right: 12px;
       font-size: 10px;
-      padding: 6px 10px;
-      background: rgba(0,0,0,0.75);
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.55);
       border: 1px solid rgba(201,168,76,0.25);
-      border-radius: 4px;
-      color: #5fcf7a;
-      font-family: ui-monospace, Consolas, monospace;
+      color: rgba(232,220,200,0.7);
+    }
+    /* hidden but kept for smoke / legacy tooling */
+    #gait-row, #studio-panel, #pipe-sel, #anim-sel, #btn-prev, #btn-next, #btn-auto, #btn-export {
+      display: none !important;
     }
   </style>
 </head>
 <body>
   <div id="toolbar">
     <a href="/">← Arena</a>
-    <span class="label">Pipeline</span>
-    <select id="pipe-sel">
-      <option value="baked" selected>Baked Bip001 (prod)</option>
-      <option value="legacy">Legacy Mixamo</option>
-    </select>
+    <span class="label">Combat Studio</span>
     <span class="label">Race</span>
-    <select id="race-sel"></select>
+    <select id="race-sel" aria-label="Race"></select>
     <span class="label">Weapon</span>
-    <select id="weapon-sel"></select>
-    <span class="label">Clip</span>
-    <select id="anim-sel"><option value="">— pick —</option></select>
-    <button id="prev-btn" type="button">◀ Prev</button>
-    <button id="next-btn" type="button">Next ▶</button>
-    <button id="cycle-btn" type="button">⏯ Auto</button>
-    <button id="export-labels-btn" type="button" title="Download animLabels.json with your renames">Export labels</button>
+    <select id="weapon-sel" aria-label="Weapon"></select>
+    <select id="pipe-sel" aria-label="Pipeline" style="display:none">
+      <option value="baked" selected>Baked Bip001 (prod)</option>
+      <option value="legacy">Legacy Mixamo (retired)</option>
+    </select>
+    <select id="anim-sel" aria-label="Clip" style="display:none"><option value="">— pick —</option></select>
+    <button id="btn-prev" type="button" style="display:none">◀ Prev</button>
+    <button id="btn-next" type="button" style="display:none">Next ▶</button>
+    <button id="btn-auto" type="button" style="display:none">⏯ Auto</button>
+    <button id="btn-export" type="button" style="display:none">Export labels</button>
     <span class="spacer"></span>
     <span id="status-pill">loading…</span>
   </div>
+
   <div id="stage">
-    <div id="log"></div>
-    <div id="canvas-wrap"></div>
-    <aside id="studio-panel"></aside>
+    <div id="log" aria-live="polite"></div>
+    <div id="canvas-wrap">
+      <div id="combat-hud">
+        <div class="mm-panel">
+          <span>MM</span>
+          <span class="val" id="motion-label">IDLE</span>
+          <span>·</span>
+          <span class="val" id="weapon-label">Weapon</span>
+          <span>·</span>
+          <span id="lock-label">Free aim</span>
+        </div>
+        <div class="aim-layer" aria-hidden="true">
+          <div class="softlock-zone" id="softlock-zone" hidden></div>
+          <div class="target-pip" id="target-pip" hidden></div>
+          <div class="crosshair" id="crosshair">
+            <span class="arm arm-t"></span>
+            <span class="arm arm-b"></span>
+            <span class="arm arm-l"></span>
+            <span class="arm arm-r"></span>
+            <span class="dot"></span>
+          </div>
+        </div>
+        <div id="resource-strip">
+          <div class="labels"><span>HP</span><span id="hp-text">100 / 100</span></div>
+          <div class="bar hp"><i id="hp-fill"></i></div>
+          <div class="labels"><span id="res-name">Rage</span><span id="res-text">0 / 100</span></div>
+          <div class="bar res"><i id="res-fill" style="width:0%"></i></div>
+        </div>
+        <div id="controls-hint">
+          <div><kbd>W/A/S/D</kbd> Move <kbd>Shift</kbd> Sprint <kbd>Space</kbd> Jump/Climb <kbd>Ctrl</kbd> Dodge <kbd>V</kbd> Block</div>
+          <div><kbd>LMB</kbd> Attack <kbd>RMB</kbd> Orbit <kbd>Tab</kbd> Soft lock <kbd>Middle</kbd> Hard lock <kbd>1–4</kbd> Weapon skills <kbd>5</kbd> Ultimate</div>
+        </div>
+        <div id="ability-bar"></div>
+        <div id="coord-pill">root Y=0 · ground Y=0</div>
+      </div>
+    </div>
   </div>
-  <div id="coord-pill">root Y=0 · ground Y=0</div>
-  <div id="gait-row">
+
+  <div id="gait-row" aria-hidden="true">
     <span>Gait</span>
     <input id="gait-slider" type="range" min="0" max="100" value="0" />
     <span id="gait-label">idle</span>
   </div>
+  <div id="studio-panel" aria-hidden="true"></div>
+
   <script type="module" src="/src/animTest/main.js"></script>
 </body>
 </html>
