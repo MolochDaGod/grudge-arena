@@ -120,3 +120,25 @@ export function bakedAnimUrl(rel) {
     .join("/");
   return `/anims/baked/${encoded}.json`;
 }
+
+/**
+ * Ordered fetch mirrors for a baked clip (first hit wins).
+ * Deploy path first; underscore filename variants for bake-name drift.
+ * @param {string} rel
+ * @returns {string[]}
+ */
+export function bakedAnimUrlCandidates(rel) {
+  const p = (rel.startsWith("/") ? rel.slice(1) : rel).replace(/\.json$/i, "");
+  const segs = p.split("/").filter(Boolean);
+  const encoded = segs.map((seg) => encodeURIComponent(seg)).join("/");
+  const underscored = segs
+    .map((seg) => encodeURIComponent(seg.replace(/\s+/g, "_")))
+    .join("/");
+  const urls = [`/anims/baked/${encoded}.json`];
+  if (underscored !== encoded) {
+    urls.push(`/anims/baked/${underscored}.json`);
+  }
+  // Arena R2 mirror (some deploys ship anims under /cdn/assets/animations)
+  urls.push(`/cdn/assets/animations/baked/${encoded}.json`);
+  return [...new Set(urls)];
+}

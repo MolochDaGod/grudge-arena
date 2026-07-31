@@ -77,6 +77,12 @@ export const RACE_CDN_ATLAS_WEBP = {
 
 export const ATLAS_PLACEHOLDER_MAX_BYTES = 1024;
 
+/**
+ * Skip oversized modular *_Characters.glb (wrong bake with embedded anim bank).
+ * Production D1 race kits are typically 2–8MB; above this is almost always a bad asset.
+ */
+export const MODULAR_GLB_MAX_BYTES = 12 * 1024 * 1024;
+
 export function isPlaceholderMapImage(img) {
   if (!img) return true;
   const w = img.width ?? img.naturalWidth ?? 0;
@@ -120,16 +126,19 @@ export function raceGlbUrl(race) {
 }
 
 /**
- * Ordered mesh fallback chain — CDN GLB first, legacy local GLBs last, FBX only as final resort.
+ * Ordered mesh fallback chain.
+ * Combat (strictD1): CDN D1 modular race GLB only — never untextured /models/*.glb.
  */
-export function raceModelFallbackPaths(race) {
+export function raceModelFallbackPaths(race, opts = {}) {
   const paths = [];
   const primary = raceGlbUrl(race);
   if (primary) paths.push(primary);
-  paths.push(modelUrl(`${race}.glb`), `/models/${race}.glb`);
-  const fbxRel = grudge6RaceModelPath(race);
-  if (fbxRel) paths.push(grudge6AssetUrl(fbxRel));
-  return paths.filter(Boolean);
+  if (!opts.strictD1) {
+    paths.push(modelUrl(`${race}.glb`), `/models/${race}.glb`);
+    const fbxRel = grudge6RaceModelPath(race);
+    if (fbxRel) paths.push(grudge6AssetUrl(fbxRel));
+  }
+  return [...new Set(paths.filter(Boolean))];
 }
 
 /**

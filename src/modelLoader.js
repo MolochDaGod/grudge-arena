@@ -1828,10 +1828,13 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     preloadWeaponAttachManifest(),
   ]);
 
+  // PURGE: forge prefabs + /models/*.glb for combat. Only CDN D1 modular GLB.
+  // Forge vertex-baked exports inflate scale and break Bip001 clip binding.
   const useForge =
-    opts.useForgePrefab === true ||
-    (opts.useForgePrefab !== false &&
-      (await shouldUseForgePrefab(race, resolvedWeapon, meshLoadout, opts)));
+    !requireD1 &&
+    (opts.useForgePrefab === true ||
+      (opts.useForgePrefab !== false &&
+        (await shouldUseForgePrefab(race, resolvedWeapon, meshLoadout, opts))));
   let forgePath = null;
   let loaded = null;
   let scene;
@@ -1853,7 +1856,10 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
   }
 
   if (!scene) {
-    loaded = await loadModelWithFallback(raceModelFallbackPaths(race), { race });
+    loaded = await loadModelWithFallback(
+      raceModelFallbackPaths(race, { strictD1: requireD1 }),
+      { race },
+    );
     scene = cloneGLTFScene(loaded.scene);
   }
 
@@ -1959,7 +1965,7 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     );
   }
 
-  // Atlas before equipment (base skin) and again after loadout (swapped D1 parts).
+  // Atlas + equip (visibility only — never skinned weapon TRS).
   await applyRaceTextureFix(scene, race);
 
   let equipment = null;
@@ -1970,24 +1976,23 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
       classId: opts.classId,
     });
     equipment.applyD1Loadout(resolvedWeapon, meshLoadout);
-    applyWeaponCarryTuning(scene, resolvedWeapon);
+    // D1 weapons are skinned to R_hand_container — do not applyWeaponCarryTuning.
   } else if (forgePath) {
-    applyWeaponCarryTuning(scene, resolvedWeapon);
     await applyRaceTextureFix(scene, race);
   } else if (!requireD1) {
     const weapon = createWeaponMesh(resolvedWeapon);
     tintWeaponMesh(weapon, raceConfig.gearTint, factionColors.emissive, tierCfg);
-    attachWeaponToBone(scene, weapon, 'Bip001_R_Hand');
-    const shieldWeapons = ['sabres', 'runeblade'];
+    attachWeaponToBone(scene, weapon, resolveHandBoneName(scene, "R"));
+    const shieldWeapons = ["sabres", "runeblade"];
     if (shieldWeapons.includes(resolvedWeapon)) {
       const shield = createShieldMesh();
       tintWeaponMesh(shield, raceConfig.gearTint, factionColors.emissive, tierCfg);
       shield.rotation.set(-Math.PI / 2, 0, Math.PI);
-      attachWeaponToBone(scene, shield, 'Bip001_L_Hand');
+      attachWeaponToBone(scene, shield, resolveHandBoneName(scene, "L"));
     }
   }
 
-  const texPatched = await applyRaceTextureFix(scene, race);
+  await applyRaceTextureFix(scene, race);
   applyFactionBodyColor(scene, race);
 
   regroundCharacter(scene, race);
@@ -2008,8 +2013,29 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     }
   }
 
+  // Bind gate: idle must bind to scene bones or we ship T-pose
+  if (requireD1 && loco.idle) {
+    const probe = createCharacterMixer(animRoot);
+    const idleStats = getTrackBindingStats(probe.clipAction(loco.idle, animRoot));
+    if (idleStats.ratio < 0.45 || idleStats.bound < 8) {
+      throw new CharacterLoadError(
+        `${raceConfig.name}: baked idle unbound (${idleStats.bound}/${idleStats.total}) — Bip001 name mismatch`,
+        {
+          code: "ANIM_BIND_FAILED",
+          race,
+          missing: [`idle ${idleStats.bound}/${idleStats.total}`],
+        },
+      );
+    }
+    console.log(
+      `[modelLoader] ${race}: idle bind ${idleStats.bound}/${idleStats.total}`,
+    );
+  }
+
   resetSkeletonBindPose(scene);
   validateSkinnedBindings(scene, `${race}-final`, { strict: requireD1 });
+  // Facing: spawn yaw owns art-forward for +X kits — do not double-yaw here.
+  scene.userData.artForward = "spawn-yaw";
   controller.director.primeLocomotion();
   controller.mixer?.update?.(0);
 
