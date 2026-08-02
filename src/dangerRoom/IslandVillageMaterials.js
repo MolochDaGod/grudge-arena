@@ -21,6 +21,7 @@ const FILE_ALIASES = {
   T_wood_05: "T_wood_05_BC",
   T_wood_detail_01: "T_wood_detail_01_BC",
   T_metal_02: "T_metal_02_BC",
+    T_planks_04: "T_wood_planks_04_BC",
 };
 
 /** Tint when a PNG is missing so props are not flat grey. */

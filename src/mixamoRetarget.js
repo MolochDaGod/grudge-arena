@@ -178,10 +178,10 @@ export function remapMixamoClip(clip, scene = null) {
       bare = mapped;
     }
 
+        // resolveBoneName() returns the exact name on the loaded scene (GLTFLoader
+    // spaces?underscores). Do NOT reconvert to spaced form — that breaks binding.
     bare = resolveBoneName(bare, sceneLookup);
-    // When a rig is loaded, keep its actual bone names (spaced or underscore).
-    // Only normalize underscore â†’ spaced for offline / no-scene remaps.
-    if (!sceneLookup?.has(bare) && bare.startsWith("Bip001_")) {
+    if (!sceneLookup && bare.startsWith("Bip001_")) {
       bare = bip001UnderscoreToGltf(bare);
     }
     track.name = bare + prop;

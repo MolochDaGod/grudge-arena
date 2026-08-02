@@ -9,7 +9,7 @@ export const BOX_ANIM_GLOBAL = {
   dodgeBack: "boxanimations/locomotion/Dodging Back",
   roll: "boxanimations/locomotion/Quick Roll To Run (1)",
   jumpAttack: "boxanimations/locomotion/Jump Attack",
-  jump: "locomotion/jump",
+  jump: "boxanimations/unarmed/Unarmed Jump Running",
   fallLoop: "boxanimations/locomotion/Fall B Loop",
   landHard: "boxanimations/locomotion/Falling (2)",
   taunt: "boxanimations/emotes/Standing Taunt Battlecry",
