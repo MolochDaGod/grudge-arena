@@ -1,17 +1,16 @@
 /**
- * Character showcase — baked Bip001 + atlas textures + teachable anim labels.
+ * Combat Studio — production TPS controls on the anim-test surface.
+ *
+ * Replaces OrbitControls showcase camera with:
+ *   OrbitCamera (danger-room TPS) + ArenaController + SoftLockSystem
+ * Weapon skills from WeaponDefinitions, baked locomotion, block/dodge/climb.
  */
 
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import {
-  createBakedGrudge6Unit,
-  createAnimatedUnit,
-} from "../modelLoader.js";
+import { createBakedGrudge6Unit } from "../modelLoader.js";
 import {
   regroundCharacter,
   placeCharacterOnGround,
-  measureFootContactY,
 } from "../characterScale.js";
 import { WeaponToBakedPack } from "../bakedAnimLoader.js";
 import {
@@ -19,33 +18,30 @@ import {
   auditCharacterMaterials,
   textureHealth,
   formatCharacterLoadError,
-  raceTextureFallbackPaths,
 } from "../characterResources.js";
-import { charUrl } from "../assetConfig.js";
+import { loadAnimLabelCatalog, getAnimEntry, getOverrides } from "../animLabels.js";
+import { WeaponDefinitions } from "../engine/WeaponDefinitions.js";
+import { getWeaponFeel, resolveMotionLabel } from "../engine/WeaponFeel.js";
+import { OrbitCamera } from "../engine/OrbitCamera.js";
+import { ArenaController } from "../engine/ArenaController.js";
+import { GroundSampler } from "../engine/GroundSampler.js";
 import {
-  loadAnimLabelCatalog,
-  getAnimEntry,
-  setAnimLabel,
-  getOverrides,
-  exportMergedLabels,
-  downloadLabelsJson,
-} from "../animLabels.js";
+  softLock,
+  setRawMouse,
+  updateSoftLock,
+  lockedTargetWorld,
+  cycleTabTarget,
+  clearTabTarget,
+} from "../engine/SoftLockSystem.js";
 import { loadBakedClip } from "../bakedAnimLoader.js";
-import { applyWeaponCarryTuning } from "../weaponAttachConfig.js";
 import { vfxForClip } from "../combatVfx.js";
-import { mountAnimStudio } from "./studio.js";
-import {
-  getClipTrim,
-  tickTrimmedAction,
-} from "../skillAnimTrim.js";
 import {
   getD1LoadoutForRace,
-  setD1ArmorSlot,
-  setD1WeaponSlot,
   setD1Weapon,
 } from "../d1LoadoutStore.js";
 
 const WEAPONS = Object.keys(WeaponToBakedPack);
+const SKILL_KEYS = ["Q", "E", "R", "F", "P"];
 
 const params = new URLSearchParams(location.search);
 const initialRace = CHARACTER_RACES.includes(params.get("race"))
@@ -54,7 +50,6 @@ const initialRace = CHARACTER_RACES.includes(params.get("race"))
 const initialWeapon = WEAPONS.includes(params.get("weapon"))
   ? params.get("weapon")
   : "greatsword";
-const initialPipe = params.get("pipeline") === "legacy" ? "legacy" : "baked";
 
 const logEl = document.getElementById("log");
 const statusPill = document.getElementById("status-pill");
@@ -65,67 +60,33 @@ const animSel = document.getElementById("anim-sel");
 const gaitSlider = document.getElementById("gait-slider");
 const gaitLabel = document.getElementById("gait-label");
 const coordPill = document.getElementById("coord-pill");
-const studioPanel = document.getElementById("studio-panel");
-
-let studio = null;
-/** @type {{ action: import('three').AnimationAction, trim: object } | null} */
-let activeTrim = null;
+const abilityBar = document.getElementById("ability-bar");
+const motionLabel = document.getElementById("motion-label");
+const weaponLabelEl = document.getElementById("weapon-label");
+const lockLabel = document.getElementById("lock-label");
+const softZoneEl = document.getElementById("softlock-zone");
+const targetPipEl = document.getElementById("target-pip");
+const crosshairEl = document.getElementById("crosshair");
+const hpFill = document.getElementById("hp-fill");
+const hpText = document.getElementById("hp-text");
+const resFill = document.getElementById("res-fill");
+const resText = document.getElementById("res-text");
+const resName = document.getElementById("res-name");
 
 let labelCatalog = { clips: {} };
 loadAnimLabelCatalog().then((c) => {
   labelCatalog = c;
 });
 
-function appendLogLine(text, { kind = "text", clipKey = null } = {}) {
+function appendLogLine(text, { kind = "text" } = {}) {
   const line = document.createElement("div");
   line.className = `log-line log-${kind}`;
-  if (kind === "clip" && clipKey) {
-    line.classList.add("log-clip");
-    line.dataset.clipKey = clipKey;
-    line.title = "Right-click to rename / annotate (saved in browser; Export labels → animLabels.json)";
-  }
   line.textContent = text;
   logEl.appendChild(line);
   logEl.scrollTop = logEl.scrollHeight;
   return line;
 }
-
 const log = (m, opts) => appendLogLine(m, opts);
-
-function showClipContextMenu(e, clipKey) {
-  e.preventDefault();
-  const entry = getAnimEntry(
-    clipKey,
-    labelCatalog,
-    getOverrides(),
-    unit?.controller?.clipSources,
-  );
-  const label = prompt(
-    `Display name for "${clipKey}"\n(baked: ${entry.source || "?"})`,
-    entry.label,
-  );
-  if (label === null) return;
-  const notes = prompt("Notes (optional)", entry.notes || "");
-  if (notes === null) return;
-  setAnimLabel(clipKey, {
-    label,
-    notes,
-    source: entry.source,
-    race: raceSel.value,
-    weapon: weaponSel.value,
-  });
-  refreshClipListUI();
-  refreshClipLogLines(unit?.controller);
-  log(`✎ saved label: ${clipKey} → "${label}" (localStorage — Export labels → public/models/animLabels.json)`, {
-    kind: "meta",
-  });
-}
-
-logEl.addEventListener("contextmenu", (e) => {
-  const row = e.target.closest?.("[data-clip-key]");
-  if (!row) return;
-  showClipContextMenu(e, row.dataset.clipKey);
-});
 
 for (const r of CHARACTER_RACES) {
   const opt = document.createElement("option");
@@ -141,47 +102,97 @@ for (const w of WEAPONS) {
   if (w === initialWeapon) opt.selected = true;
   weaponSel.appendChild(opt);
 }
-pipeSel.value = initialPipe;
+if (pipeSel) pipeSel.value = "baked";
 
+// ── Scene ──────────────────────────────────────────────────────────────
 const wrap = document.getElementById("canvas-wrap");
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a2e);
+scene.background = new THREE.Color(0x87a0b8);
+scene.fog = new THREE.Fog(0x87a0b8, 40, 120);
 
-const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 100);
-camera.position.set(0, 1.45, 3.4);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.08, 200);
+camera.position.set(0, 2.2, 6);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 wrap.appendChild(renderer.domElement);
 
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 1.05, 0);
-controls.update();
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const sun = new THREE.DirectionalLight(0xfff1d6, 1.25);
+sun.position.set(18, 28, 12);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 80;
+sun.shadow.camera.left = -30;
+sun.shadow.camera.right = 30;
+sun.shadow.camera.top = 30;
+sun.shadow.camera.bottom = -30;
+scene.add(sun);
+const fill = new THREE.HemisphereLight(0xb8d4ff, 0x3a4a2a, 0.45);
+scene.add(fill);
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.85));
-const key = new THREE.DirectionalLight(0xfff4e6, 1.15);
-key.position.set(3, 6, 4);
-key.castShadow = true;
-scene.add(key);
-const rim = new THREE.DirectionalLight(0x88aaff, 0.45);
-rim.position.set(-4, 2, -3);
-scene.add(rim);
-
+// Walkable ground + climb ledge + shallow water for swim
 const ground = new THREE.Mesh(
-  new THREE.CircleGeometry(6, 64),
-  new THREE.MeshStandardMaterial({ color: 0x2a2a3a, roughness: 0.9 }),
+  new THREE.PlaneGeometry(80, 80),
+  new THREE.MeshStandardMaterial({ color: 0x3d5c3a, roughness: 0.92, metalness: 0.05 }),
 );
 ground.rotation.x = -Math.PI / 2;
-ground.position.y = 0;
 ground.receiveShadow = true;
+ground.name = "Ground";
 scene.add(ground);
-scene.add(new THREE.GridHelper(8, 16, 0x3a3a5a, 0x222233));
+
+const climbLedge = new THREE.Mesh(
+  new THREE.BoxGeometry(6, 1.4, 3),
+  new THREE.MeshStandardMaterial({ color: 0x6a5a48, roughness: 0.85 }),
+);
+climbLedge.position.set(8, 0.7, -4);
+climbLedge.castShadow = true;
+climbLedge.receiveShadow = true;
+climbLedge.name = "ClimbLedge";
+scene.add(climbLedge);
+
+const water = new THREE.Mesh(
+  new THREE.BoxGeometry(14, 0.6, 10),
+  new THREE.MeshStandardMaterial({
+    color: 0x1a5a7a,
+    transparent: true,
+    opacity: 0.55,
+    roughness: 0.25,
+    metalness: 0.2,
+  }),
+);
+water.position.set(-10, 0.15, 6);
+water.name = "Water";
+scene.add(water);
+
+const groundSampler = new GroundSampler();
+groundSampler.setTerrainMeshes([ground, climbLedge]);
+groundSampler.setFallbackY(0);
+
+const orbitCamera = new OrbitCamera(camera, renderer.domElement);
+orbitCamera.setControlMode("tps");
+
+/** Minimal targeting facade SoftLockSystem expects. */
+const targeting = {
+  units: [],
+  enemies: [],
+  currentTarget: null,
+  select(u) {
+    this.currentTarget = u;
+  },
+  deselect() {
+    this.currentTarget = null;
+  },
+};
 
 function resize() {
-  const w = wrap.clientWidth;
-  const h = wrap.clientHeight;
+  const w = wrap.clientWidth || 1;
+  const h = wrap.clientHeight || 1;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h, false);
@@ -190,11 +201,26 @@ window.addEventListener("resize", resize);
 resize();
 
 const clock = new THREE.Clock();
+/** @type {any} */
 let unit = null;
+/** @type {ArenaController|null} */
+let playerController = null;
+/** @type {any[]} */
+let dummies = [];
 let clipNames = [];
-let cycleTimer = null;
-let cycleIdx = 0;
-let autoCycle = false;
+let autoAttack = false;
+let lastAttack = 0;
+let swingIdx = 0;
+const playerVitals = {
+  hp: 100,
+  maxHp: 100,
+  resource: 40,
+  maxResource: 100,
+  resourceName: "rage",
+};
+const skillCd = { Q: 0, E: 0, R: 0, F: 0, P: 0 };
+const skillCdMax = { Q: 0, E: 0, R: 0, F: 0, P: 0 };
+let swimming = false;
 
 function setStatus(text, ok = true) {
   statusPill.textContent = text;
@@ -204,157 +230,180 @@ function setStatus(text, ok = true) {
     : "rgba(255,107,107,0.5)";
 }
 
-function bindStats(action) {
-  let bound = 0;
-  const bindings = action?._propertyBindings || [];
-  for (const b of bindings) if (b?.binding?.node) bound++;
-  return { bound, total: bindings.length };
+function currentWeaponDef() {
+  const w = weaponSel.value;
+  return WeaponDefinitions[w] || WeaponDefinitions.greatsword;
 }
 
-function formatClipOption(key) {
-  const entry = getAnimEntry(
-    key,
-    labelCatalog,
-    getOverrides(),
-    unit?.controller?.clipSources,
-  );
-  const src = entry.source ? ` · ${entry.source}` : "";
-  return entry.label !== key ? `${entry.label} (${key})${src}` : `${key}${src}`;
-}
-
-function refreshClipListUI() {
-  if (!clipNames.length) return;
-  const prev = animSel.value;
-  animSel.innerHTML = '<option value="">— pick —</option>';
-  for (const name of clipNames) {
-    const o = document.createElement("option");
-    o.value = name;
-    o.textContent = formatClipOption(name);
-    animSel.appendChild(o);
-  }
-  if (clipNames.includes(prev)) animSel.value = prev;
-}
-
-function formatClipLogLine(key, controller) {
-  const entry = getAnimEntry(
-    key,
-    labelCatalog,
-    getOverrides(),
-    controller?.clipSources,
-  );
-  const src = entry.source ? ` ← ${entry.source}` : "";
-  const note = entry.notes ? ` // ${entry.notes}` : "";
-  return { text: `  ${entry.label} [${key}]${src}${note}`, key };
-}
-
-function refreshClipLogLines(controller) {
-  if (!controller || pipeSel.value !== "baked") return;
-  for (const row of logEl.querySelectorAll("[data-clip-key]")) {
-    const key = row.dataset.clipKey;
-    if (!key) continue;
-    const { text } = formatClipLogLine(key, controller);
-    row.textContent = text;
-  }
-}
-
-function populateClipList(controller, baked) {
-  animSel.innerHTML = '<option value="">— pick —</option>';
-  clipNames = [];
-
-  if (baked && controller.clips) {
-    for (const name of controller.clips.keys()) {
-      clipNames.push(name);
-      const o = document.createElement("option");
-      o.value = name;
-      o.textContent = formatClipOption(name);
-      animSel.appendChild(o);
+function rebuildAbilityBar() {
+  const def = currentWeaponDef();
+  abilityBar.innerHTML = "";
+  const slots = [
+    { key: "1", ab: "Q" },
+    { key: "2", ab: "E" },
+    { key: "3", ab: "R" },
+    { key: "4", ab: "F" },
+    { key: "5", ab: "P" },
+  ];
+  for (const s of slots) {
+    const ab = def.abilities?.[s.ab];
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "slot";
+    btn.dataset.ab = s.ab;
+    btn.innerHTML = `<span class="key">${s.key}</span><span class="name">${ab?.name || "—"}</span>`;
+    btn.title = ab ? `${ab.name}: ${ab.description || ""}` : "";
+    btn.addEventListener("click", () => castSkill(s.ab));
+    abilityBar.appendChild(btn);
+    if (ab) {
+      skillCdMax[s.ab] = ab.cooldown || 0;
     }
+  }
+  weaponLabelEl.textContent = def.name || weaponSel.value;
+  resName.textContent = (def.primaryResource || "resource").toUpperCase();
+  playerVitals.resourceName = def.primaryResource || "rage";
+}
+
+function updateAbilityCdUi() {
+  for (const el of abilityBar.querySelectorAll(".slot")) {
+    const ab = el.dataset.ab;
+    const left = skillCd[ab] || 0;
+    el.classList.toggle("cd", left > 0.05);
+    if (left > 0.05) {
+      el.querySelector(".name").textContent = left.toFixed(1) + "s";
+    } else {
+      const def = currentWeaponDef().abilities?.[ab];
+      el.querySelector(".name").textContent = def?.name || "—";
+    }
+  }
+}
+
+function updateVitalsUi() {
+  const hpPct = Math.max(0, Math.min(100, (playerVitals.hp / playerVitals.maxHp) * 100));
+  const resPct = Math.max(0, Math.min(100, (playerVitals.resource / playerVitals.maxResource) * 100));
+  hpFill.style.width = `${hpPct}%`;
+  resFill.style.width = `${resPct}%`;
+  hpText.textContent = `${Math.round(playerVitals.hp)} / ${playerVitals.maxHp}`;
+  resText.textContent = `${Math.round(playerVitals.resource)} / ${playerVitals.maxResource}`;
+}
+
+async function castSkill(slotKey) {
+  if (!unit?.controller || !playerController) return;
+  if ((skillCd[slotKey] || 0) > 0) return;
+  const ab = currentWeaponDef().abilities?.[slotKey];
+  if (!ab) return;
+  const cost = ab.cost || 0;
+  if (cost > 0 && playerVitals.resource < cost) {
+    log(`Not enough ${playerVitals.resourceName} for ${ab.name}`, { kind: "meta" });
     return;
   }
+  playerVitals.resource = Math.max(0, playerVitals.resource - cost);
+  skillCd[slotKey] = ab.cooldown || 1;
+  playerController._activeSkill = SKILL_KEYS.indexOf(slotKey) + 1;
+  playerController.send?.({ type: "skill" });
 
-  if (controller.actions) {
-    for (const name of controller.actions.keys()) {
-      clipNames.push(name);
-      const o = document.createElement("option");
-      o.value = name;
-      o.textContent = name;
-      animSel.appendChild(o);
-    }
-  }
-}
-
-function logClipCatalog(controller) {
-  log("— clips (right-click name to rename) —", { kind: "meta" });
-  for (const key of clipNames) {
-    const { text } = formatClipLogLine(key, controller);
-    log(text, { kind: "clip", clipKey: key });
-  }
-}
-
-const LOCO_GAIT = { idle: 0, walk: 34, run: 70, sprint: 100 };
-
-function playClip(name, { loop = true } = {}) {
-  if (!unit?.controller || !name) return;
-  activeTrim = null;
-  const trim = getClipTrim(name);
-  if (pipeSel.value === "baked" && name in LOCO_GAIT) {
-    const v = LOCO_GAIT[name];
-    gaitSlider.value = String(v);
-    gaitSlider.dispatchEvent(new Event("input"));
-  } else {
-    const speed = trim.timeScale ?? 1;
-    unit.controller.play(name, { loop, speed });
-    const action = unit.controller.currentAction;
-    if (action && (trim.start > 0 || trim.end != null)) {
-      action.time = trim.start ?? 0;
-      activeTrim = { action, trim };
-    }
-  }
-  vfxForClip(unit.scene, name);
-  const entry = getAnimEntry(
-    name,
-    labelCatalog,
-    getOverrides(),
-    unit.controller.clipSources,
-  );
-  log(`▶ ${entry.label} [${name}]`, { kind: "clip", clipKey: name });
-  setStatus(`${unit.race} · ${entry.label}`);
-}
-
-async function playBankClip(rel) {
-  if (!unit?.controller?.director || !rel) return;
+  const anim = ab.skillAnim || "attack1";
   try {
-    const clip = await loadBakedClip(rel, unit.scene);
-    unit.controller.director.playOneShot(clip, { fade: 0.15, timeScale: 1 });
-    const key = rel.split("/").pop();
-    vfxForClip(unit.scene, key);
-    log(`▶ bank: ${rel}`, { kind: "clip", clipKey: key });
-    setStatus(`${unit.race} · ${key}`);
+    if (typeof unit.controller.castSkill === "function") {
+      unit.controller.castSkill({ stateName: anim, timeScale: 1.05, fade: 0.12 });
+    } else if (unit.controller.playOnce) {
+      unit.controller.playOnce(anim, 1.05);
+    } else if (unit.controller.director) {
+      const clip = await loadBakedClip(
+        anim.includes("/") ? anim : `locomotion/${anim}`,
+        unit.scene,
+      ).catch(() => null);
+      if (clip) unit.controller.director.playOneShot(clip, { fade: 0.12, timeScale: 1.05 });
+      else unit.controller.play?.(anim, { loop: false });
+    }
   } catch (err) {
-    log(`FAIL bank clip: ${err.message}`, { kind: "error" });
+    log(`skill anim: ${err.message}`, { kind: "error" });
   }
+  vfxForClip(unit.scene, anim);
+  log(`⚔ ${ab.name} [${slotKey}]`, { kind: "clip" });
+  setStatus(`${unit.race} · ${ab.name}`);
+  updateVitalsUi();
 }
 
-function stopCycle() {
-  if (cycleTimer) {
-    clearInterval(cycleTimer);
-    cycleTimer = null;
+function performAttack() {
+  if (!unit?.controller) return;
+  const def = currentWeaponDef();
+  const anims = def.attackAnims || ["attack1"];
+  const name = anims[swingIdx % anims.length];
+  swingIdx++;
+  unit.controller.playOnce?.(name, getWeaponFeel(weaponSel.value).attackAnimSpeed ?? 1.1);
+  vfxForClip(unit.scene, name);
+  playerVitals.resource = Math.min(
+    playerVitals.maxResource,
+    playerVitals.resource + (def.primaryResource === "rage" ? 8 : 2),
+  );
+  // Damage locked dummy
+  const tgt = targeting.currentTarget;
+  if (tgt && !tgt.dead) {
+    tgt.hp = Math.max(0, tgt.hp - (def.baseAttackDamage || 30) * 0.35);
+    if (tgt.hp <= 0) {
+      tgt.dead = true;
+      tgt.mesh.position.y -= 0.4;
+      tgt.mesh.rotation.x = Math.PI / 2;
+      log(`Dummy down`, { kind: "meta" });
+      if (targeting.currentTarget === tgt) {
+        targeting.deselect();
+        clearTabTarget();
+      }
+    }
   }
+  updateVitalsUi();
 }
 
-function startCycle() {
-  stopCycle();
-  if (!clipNames.length) return;
-  cycleTimer = setInterval(() => {
-    cycleIdx = (cycleIdx + 1) % clipNames.length;
-    const name = clipNames[cycleIdx];
-    playClip(name);
-    animSel.value = name;
-  }, 3000);
+function makeDummy(pos, name = "Training Dummy") {
+  const group = new THREE.Group();
+  group.position.copy(pos);
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.35, 0.4, 1.6, 12),
+    new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8 }),
+  );
+  body.position.y = 0.9;
+  body.castShadow = true;
+  group.add(body);
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.28, 12, 12),
+    new THREE.MeshStandardMaterial({ color: 0xc4a574 }),
+  );
+  head.position.y = 1.85;
+  group.add(head);
+  scene.add(group);
+  const dummy = {
+    mesh: group,
+    team: "B",
+    hp: 200,
+    maxHp: 200,
+    dead: false,
+    displayName: name,
+    entity: { id: `dummy-${Math.random().toString(36).slice(2, 8)}`, hasTag: () => false },
+  };
+  return dummy;
+}
+
+function spawnDummies() {
+  for (const d of dummies) {
+    scene.remove(d.mesh);
+  }
+  dummies = [
+    makeDummy(new THREE.Vector3(4, 0, -2), "Dummy A"),
+    makeDummy(new THREE.Vector3(-3, 0, -5), "Dummy B"),
+    makeDummy(new THREE.Vector3(6, 0, 3), "Dummy C"),
+  ];
+  targeting.units = dummies;
+  targeting.enemies = dummies;
+  targeting.deselect();
+  clearTabTarget();
 }
 
 function disposeUnit() {
-  stopCycle();
+  if (playerController) {
+    playerController.dispose?.();
+    playerController = null;
+  }
   if (unit?.scene) {
     scene.remove(unit.scene);
     unit.controller?.dispose?.();
@@ -362,41 +411,92 @@ function disposeUnit() {
   }
   unit = null;
   clipNames = [];
-  animSel.innerHTML = '<option value="">— pick —</option>';
-  gaitSlider.value = "0";
-  gaitLabel.textContent = "idle";
+  if (animSel) animSel.innerHTML = '<option value="">— pick —</option>';
+  autoAttack = false;
 }
 
 function reportLoadError(err) {
   const detail = formatCharacterLoadError(err);
   log(`FAIL: ${detail}`, { kind: "error" });
-  console.error("[anim-test]", err);
+  console.error("[combat-studio]", err);
   setStatus(err?.code || "load error", false);
 }
 
-async function logTextureSources(race) {
-  const paths = raceTextureFallbackPaths(race);
-  log("— texture source files (edit on disk) —", { kind: "meta" });
-  for (const p of paths) {
-    log(`  atlas try: ${p}`, { kind: "meta" });
-    try {
-      const res = await fetch(p, { method: "HEAD" });
-      const len = res.headers.get("content-length");
-      log(
-        `    ${res.ok ? "OK" : "FAIL"} ${res.status} ${len ? `${len} bytes` : ""}`,
-        { kind: res.ok && len && Number(len) < 1024 ? "error" : "meta" },
-      );
-      if (res.ok && len && Number(len) < 1024) {
-        log("    WARN: file is a 1×1 placeholder — run: node scripts/sync-race-atlases.mjs", {
-          kind: "error",
-        });
-      }
-    } catch (err) {
-      log(`    fetch error: ${err.message}`, { kind: "error" });
-    }
+function wireController() {
+  if (!unit?.scene || !unit?.controller) return;
+  playerController = new ArenaController(unit.scene, unit.controller, orbitCamera);
+  playerController.controlScheme = "tps";
+  playerController.useBakedLoco = !!unit.controller.useBakedLoco;
+  playerController.clampRadius = 36;
+  playerController.groundSampler = groundSampler;
+  if (playerController.setGroundSampler) {
+    playerController.setGroundSampler(groundSampler);
   }
-  log(`  edit folder: public/assets/characters/${race}/textures/`, { kind: "meta" });
-  log(`  mesh GLB:    public/assets/characters/${race}/`, { kind: "meta" });
+  // Climb: treat ledge as climbable via simple probe
+  playerController._tryStartClimb = function tryClimb() {
+    if (!unit?.scene) return false;
+    const mesh = unit.scene;
+    const forward = this.getForward();
+    const px = mesh.position.x + forward.x * 1.2;
+    const pz = mesh.position.z + forward.z * 1.2;
+    const ledgeTop = climbLedge.position.y + 0.7;
+    const dist = Math.hypot(px - climbLedge.position.x, pz - climbLedge.position.z);
+    if (dist < 3.2 && mesh.position.y < ledgeTop - 0.2) {
+      this._climbing = true;
+      this._climbT = 0;
+      this._climbStartY = mesh.position.y;
+      this._climbTopY = ledgeTop;
+      this._climbDirX = forward.x;
+      this._climbDirZ = forward.z;
+      unit.controller.playOnce?.("climb", 1) || unit.controller.play?.("jump", { loop: false });
+      log("Climbing ledge…", { kind: "meta" });
+      return true;
+    }
+    return false;
+  };
+
+  playerController.onAttack = () => {
+    autoAttack = !autoAttack;
+    log(autoAttack ? "Auto-attack ON" : "Auto-attack OFF", { kind: "meta" });
+  };
+  playerController.onAbility = (slotKey) => {
+    if (["Q", "E", "R", "F"].includes(slotKey)) castSkill(slotKey);
+    else if (slotKey === "P" || slotKey === "5") castSkill("P");
+  };
+  playerController.onTarget = () => {
+    const rect = renderer.domElement.getBoundingClientRect();
+    cycleTabTarget(camera, rect, targeting, weaponSel.value);
+    const st = softLock.hardLock ? "HARD LOCK" : softLock.active ? "SOFT LOCK" : "Free aim";
+    lockLabel.textContent = st;
+  };
+  playerController.onDash = () => {
+    log("Dodge", { kind: "meta" });
+    unit.controller.playOnce?.("dodge", 1.2);
+  };
+
+  // LMB attack for TPS (ArenaController emits _LMBAttack)
+  window.addEventListener("mousedown", (e) => {
+    if (e.button === 0 && playerController) {
+      playerController.tickKey = playerController.tickKey || {};
+      playerController.tickKey._LMBAttack = true;
+    }
+    // Middle mouse hard lock toggle
+    if (e.button === 1) {
+      e.preventDefault();
+      if (softLock.active) {
+        softLock.hardLock = !softLock.hardLock;
+        lockLabel.textContent = softLock.hardLock ? "HARD LOCK" : "SOFT LOCK";
+        log(softLock.hardLock ? "Hard lock engaged" : "Hard lock released", { kind: "meta" });
+      } else {
+        playerController.onTarget?.();
+        softLock.hardLock = true;
+        lockLabel.textContent = "HARD LOCK";
+      }
+    }
+  });
+  window.addEventListener("mousemove", (e) => setRawMouse(e.clientX, e.clientY), {
+    passive: true,
+  });
 }
 
 async function loadCharacter() {
@@ -404,215 +504,248 @@ async function loadCharacter() {
   logEl.innerHTML = "";
   const race = raceSel.value;
   const weapon = weaponSel.value;
-  const baked = pipeSel.value === "baked";
-
-  log(`=== ${race.toUpperCase()} / ${weapon} / ${baked ? "baked" : "legacy"} ===`, {
-    kind: "meta",
-  });
+  setStatus("loading…");
+  log(`Combat Studio — ${race} / ${weapon}`, { kind: "meta" });
+  log(`pipeline: baked (prod)`, { kind: "meta" });
 
   try {
-    unit = baked
-      ? await createBakedGrudge6Unit(race, weapon)
-      : await createAnimatedUnit(race, weapon);
+    setD1Weapon(weapon);
+    const result = await createBakedGrudge6Unit(race, weapon, {
+      tier: 3,
+      requireD1: true,
+      meshLoadout: getD1LoadoutForRace(race),
+    });
+    unit = result;
+    unit.race = result.race || race;
+    unit.scene = result.scene;
+    scene.add(unit.scene);
+    placeCharacterOnGround(unit.scene, 0);
+    regroundCharacter(unit.scene);
+    groundSampler.snapMesh?.(unit.scene);
 
-    const mesh = unit.scene;
-    placeCharacterOnGround(mesh, 0, 0, race);
-    scene.add(mesh);
-    if (unit.equipment || baked) {
-      applyWeaponCarryTuning(mesh, weapon);
-    }
-
-    const targetH =
-      unit.characterMetrics?.targetHeight ||
-      mesh.userData?.characterMetrics?.targetHeight ||
-      1.75;
-    controls.target.set(0, targetH * 0.55, 0);
-    camera.position.set(0, targetH * 0.85, Math.max(2.8, targetH * 1.85));
-    controls.update();
-
-    await logTextureSources(race);
-
-    const mats = auditCharacterMaterials(mesh);
-    const health = textureHealth(mats);
-    log(`mesh: ${unit.modelPath || loadedPath(race)}`);
-    log(`pipeline: ${unit.pipeline || (baked ? "baked" : "legacy")}`);
-    const m = unit.characterMetrics || mesh.userData?.characterMetrics;
-    if (m) {
-      log(
-        `scale: target=${m.targetHeight.toFixed(2)}m measured=${m.measuredHeight.toFixed(2)}m ` +
-          `bones=${(m.boneHeight ?? 0).toFixed(2)} bbox=${(m.bboxHeight ?? 0).toFixed(2)} ` +
-          `world=${m.worldScale.toFixed(4)} (${m.source}/${m.measureMethod ?? "?"}) · rootY=${mesh.position.y.toFixed(3)} · soleY=${measureFootContactY(mesh).toFixed(3)} (feet@0)`,
-      );
-    } else {
-      log(`scale: ${mesh.scale.x.toFixed(4)} · y=${mesh.position.y.toFixed(3)}`);
-    }
-    log(`materials: ${mats.withMap}/${mats.total} textured · ${mats.visible} visible meshes`);
-
-    if (!health.ok) {
-      log(`WARN: ${health.detail}`, { kind: "error" });
-      log("FIX: node scripts/sync-race-atlases.mjs  then hard-refresh", { kind: "error" });
-      setStatus(health.label, false);
-    } else {
-      setStatus(`${race} · ${health.label}`);
-    }
-
-    populateClipList(unit.controller, baked);
-    if (baked) {
-      unit.controller.director?.primeLocomotion?.();
-      unit.controller.mixer?.update?.(0);
-      regroundCharacter(mesh, race);
-      logClipCatalog(unit.controller);
-    } else {
-      const idle = unit.controller.actions?.get("idle");
-      const stats = bindStats(idle);
-      log(`legacy idle bind: ${stats.bound}/${stats.total} tracks`);
-      if (stats.bound < stats.total * 0.5) {
-        log("WARN: low idle bind ratio — try pipeline=baked", { kind: "error" });
-      }
-      if (idle) {
-        unit.controller.play("idle");
-        unit.controller.mixer?.update?.(0);
-        regroundCharacter(mesh, race);
-      }
-    }
-
-    if (clipNames.length) {
-      cycleIdx = 0;
-      playClip(clipNames[0]);
-      animSel.value = clipNames[0];
-      unit.controller.mixer?.update?.(0);
-      regroundCharacter(mesh, race);
-      if (autoCycle) startCycle();
-    }
-
-    if (!studio) {
-      studio = mountAnimStudio(studioPanel, {
-        getWeapon: () => weaponSel.value,
-        getClipNames: () => clipNames,
-        getCurrentClip: () => animSel.value,
-        getEquipmentCatalog: () => unit?.equipment?.getCatalog?.() || {},
-        getD1Loadout: () => getD1LoadoutForRace(raceSel.value),
-        onPlayClip: (key) => playClip(key, { loop: false }),
-        onPlayBankClip: playBankClip,
-        onWeaponTuningChange: () => {
-          if (unit?.scene) applyWeaponCarryTuning(unit.scene, weaponSel.value);
-        },
-        onSkillAnimChange: (slot, clip) => {
-          log(`skill ${slot} → ${clip}`, { kind: "meta" });
-        },
-        onTrimChange: (key) => log(`trim ${key}: ${JSON.stringify(getClipTrim(key))}`, { kind: "meta" }),
-        onTrimSaved: (id, key) => log(`saved clip "${id}" ← ${key}`, { kind: "meta" }),
-        onArenaWeaponChange: (w) => {
-          weaponSel.value = w;
-          setD1Weapon(w);
-          loadCharacter();
-        },
-        onD1ArmorChange: (slot, variant) => setD1ArmorSlot(slot, variant),
-        onD1WeaponSlotChange: (key, value) => {
-          const w = getD1LoadoutForRace(raceSel.value).weapon || {};
-          if (key === "rSlot") setD1WeaponSlot("r", value, w.rVariant);
-          else if (key === "rVariant") setD1WeaponSlot("r", w.rSlot, value);
-          else if (key === "lSlot") setD1WeaponSlot("l", value, w.lVariant);
-          else if (key === "lVariant") setD1WeaponSlot("l", w.lSlot, value);
-        },
-        onD1LoadoutChange: async () => {
-          if (!unit?.equipment) return;
-          const d1 = getD1LoadoutForRace(raceSel.value);
-          unit.equipment.applyD1Loadout(weaponSel.value, d1);
-          regroundCharacter(unit.scene, raceSel.value);
-        },
-      });
-    }
-    await studio.refresh();
-
-    history.replaceState(
-      null,
-      "",
-      `?race=${race}&weapon=${weapon}&pipeline=${baked ? "baked" : "legacy"}`,
+    const audit = auditCharacterMaterials(unit.scene);
+    const health = textureHealth(audit);
+    log(
+      `materials: ${health.textured}/${health.total} textured`,
+      { kind: health.textured === health.total && health.total > 0 ? "meta" : "error" },
     );
+    const metrics = unit.characterMetrics || unit.scene.userData?.characterMetrics;
+    if (metrics) {
+      log(
+        `scale: target=${metrics.targetHeight?.toFixed?.(2) ?? "?"}m measured=${metrics.measuredHeight?.toFixed?.(2) ?? metrics.height?.toFixed?.(2) ?? "?"}m`,
+        { kind: "meta" },
+      );
+    }
+
+    // Clip catalog for smoke + skills
+    clipNames = [];
+    if (unit.controller?.clips) {
+      for (const name of unit.controller.clips.keys()) clipNames.push(name);
+    } else if (unit.controller?.actions) {
+      for (const name of unit.controller.actions.keys()) clipNames.push(name);
+    }
+    log(`baked clips: ${clipNames.length}`, { kind: "meta" });
+    log("— clips —", { kind: "meta" });
+    for (const key of clipNames.slice(0, 40)) {
+      const entry = getAnimEntry(key, labelCatalog, getOverrides(), unit.controller?.clipSources);
+      log(`  ${entry.label} [${key}]`, { kind: "clip" });
+    }
+    if (animSel) {
+      animSel.innerHTML = '<option value="">— pick —</option>';
+      for (const name of clipNames) {
+        const o = document.createElement("option");
+        o.value = name;
+        o.textContent = name;
+        animSel.appendChild(o);
+      }
+    }
+
+    unit.controller?.setWeaponType?.(weapon);
+    unit.controller?.setGaitFromSpeed?.(0, false);
+
+    orbitCamera.setTarget(unit.scene);
+    orbitCamera.snapBehind?.();
+    wireController();
+    spawnDummies();
+    rebuildAbilityBar();
+    playerVitals.hp = 100;
+    playerVitals.resource = 40;
+    updateVitalsUi();
+
+    log("Controls: WASD move · LMB attack · RMB orbit · Tab soft-lock · MMB hard-lock · V block · Ctrl dodge · 1-5 skills", {
+      kind: "meta",
+    });
+    setStatus(`${race} · ${weapon} · ready`);
   } catch (err) {
     reportLoadError(err);
   }
 }
 
-function loadedPath(race) {
-  return charUrl(`${race}/${race === "human" ? "WK" : race === "barbarian" ? "BRB" : race === "elf" ? "ELF" : race === "dwarf" ? "DWF" : race === "orc" ? "ORC" : "UD"}_Characters.glb`);
+// ── Input: keep gait slider for smoke compatibility (hidden) ──
+gaitSlider?.addEventListener("input", () => {
+  const v = Number(gaitSlider.value) / 100;
+  if (unit?.controller?.setGaitFromSpeed) {
+    unit.controller.setGaitFromSpeed(v, v > 0.85);
+  }
+  const label = v < 0.1 ? "idle" : v < 0.4 ? "walk" : v < 0.75 ? "run" : "sprint";
+  if (gaitLabel) gaitLabel.textContent = label;
+});
+
+raceSel.addEventListener("change", () => {
+  const u = new URL(location.href);
+  u.searchParams.set("race", raceSel.value);
+  u.searchParams.set("weapon", weaponSel.value);
+  u.searchParams.set("pipeline", "baked");
+  history.replaceState(null, "", u);
+  loadCharacter();
+});
+weaponSel.addEventListener("change", () => {
+  const u = new URL(location.href);
+  u.searchParams.set("race", raceSel.value);
+  u.searchParams.set("weapon", weaponSel.value);
+  history.replaceState(null, "", u);
+  loadCharacter();
+});
+
+// ── Frame loop ─────────────────────────────────────────────────────────
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.05, clock.getDelta());
+
+  for (const k of SKILL_KEYS) {
+    if (skillCd[k] > 0) skillCd[k] = Math.max(0, skillCd[k] - dt);
+  }
+  updateAbilityCdUi();
+
+  // Resource regen
+  playerVitals.resource = Math.min(
+    playerVitals.maxResource,
+    playerVitals.resource + dt * 4,
+  );
+  if (playerVitals.hp < playerVitals.maxHp) {
+    playerVitals.hp = Math.min(playerVitals.maxHp, playerVitals.hp + dt * 2);
+  }
+  updateVitalsUi();
+
+  if (unit?.mixer) unit.mixer.update(dt);
+  if (unit?.controller?.update) unit.controller.update(dt);
+  if (playerController) {
+    playerController.update(dt);
+    // Swim detection
+    const p = unit.scene.position;
+    const inWater =
+      Math.abs(p.x - water.position.x) < 7 &&
+      Math.abs(p.z - water.position.z) < 5 &&
+      p.y < 0.5;
+    if (inWater && !swimming) {
+      swimming = true;
+      unit.controller.play?.("swim", { loop: true }) ||
+        unit.controller.setGaitFromSpeed?.(0.2, false);
+      log("Swimming", { kind: "meta" });
+    } else if (!inWater && swimming) {
+      swimming = false;
+      log("Left water", { kind: "meta" });
+    }
+    if (!swimming && !playerController._climbing) {
+      groundSampler.snapMesh?.(unit.scene);
+    }
+  }
+
+  // Auto-attack
+  if (autoAttack && unit) {
+    const now = performance.now() / 1000;
+    const spd = currentWeaponDef().attackSpeed || 1;
+    if (now - lastAttack >= 1 / Math.max(0.4, spd)) {
+      lastAttack = now;
+      performAttack();
+    }
+  }
+
+  // Soft / hard lock (danger-room SoftLockSystem)
+  const rect = renderer.domElement.getBoundingClientRect();
+  if (unit) {
+    updateSoftLock(
+      dt,
+      camera,
+      rect,
+      targeting,
+      softLock.hardLock,
+      weaponSel.value,
+    );
+    // Crosshair follows magnetized aim point
+    const cx = softLock.crosshairX || rect.left + rect.width / 2;
+    const cy = softLock.crosshairY || rect.top + rect.height / 2;
+    crosshairEl.style.left = `${cx - rect.left}px`;
+    crosshairEl.style.top = `${cy - rect.top}px`;
+    crosshairEl.classList.toggle("hard", !!softLock.hardLock);
+
+    if (softLock.active && softLock.zoneRadius > 0) {
+      softZoneEl.hidden = false;
+      softZoneEl.style.left = `${softLock.zoneCx - rect.left}px`;
+      softZoneEl.style.top = `${softLock.zoneCy - rect.top}px`;
+      softZoneEl.style.width = `${softLock.zoneRadius * 2}px`;
+      softZoneEl.style.height = `${softLock.zoneRadius * 2}px`;
+    } else {
+      softZoneEl.hidden = true;
+    }
+
+    if (softLock.targetVisible && softLock.active) {
+      targetPipEl.hidden = false;
+      targetPipEl.style.left = `${softLock.targetScreenX - rect.left}px`;
+      targetPipEl.style.top = `${softLock.targetScreenY - rect.top}px`;
+    } else {
+      targetPipEl.hidden = true;
+    }
+
+    lockLabel.textContent = softLock.hardLock
+      ? "HARD LOCK"
+      : softLock.active
+        ? "SOFT LOCK"
+        : "Free aim";
+
+    if (softLock.hardLock && softLock.active) {
+      const world = lockedTargetWorld(targeting);
+      if (world && orbitCamera.nudgeToward) {
+        orbitCamera.nudgeToward(world);
+      }
+    }
+  }
+
+  // Motion label
+  if (playerController) {
+    const spd = playerController.currentSpeed || 0;
+    const moving = spd > 0.15;
+    orbitCamera.setPlayerMoving?.(moving);
+    const label =
+      swimming
+        ? "SWIM"
+        : playerController._climbing
+          ? "CLIMB"
+          : playerController.stateName === "block"
+            ? "BLOCK"
+            : resolveMotionLabel?.(spd, playerController.holdKey?.ShiftLeft) ||
+              (spd < 0.2 ? "IDLE" : spd < 2.5 ? "WALK" : spd < 5 ? "RUN" : "SPRINT");
+    motionLabel.textContent = String(label).toUpperCase();
+  }
+
+  orbitCamera.update?.(dt);
+  renderer.render(scene, camera);
+
+  if (unit?.scene) {
+    const p = unit.scene.position;
+    coordPill.textContent = `x=${p.x.toFixed(1)} y=${p.y.toFixed(2)} z=${p.z.toFixed(1)} · ${swimming ? "swim" : "ground"}`;
+  }
 }
 
-gaitSlider.addEventListener("input", () => {
-  if (!unit?.controller?.director) return;
-  const v = Number(gaitSlider.value) / 100;
-  unit.controller.director.gaitTarget = v;
-  unit.controller.director.gait = v;
-  const label =
-    v < 0.2 ? "idle" : v < 0.55 ? "walk" : v < 0.85 ? "run" : "sprint";
-  gaitLabel.textContent = label;
-});
-
-raceSel.addEventListener("change", loadCharacter);
-weaponSel.addEventListener("change", loadCharacter);
-pipeSel.addEventListener("change", loadCharacter);
-
-animSel.addEventListener("change", () => {
-  stopCycle();
-  playClip(animSel.value);
-  studio?.refreshTrim?.();
-});
-
-document.getElementById("prev-btn").addEventListener("click", () => {
-  if (!clipNames.length) return;
-  stopCycle();
-  cycleIdx = (cycleIdx - 1 + clipNames.length) % clipNames.length;
-  playClip(clipNames[cycleIdx]);
-  animSel.value = clipNames[cycleIdx];
-});
-
-document.getElementById("next-btn").addEventListener("click", () => {
-  if (!clipNames.length) return;
-  stopCycle();
-  cycleIdx = (cycleIdx + 1) % clipNames.length;
-  playClip(clipNames[cycleIdx]);
-  animSel.value = clipNames[cycleIdx];
-});
-
-document.getElementById("cycle-btn").addEventListener("click", (e) => {
-  autoCycle = !autoCycle;
-  if (autoCycle) startCycle();
-  else stopCycle();
-  e.target.style.borderColor = autoCycle ? "#5fcf7a" : "";
-});
-
-document.getElementById("export-labels-btn")?.addEventListener("click", async () => {
-  const merged = await exportMergedLabels(unit?.controller?.clipSources);
-  downloadLabelsJson(merged);
-  log("exported animLabels.json — save to public/models/animLabels.json", { kind: "meta" });
-});
-
-window.addEventListener("unhandledrejection", (ev) => {
-  reportLoadError(ev.reason);
-});
-
-(function tick() {
-  requestAnimationFrame(tick);
-  const dt = clock.getDelta();
-  if (unit?.controller) {
-    if (unit.controller.director && pipeSel.value === "baked") {
-      unit.controller.director.update(dt);
-    } else {
-      unit.controller.update(dt);
-    }
-    if (activeTrim?.action) {
-      const playing = tickTrimmedAction(activeTrim.action, activeTrim.trim);
-      if (!playing) activeTrim = null;
-    }
-  }
-  if (unit?.scene && coordPill) {
-    const m = unit.scene;
-    coordPill.textContent =
-      `root (${m.position.x.toFixed(1)}, ${m.position.y.toFixed(2)}, ${m.position.z.toFixed(1)}) · ground Y=0`;
-  }
-  controls.update();
-  renderer.render(scene, camera);
-})();
+// SoftLock update may not export getSoftLockHudState in older builds — provide fallback
+function ensureSoftLockUpdate() {
+  if (typeof updateSoftLock !== "function") return;
+}
+ensureSoftLockUpdate();
 
 loadCharacter();
+tick();
+
+log("Combat Studio ready — production TPS stack (OrbitCamera + ArenaController + SoftLock)", {
+  kind: "meta",
+});

@@ -7,9 +7,10 @@
   <meta name="description" content="Grudge Arena — 3D PvP combat arena with 6 playable races, 5 weapon classes, and real-time multiplayer. Built on Grudge Studio.">
   <script>
     if (/island-crusade-combat-sandbox/i.test(location.hostname)) {
+      document.documentElement.className = (document.documentElement.className + ' combat-sandbox-host').trim();
       document.title = 'Grudge Warlords: Combat Sandbox';
       const desc = document.querySelector('meta[name="description"]');
-      if (desc) desc.content = 'Island Crusade combat sandbox — TPS movement, weapon skills, full HUD and panels.';
+      if (desc) desc.content = 'Island Crusade combat sandbox — WoW-style controls, weapon skills, full HUD and panels.';
     }
   </script>
   <meta name="theme-color" content="#07070f">
@@ -252,10 +253,23 @@
 
   <!-- Player bars -->
   <div class="hud-bars">
-    <div class="bar-row"><span class="bar-label">Health</span><div class="bar-track"><div class="bar-fill" id="healthBar"></div></div></div>
-    <div class="bar-row"><span class="bar-label">Mana</span><div class="bar-track"><div class="bar-fill" id="manaBar"></div></div></div>
-    <div class="bar-row"><span class="bar-label">Energy</span><div class="bar-track"><div class="bar-fill" id="energyBar"></div></div></div>
-    <div class="bar-row"><span class="bar-label">Rage</span><div class="bar-track"><div class="bar-fill" id="rageBar"></div></div></div>
+    <div class="bar-row" data-resource="health"><span class="bar-label">Health</span><div class="bar-track"><div class="bar-fill bar-fill-hp" id="healthBar"></div></div></div>
+    <div class="bar-row" data-resource="mana"><span class="bar-label">Mana</span><div class="bar-track"><div class="bar-fill bar-fill-mp" id="manaBar"></div></div></div>
+    <div class="bar-row" data-resource="energy"><span class="bar-label">Energy</span><div class="bar-track"><div class="bar-fill bar-fill-en" id="energyBar"></div></div></div>
+    <div class="bar-row" data-resource="rage"><span class="bar-label">Rage</span><div class="bar-track"><div class="bar-fill bar-fill-rg" id="rageBar"></div></div></div>
+  </div>
+
+  <!-- Compact MMORPG status strip (combat sandbox) -->
+  <div id="sandbox-status" class="sandbox-status" hidden>
+    <div id="sb-portrait" class="sb-portrait" title="Character [C]">⚔</div>
+    <div class="sb-info">
+      <div id="sb-name" class="sb-name">Warlord</div>
+      <div id="sb-class" class="sb-class">Lv.42 Warrior</div>
+      <div class="sb-bars">
+        <div class="sb-bar-track sb-bar-hp"><div id="sb-hp" class="sb-bar-fill"></div></div>
+        <div class="sb-bar-track sb-bar-res" id="sb-res-wrap" data-resource="mana"><div id="sb-res" class="sb-bar-fill"></div></div>
+      </div>
+    </div>
   </div>
 
   <!-- Weapons -->
@@ -279,7 +293,7 @@
     <div class="panel-toggles">
       <button class="panel-toggle-btn" data-panel="panel-inv" title="Inventory [I]">I</button>
       <button class="panel-toggle-btn" data-panel="panel-char" title="Character [C]">C</button>
-      <button class="panel-toggle-btn" data-panel="panel-skills" title="Skills [K]">K</button>
+      <button class="panel-toggle-btn" data-panel="panel-skills" title="Spell Book [K]">K</button>
     </div>
     
     <!-- Inventory panel (40-slot grid populated from ECS Inventory component) -->
@@ -294,22 +308,24 @@
       </div>
     </div>
     
-    <!-- Character panel (paper-doll equipment + stats) -->
+    <!-- Character panel (MMORPG sheet + paper-doll equipment) -->
     <div id="panel-char" class="float-panel">
       <div class="fp-header">
         <span class="fp-title">Character</span>
         <span class="fp-close" data-close="panel-char">✕</span>
       </div>
       <div class="fp-body">
+        <div id="char-sheet-header" class="char-sheet-header"></div>
         <div class="equip-doll" id="equip-doll"></div>
+        <div id="char-attr-grid" class="char-attr-grid"></div>
         <div class="equip-stats" id="equip-stats"></div>
       </div>
     </div>
     
-    <!-- Skills panel (9-slot skill bar) -->
+    <!-- Spell book (9-slot ability grid) -->
     <div id="panel-skills" class="float-panel">
       <div class="fp-header">
-        <span class="fp-title">Skills</span>
+        <span class="fp-title">Spell Book</span>
         <span class="fp-close" data-close="panel-skills">✕</span>
       </div>
       <div class="fp-body">
@@ -324,20 +340,30 @@
 <script type="module">
   import { bootRouter, navigate, resolveInitialRoute, ROUTES, parseRoute } from './src/arenaRouter.js';
   import { registerGameFlowHost, handleRoute, exitToDressingRoom, resumePendingRoute } from './src/gameFlow.js';
+  import { bootArenaGame } from './src/arenaBoot.js';
   import { isCombatSandboxMode } from './src/combatSandbox.js';
+  import {
+    applySandboxHostDocument,
+    prepareSandboxLobbyChrome,
+  } from './src/sandboxGameFlow.js';
+  import * as arenaGameApi from './src/arenaGameApi.js';
 
   const COMBAT_SANDBOX_HOST = isCombatSandboxMode();
+  if (COMBAT_SANDBOX_HOST) applySandboxHostDocument();
 
   // ── Grudge Auth ───────────────────────────────────────────────
-  // Auth contract: Puter SDK for identity, Phantom for wallet, Guest fallback
-  // Token key: grudge_auth_token (shared across all Grudge apps for SSO)
-  // API calls via /api/* → Vercel rewrites to id.grudge-studio.com & api.grudge-studio.com
+  // AUTH (accounts): /api/auth/* → id.grudge-studio.com  (ONLY login surface)
+  // GAME (builds/matches): /api/arena/* → grudge-arena-api  (FK grudge_id only)
+  // Token key: grudge_auth_token (shared SSO across all Grudge apps)
+  // Never point login at Railway game APIs. See Desktop/IDENTITY_AND_GAME_DATA.md
   const API_BASE = '/api';
+  const IDENTITY_LOGIN = 'https://id.grudge-studio.com/login';
   const WS_URL = 'https://ws.grudge-studio.com';
   let selectedRace = 'human';
   let selectedClass = 'warrior';
   let selectedWeapon = 'greatsword';
   let grudgeUser = null;
+  let arenaGameApiLive = false;
 
   const ATTRIBUTE_TOTAL = 160;
   const ATTRIBUTE_KEYS = ['Strength', 'Intellect', 'Vitality', 'Dexterity', 'Endurance', 'Wisdom', 'Agility', 'Tactics'];
@@ -494,6 +520,8 @@
         d1Loadout,
         perRaceD1,
       }));
+      // Dual-path: local first, remote best-effort (never blocks UI)
+      maybeSyncBuildToGameApi();
     } catch { }
   }
 
@@ -927,6 +955,15 @@
 
   async function showLoggedIn(user) {
     grudgeUser = user;
+    if (COMBAT_SANDBOX_HOST) {
+      prepareSandboxLobbyChrome();
+      document.getElementById('un').textContent = user.displayName || user.username || 'Guest';
+      const resumed = await resumePendingRoute();
+      if (!resumed) {
+        await handleRoute(parseRoute(location.pathname));
+      }
+      return;
+    }
     document.getElementById('auth-gate').style.display = 'none';
     document.getElementById('race-select').classList.add('show');
     document.getElementById('un').textContent = user.displayName || user.username || 'Warlord';
@@ -993,23 +1030,93 @@
   }
 
   async function fetchUserProfile(token) {
+    // Identity SSOT: GET /auth/me (NOT /auth/user — that 404s on id gateway)
     try {
-      const r = await fetch(API_BASE + '/auth/user', { headers: { Authorization: 'Bearer ' + token } });
+      const r = await fetch(API_BASE + '/auth/me', {
+        headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' },
+      });
       if (!r.ok) return null;
-      return await r.json();
+      const d = await r.json();
+      // Normalize id.me shape → arena user object
+      if (d && (d.grudgeId || d.id || d.success)) {
+        return {
+          id: d.id,
+          grudgeId: d.grudgeId || d.grudge_id || '',
+          username: d.username || d.displayName || 'Warlord',
+          displayName: d.displayName || d.username || 'Warlord',
+          avatarUrl: d.avatarUrl || null,
+          walletAddress: d.walletAddress || null,
+          role: d.role || 'player',
+        };
+      }
+      return null;
     } catch { return null; }
   }
 
   async function verifyToken(token) {
+    // Identity SSOT: GET /auth/verify with Bearer (POST body is not supported)
     try {
       const r = await fetch(API_BASE + '/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
+        method: 'GET',
+        headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' },
       });
+      if (!r.ok) return false;
       const d = await r.json();
-      return d.valid === true;
+      return d.valid === true || d.success === true;
     } catch { return false; }
+  }
+
+  /** Canonical Grudge ID login — redirect to id gateway (fleet allowlist return). */
+  function startGrudgeIdLogin() {
+    const returnUrl = location.origin + location.pathname.replace(/\/?$/, '/') + (location.search || '');
+    // Prefer clean dressing-room callback so token lands on SPA
+    const callback = location.origin + '/?from=id';
+    const url = IDENTITY_LOGIN + '?redirect_uri=' + encodeURIComponent(callback);
+    setAuthStatus('Redirecting to Grudge ID…');
+    location.assign(url);
+  }
+
+  /** Best-effort: push local build to arena game API (never blocks play). */
+  async function maybeSyncBuildToGameApi() {
+    if (!arenaGameApi || !getToken()) return;
+    try {
+      const payload = {
+        race: selectedRace,
+        classId: selectedClass,
+        weapon: selectedWeapon,
+        ringTier: selectedRingTier,
+        ringPerks: selectedRingPerks,
+        attributes: attributePoints,
+      };
+      const res = await arenaGameApi.syncBuildToGameApi(payload);
+      if (res.ok) console.log('[arena] build synced to game API');
+    } catch (e) {
+      console.warn('[arena] build sync skipped:', e?.message || e);
+    }
+  }
+
+  /** Pull remote build if present (overrides empty local only carefully). */
+  async function maybeHydrateBuildFromGameApi() {
+    if (!arenaGameApi || !getToken()) return;
+    try {
+      const remote = await arenaGameApi.fetchRemoteActiveBuild();
+      if (!remote) return;
+      if (remote.race) selectedRace = remote.race;
+      if (remote.classId) selectedClass = remote.classId;
+      if (remote.weapon) selectedWeapon = remote.weapon;
+      if (remote.ringTier) selectedRingTier = remote.ringTier;
+      if (Array.isArray(remote.ringPerks)) selectedRingPerks = remote.ringPerks.slice(0, 3);
+      if (remote.attributes && typeof remote.attributes === 'object') {
+        for (const key of ATTRIBUTE_KEYS) {
+          const val = Number(remote.attributes[key]);
+          if (!Number.isNaN(val) && val >= 0) attributePoints[key] = Math.floor(val);
+        }
+      }
+      saveBuildToStorage();
+      console.log('[arena] hydrated build from game API');
+    } catch (e) {
+      console.warn('[arena] remote build hydrate skipped:', e?.message || e);
+    }
   }
 
   // ── Phantom Wallet Connect (with message signing) ────────────
@@ -1094,14 +1201,23 @@
     }
   });
 
-  // ── Puter Auth (Grudge ID via Puter SDK) ─────────────────────
+  // ── Grudge ID (canonical SSO via id.grudge-studio.com) ────────
+  // Primary path: redirect to identity gateway (Discord/Google/password/Puter UI there).
+  // Fallback: Puter SDK popup + /api/auth/puter if redirect fails / offline.
   document.getElementById('puter-btn').addEventListener('click', async () => {
     const btn = document.getElementById('puter-btn');
     btn.disabled = true;
-    setAuthStatus('Connecting to Grudge ID...');
 
+    // Prefer full Grudge ID login page (single SSO for all apps)
     try {
-      // Use Puter SDK to authenticate
+      startGrudgeIdLogin();
+      return;
+    } catch (e) {
+      console.warn('[arena] ID redirect failed, trying Puter SDK:', e?.message || e);
+    }
+
+    setAuthStatus('Connecting to Grudge ID...');
+    try {
       if (typeof puter === 'undefined' || !puter.auth) {
         throw new Error('Auth service unavailable. Please refresh and try again.');
       }
@@ -1113,7 +1229,6 @@
       const puterUsername = puterUser.username || puterUser.email || 'Warlord';
       setAuthStatus('Signed in · Linking Grudge ID...');
 
-      // Register/login with Grudge backend using Puter identity
       try {
         const r = await fetch(API_BASE + '/auth/puter', {
           method: 'POST',
@@ -1135,8 +1250,6 @@
         console.warn('[arena] Backend unreachable for Puter auth:', netErr.message);
       }
 
-      // Fallback: offline Puter session
-      console.log('[arena] Using offline Puter session');
       const offlineUser = {
         username: puterUsername,
         puterUuid,
@@ -1171,34 +1284,43 @@
     setAuthStatus('');
     showLoggedIn(guestUser);
 
-    // Attempt backend registration in the background (creates Grudge ID for guest)
+    // Background: official guest route on identity (/api/guest → id /auth/guest)
     try {
-      const r = await fetch(API_BASE + '/auth/puter', {
+      const r = await fetch(API_BASE + '/guest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ puterUuid: 'guest_' + deviceId, puterUsername: 'Guest' })
+        body: JSON.stringify({ deviceId }),
       });
       if (r.ok) {
         const data = await r.json();
         const user = handleAuthData(data);
         user.isGuest = true;
         user.username = user.username || 'Guest';
-        storeAuth(null, user);
+        storeAuth(data.sessionToken || data.token || null, user);
         grudgeUser = user;
-        // Update GID display if we got one
         const gid = (user.grudgeId || user.grudge_id || '').slice(0, 8).toUpperCase();
         if (gid) document.getElementById('ug').textContent = 'GRUDGE-' + gid;
         console.log('[arena] Guest linked to Grudge ID:', gid);
+        maybeSyncBuildToGameApi();
       }
     } catch (err) {
-      console.warn('[arena] Guest backend registration failed (playing offline):', err.message);
+      console.warn('[arena] Guest identity registration failed (playing offline):', err.message);
     }
   });
 
   // ── Boot auth flow ───────────────────────────────
   (async function initAuth() {
+    // Probe game API once (non-blocking for auth)
+    if (arenaGameApi) {
+      arenaGameApi.probeArenaGameApi().then((live) => {
+        arenaGameApiLive = !!live;
+        if (live) console.log('[arena] game API live at /api/arena');
+        else console.log('[arena] game API offline — localStorage builds only (auth still id.*)');
+      }).catch(() => { arenaGameApiLive = false; });
+    }
+
     const params = new URLSearchParams(location.search);
-    const incomingToken = params.get('token') || params.get('sso_token');
+    const incomingToken = params.get('token') || params.get('sso_token') || params.get('grudge_token');
     const incomingGrudgeId = params.get('grudge_id') || params.get('grudgeId');
     const incomingUsername = params.get('grudge_username') || params.get('username');
 
@@ -1215,6 +1337,7 @@
       }
       history.replaceState({}, '', ROUTES.DRESSING_ROOM);
       await showLoggedIn(getUser() || { username: incomingUsername || 'Warlord', grudgeId: incomingGrudgeId || '' });
+      await maybeHydrateBuildFromGameApi();
       return;
     }
 
@@ -1228,8 +1351,13 @@
           user = await fetchUserProfile(existingToken);
           if (user) storeAuth(existingToken, user);
         }
-        if (user) { await showLoggedIn(user); return; }
+        if (user) {
+          await showLoggedIn(user);
+          await maybeHydrateBuildFromGameApi();
+          return;
+        }
       }
+      // Soft fail: keep offline guest/wallet sessions; clear only hard-invalid tokens
       clearAuth();
     }
 
@@ -1322,14 +1450,14 @@
     saveBuildToStorage();
   };
 
-  // ── Danger Room (solo training — dangerroom.puter.site controller outline) ──
+  // ── Danger Room (solo island — always open; defaults Grudge6 human) ──
   window.enterDangerRoom = function () {
     sanitizeSelectionState();
     syncBuilderFromState();
-    if (getPointsSpent() !== ATTRIBUTE_TOTAL) {
-      setAuthStatus(`Spend all ${ATTRIBUTE_TOTAL} points before entering Danger Room`);
-      return;
-    }
+    // No attribute lock — open play / showcase. Prefer human if unset.
+    if (!selectedRace || !VALID_RACES.includes(selectedRace)) selectedRace = 'human';
+    if (!selectedWeapon) selectedWeapon = 'greatsword';
+    if (!selectedClass) selectedClass = 'warrior';
     saveBuildToStorage();
     navigate(ROUTES.DANGER_ROOM);
   };
@@ -1413,36 +1541,21 @@
     const playerName = grudgeUser?.username || 'Warlord';
     const raceName = normalizedRace.charAt(0).toUpperCase() + normalizedRace.slice(1);
 
-    setLoadingProgress(10, 'Loading game engine...');
-
     try {
-      const { GrudgeArena } = await import('./game.js');
-      setLoadingProgress(40, 'Initializing arena...');
-
-      const arena = new GrudgeArena({
+      await bootArenaGame({
         container: root,
-        mode: mode === 'danger' ? 'danger' : 'arena',
         race: normalizedRace,
         weapon: normalizedBuild.weapon,
         classId: normalizedBuild.classId,
         buildConfig: normalizedBuild,
-        playerName: playerName,
+        playerName,
         grudgeId: grudgeUser?.grudgeId || localStorage.getItem('grudge_id') || '',
         matchData: matchData || null,
+        mode,
         wsUrl: WS_URL,
         token: getToken(),
+        onProgress: setLoadingProgress,
       });
-
-      // Activate #game-root BEFORE init so its clientWidth/Height are non-zero
-      // when the renderer sizes its drawing buffer. Loading overlay (z-index 90)
-      // still covers it, so the user sees the loading screen until init completes.
-      root.classList.add('active');
-      void root.offsetWidth; // force layout flush
-
-      setLoadingProgress(60, 'Building world...');
-      await arena.init();
-
-      setLoadingProgress(100, 'Ready!');
 
       const hudInfo = document.getElementById('hud-player-info');
       if (hudInfo) hudInfo.textContent = playerName + ' · ' + raceName;
@@ -1451,7 +1564,6 @@
         document.getElementById('loading-overlay').classList.remove('active');
       }, 300);
 
-      window.__grudgeArena = arena;
       console.log('[arena] Game loaded —', raceName);
     } catch (err) {
       console.error('[arena] Failed to load game engine:', err);
@@ -1475,8 +1587,8 @@
   }
 
   registerGameFlowHost({
-    isAuthed: isUserAuthed,
-    isBuildReady: () => getPointsSpent() === ATTRIBUTE_TOTAL,
+    isAuthed: () => COMBAT_SANDBOX_HOST || isUserAuthed(),
+    isBuildReady: () => COMBAT_SANDBOX_HOST || getPointsSpent() === ATTRIBUTE_TOTAL,
     setAuthStatus,
     getBuildConfig: () => normalizeBuildConfig(getCurrentBuildConfig()),
     loadArenaGame,

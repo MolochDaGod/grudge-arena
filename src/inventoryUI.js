@@ -14,6 +14,8 @@
  */
 
 import { itemRegistry } from "./itemRegistry.js";
+import { assetUrl } from "./assetConfig.js";
+import { syncCharacterHomePanelActive } from "./characterHomeHud.js";
 
 const SLOT_GLYPHS = {
   head: "🪖",
@@ -54,6 +56,80 @@ const RIGHT_COL = [
   "trinket2",
   "offHand",
 ];
+const ATTR_KEYS = [
+  "Strength",
+  "Intellect",
+  "Vitality",
+  "Dexterity",
+  "Endurance",
+  "Wisdom",
+  "Agility",
+  "Tactics",
+];
+const ATTR_SHORT = {
+  Strength: "STR",
+  Intellect: "INT",
+  Vitality: "VIT",
+  Dexterity: "DEX",
+  Endurance: "END",
+  Wisdom: "WIS",
+  Agility: "AGI",
+  Tactics: "TAC",
+};
+const RACE_GLYPH = {
+  human: "⚔",
+  elf: "🏹",
+  orc: "💀",
+  dwarf: "⛏",
+};
+const ABILITY_HOTKEYS = ["Q", "E", "R", "F"];
+const SPELLBOOK_LAYOUT = [
+  { key: "Q", hotkey: "Q" },
+  { key: "E", hotkey: "E" },
+  { key: "R", hotkey: "R" },
+  { key: "F", hotkey: "F" },
+  { key: null, hotkey: "—" },
+  { key: "6", hotkey: "6", consumable: 0 },
+  { key: "7", hotkey: "7", consumable: 1 },
+  { key: "8", hotkey: "8", consumable: 2 },
+  { key: "P", hotkey: "P", ultimate: true },
+];
+
+const SPELL_EFFECT_ICONS = {
+  fireball: "ability_fireball",
+  dot_projectile: "ability_venom_edge",
+  lifesteal_projectile: "ability_life_drain",
+  multi_projectile: "ability_multishot",
+  debuff_target: "ability_enfeeble",
+  frost_nova: "ability_holy_nova",
+  meteor: "ability_meteor_strike",
+  aoe_zone: "ability_molotov",
+  shield: "ability_divine_shield",
+  buff_damage: "ability_damage_surge",
+  reset_cooldowns: "ability_mana_flow",
+  dash: "ability_wind_walk",
+  blink: "ability_evasion",
+  teleport_behind: "ability_evasive",
+  aoe_melee: "ability_whirlwind",
+  execute: "ability_execute",
+  aoe_strike: "ability_thunderclap",
+  stealth: "ability_sleep_dart",
+  projectile_pull: "ability_entangle",
+  melee_lifesteal: "ability_lacerate",
+  aoe_shield: "ability_mana_shield",
+  beam: "ability_lightning",
+  ground_zone: "ability_rejuvenate",
+  full_heal_invuln: "ability_invincible",
+  reload: "ability_mana_flow",
+  bear_form: "ability_damage_surge",
+  projectile: "ability_arcane_bolt",
+  melee: "ability_thunderclap",
+};
+
+function spellIconSrc(ability) {
+  const file = SPELL_EFFECT_ICONS[ability?.effect] || "ability_arcane_bolt";
+  return assetUrl(`assets/icons/abilities/${file}.png`);
+}
 const RARITY_GLYPH = {
   weapon: "⚔",
   armor: "🛡",
@@ -65,10 +141,12 @@ const RARITY_GLYPH = {
 };
 
 export class InventoryUI {
-  constructor(playerEntity, inventorySystem) {
+  constructor(playerEntity, inventorySystem, opts = {}) {
     this.entity = playerEntity;
     this.system = inventorySystem;
-    this._cache = { inv: -1, eq: -1, sk: -1 };
+    this._getWeapon = opts.getWeapon || (() => null);
+    this._getWeaponType = opts.getWeaponType || (() => "greatsword");
+    this._cache = { inv: -1, eq: -1, sk: -1, profile: -1 };
     this._activePanel = null;
     this._tooltipEl = document.getElementById("item-tooltip");
     this._ctxEl = document.getElementById("ctx-menu");
@@ -90,6 +168,7 @@ export class InventoryUI {
     document.getElementById(panelId)?.classList.add("active");
     this._activePanel = panelId;
     this._syncToggleButtons();
+    syncCharacterHomePanelActive(panelId);
     this._renderActive();
   }
 
@@ -98,6 +177,7 @@ export class InventoryUI {
     document.getElementById(this._activePanel)?.classList.remove("active");
     this._activePanel = null;
     this._syncToggleButtons();
+    syncCharacterHomePanelActive(null);
     this._hideCtx();
   }
 
@@ -119,6 +199,15 @@ export class InventoryUI {
       this._cache.sk = sk.version;
       this._renderSkills(sk);
     }
+    const profile = this.entity.getComponent("BuildProfile");
+    const profileVer = profile?.version ?? 0;
+    if (profileVer !== this._cache.profile) {
+      this._cache.profile = profileVer;
+      this._renderCharacterSheet();
+    }
+    if (this._activePanel === "panel-char") {
+      this._tickCharacterBars();
+    }
   }
 
   _renderActive() {
@@ -127,7 +216,10 @@ export class InventoryUI {
     const eq = this.entity.getComponent("Equipment");
     const sk = this.entity.getComponent("SkillBar");
     if (this._activePanel === "panel-inv" && inv) this._renderInventory(inv);
-    if (this._activePanel === "panel-char" && eq) this._renderEquipment(eq);
+    if (this._activePanel === "panel-char") {
+      this._renderCharacterSheet();
+      if (eq) this._renderEquipment(eq);
+    }
     if (this._activePanel === "panel-skills" && sk) this._renderSkills(sk);
   }
 
@@ -297,18 +389,145 @@ export class InventoryUI {
   _renderSkills(sk) {
     const grid = document.getElementById("skill-grid");
     if (!grid) return;
+    const weapon = this._getWeapon();
+    grid.className = "spellbook-grid";
     grid.innerHTML = "";
-    for (let i = 0; i < sk.size; i++) {
-      const skillId = sk.slots[i];
+
+    for (const slot of SPELLBOOK_LAYOUT) {
       const cell = document.createElement("div");
-      cell.className = "skill-cell" + (skillId ? " active" : "");
-      cell.dataset.idx = String(i);
+      let ability = null;
+      let label = "Empty";
+      let cost = "";
+
+      if (slot.key === "P") {
+        ability = weapon?.abilities?.P;
+      } else if (slot.consumable != null) {
+        const skillId = sk.slots[5 + slot.consumable];
+        label = skillId ? skillId.split(":").pop() : "Empty";
+      } else if (slot.key && weapon?.abilities?.[slot.key]) {
+        ability = weapon.abilities[slot.key];
+      }
+
+      if (ability) {
+        label = ability.name;
+        if (ability.cost && ability.costType) {
+          cost = `${ability.cost} ${ability.costType}`;
+        } else if (ability.cooldown) {
+          cost = `${ability.cooldown}s CD`;
+        }
+      } else if (slot.key === null) {
+        label = "—";
+      }
+
+      const filled = !!(ability || (slot.consumable != null && sk.slots[5 + slot.consumable]));
+      cell.className =
+        "spellbook-cell" +
+        (filled ? " active" : "") +
+        (slot.ultimate ? " ult" : "");
       cell.innerHTML =
-        `<span class="sk-key">${i + 1}</span>` +
-        (skillId
-          ? `<span class="sk-glyph">✦</span><span class="sk-name">${skillId}</span>`
-          : `<span class="sk-name">empty</span>`);
+        `<span class="spellbook-key">${slot.hotkey}</span>` +
+        (ability
+          ? `<img class="spellbook-icon" src="${spellIconSrc(ability)}" alt="" onerror="this.style.display='none'">`
+          : slot.consumable != null && sk.slots[5 + slot.consumable]
+            ? `<span class="spellbook-icon">🧪</span>`
+            : `<span class="spellbook-icon" style="opacity:0.35">—</span>`) +
+        `<span class="spellbook-name">${label}</span>` +
+        (cost ? `<span class="spellbook-cost">${cost}</span>` : "");
+
+      if (ability && slot.key) {
+        cell.title = ability.description || label;
+        cell.style.cursor = "pointer";
+        cell.addEventListener("click", () => {
+          window.__grudgeArena?.useAbility?.(slot.key);
+        });
+      }
       grid.appendChild(cell);
+    }
+  }
+
+  _renderCharacterSheet() {
+    const header = document.getElementById("char-sheet-header");
+    const attrGrid = document.getElementById("char-attr-grid");
+    if (!header && !attrGrid) return;
+
+    const info = this.entity.getComponent("TargetInfo");
+    const profile = this.entity.getComponent("BuildProfile") || {};
+    const attrs = profile.attributes || {};
+    const weapon = this._getWeapon();
+    const cls =
+      (profile.classId || "warrior").charAt(0).toUpperCase() +
+      (profile.classId || "warrior").slice(1);
+    const race = info?.race
+      ? String(info.race).charAt(0).toUpperCase() + String(info.race).slice(1)
+      : "Human";
+    const portrait =
+      RACE_GLYPH[String(info?.race || "").toLowerCase()] || "⚔";
+    const weaponTitle = weapon?.title ? `${weapon.title} ${weapon.name}` : weapon?.name || cls;
+
+    if (header) {
+      header.innerHTML = `
+        <div class="char-portrait-lg">${portrait}</div>
+        <div class="char-identity">
+          <div class="char-name">${info?.displayName || "Warlord"}</div>
+          <div class="char-sub">Lv.${profile.level ?? 42} ${cls} · ${race}</div>
+          <div class="char-weapon">${weaponTitle}</div>
+          <div class="char-bars" id="char-live-bars">
+            <div class="char-bar-row" data-bar="hp">
+              <span class="char-bar-label">HP</span>
+              <div class="char-bar-track"><div class="char-bar-fill char-fill-hp" id="char-hp-bar"></div></div>
+              <span class="char-bar-val" id="char-hp-val">—</span>
+            </div>
+            <div class="char-bar-row" data-bar="primary">
+              <span class="char-bar-label" id="char-res-label">MP</span>
+              <div class="char-bar-track"><div class="char-bar-fill char-fill-res" id="char-res-bar"></div></div>
+              <span class="char-bar-val" id="char-res-val">—</span>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    if (attrGrid) {
+      attrGrid.innerHTML = ATTR_KEYS.map((key) => {
+        const val = attrs[key] ?? 0;
+        return `<div class="csg-cell" title="${key}">
+          <div class="csg-val">${val}</div>
+          <div class="csg-key">${ATTR_SHORT[key]}</div>
+        </div>`;
+      }).join("");
+    }
+
+    const portraitEl = document.querySelector(".equip-portrait");
+    if (portraitEl) portraitEl.textContent = portrait;
+
+    this._tickCharacterBars();
+  }
+
+  _tickCharacterBars() {
+    const hp = this.entity.getComponent("Health");
+    const res = this.entity.getComponent("Resources");
+    const weapon = this._getWeapon();
+    if (!hp || !res) return;
+
+    const pct = (cur, max) => Math.round((cur / Math.max(max, 1)) * 100);
+    const fmt = (cur, max) => `${Math.floor(cur)}/${max}`;
+
+    const hpBar = document.getElementById("char-hp-bar");
+    const hpVal = document.getElementById("char-hp-val");
+    if (hpBar) hpBar.style.width = `${pct(hp.current, hp.max)}%`;
+    if (hpVal) hpVal.textContent = fmt(hp.current, hp.max);
+
+    const primary = weapon?.primaryResource || "mana";
+    const pool = res[primary] || res.mana;
+    const resBar = document.getElementById("char-res-bar");
+    const resVal = document.getElementById("char-res-val");
+    const resLabel = document.getElementById("char-res-label");
+    if (resBar) resBar.style.width = `${pct(pool.current, pool.max)}%`;
+    if (resVal) resVal.textContent = fmt(pool.current, pool.max);
+    if (resLabel) {
+      resLabel.textContent = primary === "rage" ? "RG" : primary === "energy" ? "EN" : "MP";
+      resBar?.classList.toggle("char-fill-rage", primary === "rage");
+      resBar?.classList.toggle("char-fill-energy", primary === "energy");
+      resBar?.classList.toggle("char-fill-mana", primary === "mana");
     }
   }
 

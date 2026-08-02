@@ -4,6 +4,7 @@
  */
 
 import { CHARACTER_RACES, isValidRace } from "./characterResources.js";
+import { getRaceClassArmor } from "./d1SlotCatalog.js";
 
 export const D1_LOADOUT_STORAGE_KEY = "grudge_arena_d1_loadout_v1";
 export const BUILD_STORAGE_KEY = "grudge_arena_character_build_v1";
@@ -140,9 +141,14 @@ export function getD1LoadoutState() {
   return state;
 }
 
-export function getD1LoadoutForRace(race) {
-  if (state.perRace?.[race]) return normalizeD1(state.perRace[race]);
-  return state.d1;
+export function getD1LoadoutForRace(race, classId = "warrior") {
+  const raw = state.perRace?.[race] ? normalizeD1(state.perRace[race]) : state.d1;
+  const defaults = getRaceClassArmor(race, classId);
+  const armor = { ...defaults };
+  for (const [slot, variant] of Object.entries(raw.armor || {})) {
+    if (variant) armor[slot] = String(variant).toUpperCase();
+  }
+  return { ...raw, armor };
 }
 
 export function setD1Race(race) {

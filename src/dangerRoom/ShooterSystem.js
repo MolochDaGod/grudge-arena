@@ -4,6 +4,7 @@
 
 import * as THREE from "three";
 import { registerHit, pulseCrosshairSpread } from "../engine/CombatFeedback.js";
+import { addRecoil, addShake } from "../engine/CameraRecoil.js";
 
 const FIRE_COOLDOWN = {
   bow: 0.55,
@@ -103,10 +104,11 @@ export function updateShooter(arena, dt) {
   const ctrl = arena.playerController;
   const weaponType = arena._getWeaponTypeKey?.() ?? "greatsword";
   if (!ctrl || !isFirearm(weaponType)) return;
+  // WoW danger room: bow/rifle use RMB auto-attack via game.js — hitscan is TPS-only.
+  if (ctrl.controlScheme !== "tps") return;
 
-  const aiming = !!(arena._autoAttackOn || ctrl.holdKey?._RMB);
   const fireDown = ctrl.holdKey?._LMB || ctrl.tickKey?._LMB;
-  if (!aiming || !fireDown || fireCooldown > 0 || isReloading(weaponType)) return;
+  if (!fireDown || fireCooldown > 0 || isReloading(weaponType)) return;
 
   const ammo = getAmmo(weaponType);
   if (ammo <= 0) {
@@ -138,6 +140,8 @@ function fireHitscan(arena, weaponType) {
 
   const hit = findTargetHit(_origin, _dir, weaponType === "bow" ? 40 : 60, arena.allUnits || []);
   pulseCrosshairSpread(weaponType === "rifle" ? 8 : 5);
+  addRecoil(weaponType);
+  addShake(weaponType);
   if (hit) {
     registerHit();
     arena.combatSystem?.applyDamage?.(hit.unit.entity, weaponType === "rifle" ? 35 : 45);

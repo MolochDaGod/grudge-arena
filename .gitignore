@@ -12,6 +12,9 @@ dist
 public/assets/characters/*/
 public/assets/maps/*/
 
+# Forge master catalog (250MB) — source: D:\.downloads\30grudge6characters.glb via npm run import:forge
+public/assets/forge/30grudge6characters.glb
+
 # Animation packs are large — also on R2
 # public/assets/animations/ is kept in git (small JSON manifests only)
 
@@ -20,3 +23,4 @@ public/assets/maps/*/
 # Raw Mixamo source (unzipped boxanimations.zip — run npm run pipeline:boxanims)
 artifacts/boxanimations/
 public/anims/staging/
+.env*.local

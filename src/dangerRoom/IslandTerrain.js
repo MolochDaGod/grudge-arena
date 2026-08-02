@@ -5,9 +5,14 @@
 import * as THREE from "three";
 import { loadTerrainPBR, makeTerrainMaterial } from "./TerrainTextureLoader.js";
 import { buildIslandWorldDecor } from "./IslandWorldDecor.js";
+import {
+  collectIslandGroundMeshes,
+  collectIslandObstacleMeshes,
+} from "./islandCollision.js";
 
-const ISLAND_SIZE = 96;
-const SEGMENTS = 128;
+export const ISLAND_SIZE = 96;
+export const ISLAND_SEGMENTS = 128;
+const SEGMENTS = ISLAND_SEGMENTS;
 
 function hash2(x, z) {
   const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
@@ -50,6 +55,16 @@ export function islandHeight(x, z) {
   return plateau * edge - 0.12;
 }
 
+/** Land mass mask (1 = island centre, 0 = off-island water). Used for nav walkability. */
+export function islandLandFactor(x, z) {
+  const half = ISLAND_SIZE / 2;
+  const nx = x / half;
+  const nz = z / half;
+  const dist = Math.sqrt(nx * nx + nz * nz);
+  return Math.max(0, 1 - Math.pow(dist, 2.15));
+}
+
+/** Shore/sand splat mask only — not walkability. */
 export function islandEdgeFactor(x, z) {
   const half = ISLAND_SIZE / 2;
   const dist = Math.sqrt((x / half) ** 2 + (z / half) ** 2);
@@ -171,6 +186,7 @@ export async function buildIslandTerrain(root) {
     rock.scale.set(s * 1.2, s * 0.7, s);
     rock.position.set(x, y + s * 0.35, z);
     rock.rotation.set(rng(i + 2) * 0.4, rng(i + 4) * Math.PI * 2, rng(i + 6) * 0.3);
+    rock.name = `island-rock-${i}`;
     rock.castShadow = true;
     rock.receiveShadow = true;
     rocks.add(rock);
@@ -193,23 +209,75 @@ export async function buildIslandTerrain(root) {
   water.name = "island-water";
   root.add(water);
 
-  let obstacleMeshes = [];
+  let decorObstacles = [];
   try {
     const decor = await buildIslandWorldDecor(root);
-    obstacleMeshes = decor.obstacleMeshes || [];
+    decorObstacles = decor.obstacleMeshes || [];
   } catch (err) {
     console.warn("[island] world decor:", err.message);
   }
 
+  const cardinalWalls = [];
+  const wallMat = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  for (const { x, z } of [
+    { x: 11, z: 5 },
+    { x: -11, z: 5 },
+    { x: 0, z: -4 },
+    { x: 0, z: 12 },
+  ]) {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(2.8, 3.6, 2.8), wallMat);
+    const y = islandHeight(x, z);
+    wall.position.set(x, y + 1.8, z);
+    wall.name = "island-cardinal-wall";
+    wall.castShadow = false;
+    wall.receiveShadow = false;
+    root.add(wall);
+    cardinalWalls.push(wall);
+  }
+
+  const groundMeshes = collectIslandGroundMeshes(root, [terrainMesh, beachMesh]);
+  const collected = collectIslandObstacleMeshes(root);
+  const seen = new Set();
+  const propMeshes = [];
+  for (const m of [...cardinalWalls, ...decorObstacles, ...collected]) {
+    if (!m || seen.has(m)) continue;
+    seen.add(m);
+    propMeshes.push(m);
+  }
+
   return {
     terrainMesh,
-    terrainMeshes: [terrainMesh, beachMesh],
-    obstacleMeshes,
+    terrainMeshes: groundMeshes,
+    groundMeshes,
+    propMeshes,
+    obstacleMeshes: propMeshes,
     clampRadius: ISLAND_SIZE * 0.42,
   };
 }
 
-/** Bilinear height sample (matches gameplay raycast for AI / spawn). */
+/** Bilinear height sample on the visual heightfield grid (128², matches terrain mesh). */
 export function sampleIslandHeight(x, z) {
-  return islandHeight(x, z);
+  const half = ISLAND_SIZE / 2;
+  const gs = ISLAND_SIZE / SEGMENTS;
+  const gx = (x + half) / gs;
+  const gz = (z + half) / gs;
+  const ix = Math.max(0, Math.min(SEGMENTS - 1, Math.floor(gx)));
+  const iz = Math.max(0, Math.min(SEGMENTS - 1, Math.floor(gz)));
+  const fx = gx - ix;
+  const fz = gz - iz;
+  const x0 = -half + ix * gs;
+  const z0 = -half + iz * gs;
+  const x1 = x0 + gs;
+  const z1 = z0 + gs;
+  const h00 = islandHeight(x0, z0);
+  const h10 = islandHeight(x1, z0);
+  const h01 = islandHeight(x0, z1);
+  const h11 = islandHeight(x1, z1);
+  const hx0 = h00 * (1 - fx) + h10 * fx;
+  const hx1 = h01 * (1 - fx) + h11 * fx;
+  return hx0 * (1 - fz) + hx1 * fz;
 }

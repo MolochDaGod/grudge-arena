@@ -1,9 +1,10 @@
 /**
- * Open-world island decor — forest_pack.glb scatter, procedural forest, village hub.
+ * Open-world island decor — Kenney Pirate Kit outpost (all 72 GLBs) + light forest fringe.
  */
 
 import { scatterForestPack } from "./IslandForestPack.js";
 import { buildProceduralForest } from "./IslandProceduralForest.js";
+import { buildPirateOutpost } from "./IslandPirateKit.js";
 import { loadVillageCluster } from "./IslandVillageProps.js";
 
 /**
@@ -14,12 +15,14 @@ export async function buildIslandWorldDecor(root) {
   const decorRoot = root;
   const obstacleMeshes = [];
 
-  const [pack, village] = await Promise.all([
+  const [pirate, pack, village] = await Promise.all([
+    buildPirateOutpost(decorRoot),
     scatterForestPack(decorRoot),
     loadVillageCluster(decorRoot),
   ]);
   buildProceduralForest(decorRoot);
 
+  if (pirate.obstacleMeshes?.length) obstacleMeshes.push(...pirate.obstacleMeshes);
   if (pack.obstacleMeshes?.length) obstacleMeshes.push(...pack.obstacleMeshes);
   if (village.obstacleMeshes?.length) obstacleMeshes.push(...village.obstacleMeshes);
 

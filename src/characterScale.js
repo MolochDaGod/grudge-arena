@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import { modelUrl } from "./assetConfig.js";
 import { getRaceConfig } from "./engine/RaceConfig.js";
+import { findBip001Bone, BIP001_ALIASES } from "./engine/Bip001Bones.js";
 
 const DEFAULT_TARGET_H = 1.75;
 const MANIFEST_TOLERANCE = 0.08;
@@ -29,18 +30,97 @@ export function isBodyMeasureMesh(node) {
   return !/weapon_|_shield_|xtra_|quiver|pick_|wood_/.test(n);
 }
 
+/**
+ * Armature subtree for the visible body rig (D1 GLBs ship 5+ decoy armatures).
+ * AnimationMixer must target this, not the full scene root.
+ */
+export function getAnimationRoot(scene) {
+  let root = null;
+  scene.traverse((node) => {
+    if (root || !isBodyMeasureMesh(node) || !node.skeleton) return;
+    let p = node;
+    while (p.parent && p.parent !== scene) p = p.parent;
+    root = p;
+  });
+  return root || scene;
+}
+
+/**
+ * World-space camera pivot (chest) — bone-primary, not scene root (D1 decoy armatures).
+ * @param {THREE.Object3D} scene
+ * @param {THREE.Vector3} [out]
+ */
+/** True when scene carries a Bip001 rig or baked character metrics. */
+export function hasCharacterRig(scene) {
+  if (!scene) return false;
+  if (scene.userData?.characterMetrics) return true;
+  let rigged = false;
+  scene.traverse((node) => {
+    if (rigged) return;
+    if (node.isBone && /Bip001.?Pelvis/i.test(node.name)) rigged = true;
+    if (isBodyMeasureMesh(node)) rigged = true;
+  });
+  return rigged;
+}
+
+export function getCharacterCameraPivot(scene, out = new THREE.Vector3()) {
+  scene.updateMatrixWorld(true);
+  const chest =
+    findBip001Bone(scene, BIP001_ALIASES.spine2) ??
+    findBip001Bone(scene, BIP001_ALIASES.spine1) ??
+    findBip001Bone(scene, BIP001_ALIASES.spine) ??
+    findBip001Bone(scene, BIP001_ALIASES.pelvis);
+  const metrics = scene.userData?.characterMetrics;
+  const targetH = metrics?.targetHeight ?? DEFAULT_TARGET_H;
+
+  if (chest) {
+    chest.getWorldPosition(out);
+    if (chest.name.includes('Pelvis')) out.y += targetH * 0.42;
+    return out;
+  }
+
+  out.copy(scene.position);
+  out.y += targetH * 0.55;
+  return out;
+}
+
+/** Prefer the skeleton on the first visible body skinned mesh (D1 GLBs ship 5+ armatures). */
+function findPrimarySkeleton(scene) {
+  let skeleton = null;
+  scene.traverse((node) => {
+    if (skeleton) return;
+    if (!isBodyMeasureMesh(node) || !node.skeleton?.bones?.length) return;
+    skeleton = node.skeleton;
+  });
+  return skeleton;
+}
+
+function resolveBoneFromSkeleton(skeleton, ...names) {
+  if (!skeleton) return null;
+  const lookup = new Map(skeleton.bones.map((b) => [b.name, b]));
+  for (const name of names) {
+    const hit = lookup.get(name);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 function measureBoneHeight(scene) {
   scene.updateMatrixWorld(true);
-  let pelvis = null;
-  let head = null;
-  let foot = null;
-  scene.traverse((node) => {
-    if (!node.isBone) return;
-    const name = node.name;
-    if (name === "Bip001_Pelvis" || name === "Bip001 Pelvis") pelvis = node;
-    if (name === "Bip001_Head" || name === "Bip001 Head") head = node;
-    if (name === "Bip001_L_Foot" || name === "Bip001 L Foot") foot = node;
-  });
+  const skeleton = findPrimarySkeleton(scene);
+  let pelvis = resolveBoneFromSkeleton(skeleton, "Bip001 Pelvis", "Bip001_Pelvis");
+  let head = resolveBoneFromSkeleton(skeleton, "Bip001 Head", "Bip001_Head");
+  let foot = resolveBoneFromSkeleton(skeleton, "Bip001 L Foot", "Bip001_L_Foot");
+
+  if (!pelvis || !head) {
+    scene.traverse((node) => {
+      if (!node.isBone) return;
+      const name = node.name;
+      if (!pelvis && (name === "Bip001_Pelvis" || name === "Bip001 Pelvis")) pelvis = node;
+      if (!head && (name === "Bip001_Head" || name === "Bip001 Head")) head = node;
+      if (!foot && (name === "Bip001_L_Foot" || name === "Bip001 L Foot")) foot = node;
+    });
+  }
   if (!pelvis || !head) return 0;
   const p = new THREE.Vector3();
   const h = new THREE.Vector3();
@@ -69,6 +149,31 @@ export function measureBodyBoundingBox(scene) {
  * Measure world-space humanoid height. Bones are primary (stable on D1 GLBs);
  * body bbox is fallback only when sane (≤2.5m).
  */
+/** World-space body height from skinned mesh vertices (truth for on-screen size). */
+export function measureWorldBodyHeight(scene) {
+  scene.updateMatrixWorld(true);
+  let minY = Infinity;
+  let maxY = -Infinity;
+  let samples = 0;
+  scene.traverse((node) => {
+    if (!isBodyMeasureMesh(node) || !node.geometry?.attributes?.position) return;
+    const pos = node.geometry.attributes.position;
+    const m = node.matrixWorld.elements;
+    const step = Math.max(1, Math.floor(pos.count / 400));
+    for (let i = 0; i < pos.count; i += step) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const z = pos.getZ(i);
+      const wy = m[1] * x + m[5] * y + m[9] * z + m[13];
+      minY = Math.min(minY, wy);
+      maxY = Math.max(maxY, wy);
+      samples++;
+    }
+  });
+  if (!samples || !Number.isFinite(minY)) return 0;
+  return maxY - minY;
+}
+
 export function measureCharacterHeight(scene) {
   scene.traverse((node) => {
     if (node.isSkinnedMesh?.skeleton) node.normalizeSkinWeights();
@@ -118,11 +223,22 @@ function footMidpointY(scene) {
   scene.updateMatrixWorld(true);
   const p = new THREE.Vector3();
   const ys = [];
-  scene.traverse((node) => {
-    if (!node.isBone || !FOOT_BONE_NAMES.has(node.name)) return;
+  const skeleton = findPrimarySkeleton(scene);
+  const footCandidates = skeleton?.bones?.length
+    ? skeleton.bones.filter((b) => FOOT_BONE_NAMES.has(b.name))
+    : null;
+  const nodes = footCandidates?.length
+    ? footCandidates
+    : [];
+  if (!nodes.length) {
+    scene.traverse((node) => {
+      if (node.isBone && FOOT_BONE_NAMES.has(node.name)) nodes.push(node);
+    });
+  }
+  for (const node of nodes) {
     node.getWorldPosition(p);
     ys.push(p.y);
-  });
+  }
   if (!ys.length) return null;
   return ys.reduce((a, b) => a + b, 0) / ys.length;
 }
@@ -202,6 +318,52 @@ export function absorbEmbeddedRootScales(scene) {
 }
 
 /**
+ * Correct scene.scale when skinned body vertices render far taller than target.
+ * @returns {{ worldBodyH, worldBodyFix, appliedScale, source, resolvedH }}
+ */
+export function applyWorldBodyScaleFix(scene, race, targetH, state = {}) {
+  let worldBodyH = measureWorldBodyHeight(scene);
+  let worldBodyFix = 1;
+  let appliedScale = state.appliedScale ?? 1;
+  let source = state.source ?? "unknown";
+  let resolvedH = state.resolvedH ?? targetH;
+
+  // Synty / unbaked grudge6 GLBs often land at ~30–100× real size (cm as m).
+  // Allow aggressive downscale (was clamped to ≥0.12 which blocked 100× fixes).
+  if (worldBodyH > targetH * 1.25) {
+    const fix = targetH / worldBodyH;
+    if (fix >= 0.005 && fix <= 1.05) {
+      scene.scale.multiplyScalar(fix);
+      scene.updateMatrixWorld(true);
+      worldBodyFix = fix;
+      appliedScale *= fix;
+      source = `${source}+world-body-fix`;
+      groundCharacter(scene);
+      worldBodyH = measureWorldBodyHeight(scene);
+      const remeasured = measureCharacterHeight(scene);
+      resolvedH =
+        worldBodyH > 0.5 && worldBodyH < MAX_HUMANOID_H * 1.1
+          ? worldBodyH
+          : remeasured.height > 0.001
+            ? remeasured.height
+            : targetH;
+    }
+  }
+
+  const m = scene.userData.characterMetrics;
+  if (m) {
+    m.worldBodyHeight = worldBodyH;
+    m.worldBodyFix = worldBodyFix;
+    m.worldScale = scene.scale.x;
+    m.appliedScale = appliedScale;
+    m.measuredHeight = resolvedH;
+    m.source = source;
+  }
+
+  return { worldBodyH, worldBodyFix, appliedScale, source, resolvedH };
+}
+
+/**
  * Apply scale + grounding. Returns metrics on scene.userData.characterMetrics.
  */
 export async function applyCharacterScale(scene, race, opts = {}) {
@@ -216,15 +378,30 @@ export async function applyCharacterScale(scene, race, opts = {}) {
   let appliedScale = 1;
   let source = "manifest-skip";
 
-  if (before.height > 0.001) {
-    const delta = Math.abs(before.height - targetH) / targetH;
-    if (raceEntry?.scaleMode === "skinned-root-only" && delta <= MANIFEST_TOLERANCE) {
-      appliedScale = 1;
-      source = "manifest-baked";
-    } else if (delta > MANIFEST_TOLERANCE) {
-      appliedScale = targetH / before.height;
+  // Prefer world-space body vertices (truth for on-screen size) over bone estimates.
+  // Unbaked arena CDN kits are often 30–100× too tall when root scale was lost.
+  const worldBefore = measureWorldBodyHeight(scene);
+  const measureH =
+    worldBefore > MAX_HUMANOID_H * 1.5
+      ? worldBefore
+      : before.height > 0.001
+        ? before.height
+        : worldBefore;
+
+  if (raceEntry?.scaleMode === "skinned-root-only" && measureH > 0.001 && measureH <= MAX_HUMANOID_H * 1.15) {
+    // Bake looks good — skip soft drift correction only.
+    appliedScale = 1;
+    source = "manifest-baked";
+  } else if (measureH > 0.001) {
+    const delta = Math.abs(measureH - targetH) / targetH;
+    // Always correct gross oversize (cm-as-m); allow soft correct within tolerance otherwise.
+    const grosslyOversized = measureH > targetH * 1.35 || measureH > MAX_HUMANOID_H;
+    if (grosslyOversized || delta > MANIFEST_TOLERANCE) {
+      appliedScale = targetH / measureH;
+      // Allow 100× downscale for unbaked Synty / grudge6 kits
+      appliedScale = Math.min(2.5, Math.max(0.005, appliedScale));
       scene.scale.multiplyScalar(appliedScale);
-      source = "measured-correct";
+      source = grosslyOversized ? "force-downscale" : "measured-correct";
     }
   } else {
     log(`[characterScale] ${race}: could not measure height — using target ${targetH.toFixed(2)}m`);
@@ -240,6 +417,17 @@ export async function applyCharacterScale(scene, race, opts = {}) {
 
   const groundedY = groundCharacter(scene);
 
+  const bodyFix = applyWorldBodyScaleFix(scene, race, targetH, {
+    appliedScale,
+    source,
+    resolvedH,
+  });
+  let worldBodyH = bodyFix.worldBodyH;
+  let worldBodyFix = bodyFix.worldBodyFix;
+  appliedScale = bodyFix.appliedScale;
+  source = bodyFix.source;
+  resolvedH = bodyFix.resolvedH;
+
   const metrics = {
     race,
     targetHeight: targetH,
@@ -254,13 +442,15 @@ export async function applyCharacterScale(scene, race, opts = {}) {
     measureMethod: after.method,
     bboxHeight: after.bboxH,
     boneHeight: after.boneH,
+    worldBodyHeight: worldBodyH,
+    worldBodyFix,
     source,
   };
   scene.userData.characterMetrics = metrics;
 
   log(
     `[characterScale] ${race}: target=${targetH.toFixed(3)}m measured=${resolvedH.toFixed(3)}m ` +
-      `(bones=${(after.boneH || 0).toFixed(2)} bbox=${(after.bboxH || 0).toFixed(2)}) ` +
+      `worldBody=${worldBodyH.toFixed(3)}m (bones=${(after.boneH || 0).toFixed(2)} bbox=${(after.bboxH || 0).toFixed(2)}) ` +
       `scale=${scene.scale.x.toFixed(4)} (${source}) y=${groundedY.toFixed(3)}`,
   );
 
@@ -279,13 +469,14 @@ export function regroundCharacter(scene, race) {
   return groundedY;
 }
 
-/** Capsule sizing — prefer target when measured bbox inflated. */
+/** Capsule sizing — feet at mesh Y=0, center at ~pelvis (52% of standing height). */
 export function physicsSizeFromMetrics(metrics, fallback = { radius: 0.5, height: 1.8, offset: 0.9 }) {
   const target = metrics?.targetHeight || fallback.height;
   let h = metrics?.measuredHeight || target;
   if (h > MAX_HUMANOID_H || h > target * 1.35) h = target;
   const radius = Math.min(0.55, Math.max(0.35, h * 0.28));
   const height = Math.max(1.2, Math.min(2.2, h));
-  const offset = height * 0.5 + (metrics?.heightOffset ?? 0);
+  const pelvisFrac = 0.52;
+  const offset = h * pelvisFrac + (metrics?.heightOffset ?? 0);
   return { radius, height, offset };
 }

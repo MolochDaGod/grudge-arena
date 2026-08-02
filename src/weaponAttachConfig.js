@@ -108,6 +108,8 @@ export function applyWeaponCarryTuning(scene, weaponType) {
     const isWeapon = matchesActiveWeapon(node, cfg.hand);
     const isShield = weaponType === "sabres" && matchesShield(node);
     if (!isWeapon && !isShield) return;
+    // Never mutate SkinnedMesh TRS — D1 weapons follow hand bones via skinning.
+    if (node.isSkinnedMesh) return;
 
     node.position.set(pos[0], pos[1], pos[2]);
     node.rotation.set(rot[0], rot[1], rot[2]);

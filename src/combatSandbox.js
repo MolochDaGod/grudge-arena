@@ -12,16 +12,26 @@ export function isCombatSandboxHost() {
   return SANDBOX_HOST_RE.test(location.hostname);
 }
 
-/** Combat sandbox uses danger-room engine with island preset + full HUD. */
+/**
+ * Full island combat experience (terrain, boats, harvest, sandbox HUD).
+ * True for dedicated sandbox host, /combat-sandbox, and primary /danger-room
+ * so production danger-room is game-ready without a separate deploy.
+ */
 export function isCombatSandboxMode() {
   if (isCombatSandboxHost()) return true;
   if (typeof location === "undefined") return false;
   const path = (location.pathname || "").replace(/\/+$/, "") || "/";
-  return path === COMBAT_SANDBOX_PATH;
+  return (
+    path === COMBAT_SANDBOX_PATH ||
+    path === "/danger-room" ||
+    path === "/training" ||
+    path === "/dangerroom"
+  );
 }
 
 export const COMBAT_SANDBOX_PRESET = "island";
-export const COMBAT_SANDBOX_ANIM_OVERDRIVE = 2;
+/** Match anim-test gait timing — higher values look sped-up and harsh on island TPS. */
+export const COMBAT_SANDBOX_ANIM_OVERDRIVE = 1;
 
 export function combatSandboxDefaultRoute() {
   return isCombatSandboxHost() ? "/" : COMBAT_SANDBOX_PATH;

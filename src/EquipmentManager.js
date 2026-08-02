@@ -28,7 +28,11 @@
  *   wood       — carried wood extra
  */
 
-import { resolveWeaponMapping } from "./d1SlotCatalog.js";
+import {
+  getRaceClassArmor,
+  resolveVariantKey,
+  resolveWeaponMapping,
+} from "./d1SlotCatalog.js";
 
 const WEAPON_SLOTS = [
   "sword",
@@ -92,7 +96,13 @@ export class EquipmentManager {
     this._hasMeshes = false;
     /** @type {object|null} arenaPrefab manifest slice */
     this._manifest = opts.manifest ?? null;
+    this._race = opts.race ?? "human";
+    this._classId = opts.classId ?? "warrior";
     this._catalog(scene);
+  }
+
+  _defaultArmor() {
+    return getRaceClassArmor(this._race, this._classId);
   }
 
   setManifest(manifest) {
@@ -150,9 +160,8 @@ export class EquipmentManager {
     const map = this.slots.get(slot);
     if (!map || map.size === 0) return false;
 
-    const v = variant === null ? null : variant.toUpperCase();
-    // If requested variant not found, fall back to first available
-    const key = v !== null && map.has(v) ? v : map.keys().next().value;
+    const key = resolveVariantKey(map.keys(), variant);
+    if (!key) return false;
 
     for (const [k, node] of map) {
       node.visible = k === key;
@@ -173,12 +182,13 @@ export class EquipmentManager {
   }
 
   /**
-   * Apply default body armor — first available variant of each armor slot.
-   * Typically shows body_A, head_A, arms_A, legs_A, shoulders_A.
+   * Apply clothed warrior armor (or explicit armor map).
+   * @param {Record<string,string>|null} [armor]
    */
-  applyDefaultArmor() {
+  applyDefaultArmor(armor = null) {
+    const loadout = armor || this._defaultArmor();
     for (const slot of ARMOR_SLOTS) {
-      this.equip(slot, null); // null = first available
+      this.equip(slot, loadout[slot] ?? null);
     }
   }
 
@@ -204,8 +214,8 @@ export class EquipmentManager {
   /**
    * Full loadout: default armor + weapon for a given arena weapon type.
    */
-  applyLoadout(weaponType) {
-    this.applyDefaultArmor();
+  applyLoadout(weaponType, armor = null) {
+    this.applyDefaultArmor(armor);
     this.applyWeapon(weaponType);
   }
 
@@ -224,12 +234,8 @@ export class EquipmentManager {
    * @param {{ armor?: Record<string,string>, weapon?: { rSlot?: string, rVariant?: string, lSlot?: string, lVariant?: string }, extras?: string[] }} d1Loadout
    */
   applyD1Loadout(weaponType, d1Loadout = {}) {
-    this.applyLoadout(weaponType);
-
-    const armor = d1Loadout.armor || {};
-    for (const [slot, variant] of Object.entries(armor)) {
-      if (variant) this.equip(slot, variant);
-    }
+    const armor = { ...this._defaultArmor(), ...(d1Loadout.armor || {}) };
+    this.applyLoadout(weaponType, armor);
 
     const w = d1Loadout.weapon || {};
     for (const s of [...WEAPON_SLOTS, ...SHIELD_SLOTS]) this.unequip(s);

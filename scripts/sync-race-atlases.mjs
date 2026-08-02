@@ -4,8 +4,9 @@
  *
  * Modular *_Characters.glb only embed a 1×1 PNG data-URI (70 bytes) — NOT the Synty atlas.
  * Sources (in order):
- *   1. Faction hero GLB body_atlas bufferView (crusade/fabled zips)
- *   2. grudge6 CDN WebP (assets.grudge-studio.com/assets/{faction}/textures/*.webp)
+ *   1. Faction hero GLB body_atlas bufferView (crusade/fabled/legion presets)
+ *   2. Local mono-ingest WebP (public/textures/grudge6-atlases/* from ingest:30grudge6)
+ *   3. grudge6 CDN WebP (assets.grudge-studio.com/assets/{faction}/textures/*.webp)
  *
  * Edit atlases here after running:
  *   public/assets/characters/{race}/textures/Map__*.png|.webp
@@ -22,8 +23,9 @@ const ROOT = resolve(__dir, "..");
 const CHARS = join(ROOT, "public", "assets", "characters");
 const FACTIONS = join(ROOT, "public", "assets", "factions");
 const GRUDGE6 = "https://assets.grudge-studio.com";
+const MONO_ATLASES = join(ROOT, "public", "textures", "grudge6-atlases");
 
-/** @type {Record<string, { outFile: string, heroGlb?: string, webpUrl?: string }>} */
+/** @type {Record<string, { outFile: string, heroGlb?: string, monoWebp?: string, webpUrl?: string }>} */
 const RACE_ATLAS = {
   human: {
     outFile: "Map__9.png",
@@ -46,11 +48,15 @@ const RACE_ATLAS = {
     webpUrl: `${GRUDGE6}/assets/dwarves/textures/DWF_Standard_Units.webp`,
   },
   orc: {
-    outFile: "Map__11.webp",
+    outFile: "Map__11.png",
+    heroGlb: join(FACTIONS, "legion", "orcs_warrior.glb"),
+    monoWebp: join(MONO_ATLASES, "ORC_body_atlas.png"),
     webpUrl: `${GRUDGE6}/assets/orcs/textures/ORC_StandardUnits.webp`,
   },
   undead: {
-    outFile: "Map__11.webp",
+    outFile: "Map__11.png",
+    heroGlb: join(FACTIONS, "legion", "undead_warrior.glb"),
+    monoWebp: join(MONO_ATLASES, "UD_body_atlas.png"),
     webpUrl: `${GRUDGE6}/assets/undead/textures/UD_Standard_Units.webp`,
   },
 };
@@ -91,6 +97,16 @@ async function fetchWebp(url) {
   return Buffer.from(await res.arrayBuffer());
 }
 
+function isPng(buf) {
+  return buf?.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+}
+
+async function toOutFormat(data, outFile) {
+  if (!outFile.endsWith(".webp") || !isPng(data)) return data;
+  const sharp = (await import("sharp")).default;
+  return sharp(data).webp({ lossless: true, effort: 4 }).toBuffer();
+}
+
 async function main() {
   console.log("Sync race atlases → public/assets/characters/{race}/textures/\n");
   const manifestPath = join(ROOT, "public", "models", "characterManifest.json");
@@ -106,8 +122,16 @@ async function main() {
     let source = "";
 
     if (cfg.heroGlb && existsSync(cfg.heroGlb)) {
-      data = extractHeroAtlas(cfg.heroGlb);
-      if (data?.length > 1024) source = `hero:${cfg.heroGlb}`;
+      const heroData = extractHeroAtlas(cfg.heroGlb);
+      if (heroData?.length > 1024) {
+        data = await toOutFormat(heroData, cfg.outFile);
+        source = `hero:${cfg.heroGlb}`;
+      }
+    }
+
+    if ((!data || data.length <= 1024) && cfg.monoWebp && existsSync(cfg.monoWebp)) {
+      data = readFileSync(cfg.monoWebp);
+      if (data.length > 1024) source = `mono:${cfg.monoWebp}`;
     }
 
     if ((!data || data.length <= 1024) && cfg.webpUrl) {
@@ -124,6 +148,7 @@ async function main() {
       continue;
     }
 
+    data = await toOutFormat(data, cfg.outFile);
     writeFileSync(outPath, data);
     const rel = `/assets/characters/${race}/textures/${cfg.outFile}`;
     console.log(`  ✔ ${race}: ${cfg.outFile} (${(data.length / 1024).toFixed(0)} KB) ← ${source}`);

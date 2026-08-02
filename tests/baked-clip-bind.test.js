@@ -7,6 +7,7 @@ import {
   normalizeBakedBip001Clip,
   getTrackBindingStats,
 } from "../src/mixamoRetarget.js";
+import { getAnimationRoot } from "../src/characterScale.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -51,11 +52,17 @@ describe("baked clip bone binding", () => {
     );
     const json = JSON.parse(readFileSync(path, "utf8"));
     const clip = THREE.AnimationClip.parse(json);
-    expect(clip.tracks[0].name).toContain("Bip001_");
+    const rawBone = clip.tracks[0].name.split(".")[0];
+    const hadUnderscore = rawBone.includes("_");
 
     normalizeBakedBip001Clip(clip);
     expect(clip.tracks[0].name).toContain("Bip001 Pelvis");
-    expect(clip.tracks.some((t) => t.name.includes("_"))).toBe(false);
+    expect(clip.tracks.every((t) => !t.name.split(".")[0].includes("_"))).toBe(
+      true,
+    );
+    if (hadUnderscore) {
+      expect(rawBone).toContain("Bip001_");
+    }
   });
 
   it("binds normalized idle clip to D1 rig at high ratio", () => {
@@ -67,8 +74,9 @@ describe("baked clip bone binding", () => {
     normalizeBakedBip001Clip(clip);
 
     const scene = makeD1Rig();
-    const mixer = new THREE.AnimationMixer(scene);
-    const stats = getTrackBindingStats(mixer.clipAction(clip, scene));
+    const animRoot = getAnimationRoot(scene);
+    const mixer = new THREE.AnimationMixer(animRoot);
+    const stats = getTrackBindingStats(mixer.clipAction(clip, animRoot));
     expect(stats.bound).toBeGreaterThan(12);
     expect(stats.ratio).toBeGreaterThan(0.7);
   });

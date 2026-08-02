@@ -86,6 +86,29 @@ describe("characterScale", () => {
     expect(m.bboxH).toBeGreaterThan(5);
   });
 
+  it("measureCharacterHeight uses primary body skeleton when decoy armatures exist", () => {
+    const root = new THREE.Group();
+
+    const decoyPelvis = new THREE.Bone();
+    decoyPelvis.name = "Bip001 Pelvis";
+    const decoyHead = new THREE.Bone();
+    decoyHead.name = "Bip001 Head";
+    decoyHead.position.set(0, 0.02, 0);
+    decoyPelvis.add(decoyHead);
+    root.add(decoyPelvis);
+
+    const scene = makeBoneScene({ boneH: 1.84, bboxH: 1.84 });
+    scene.name = "ELF_body";
+    const body = scene.children.find((c) => c.isSkinnedMesh);
+    if (body) body.name = "ELF_Units_Body_A";
+    root.add(scene);
+
+    const m = measureCharacterHeight(root);
+    expect(m.method).toBe("bones");
+    expect(m.height).toBeCloseTo(1.84, 1);
+    expect(m.height).toBeGreaterThan(1);
+  });
+
   it("placeCharacterOnGround zeros sole contact without resetting loader Y offset", () => {
     const scene = makeBoneScene({ boneH: 1.75, bboxH: 1.75 });
     scene.position.y = 1.2;

@@ -62,9 +62,10 @@ export class PhysicsWorld {
    * @param {number} mask     — collision mask bitmask
    * @returns {CANNON.Body}
    */
-  createCharacterBody(position, radius = 0.5, height = 1.8, group, mask) {
+  createCharacterBody(position, radius = 0.5, height = 1.8, group, mask, opts = {}) {
     const body = new CANNON.Body({
-      mass: 60,
+      mass: opts.kinematic ? 0 : 60,
+      type: opts.kinematic ? CANNON.Body.KINEMATIC : CANNON.Body.DYNAMIC,
       fixedRotation: true,
       collisionFilterGroup: group,
       collisionFilterMask: mask,

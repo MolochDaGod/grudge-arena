@@ -40,6 +40,19 @@ describe("characterResources", () => {
     expect(paths[2]).toContain("BRB_StandardUnits_texture.webp");
   });
 
+  it("raceTextureFallbackPaths uses Map__11.png for legion races", () => {
+    const orc = raceTextureFallbackPaths("orc");
+    expect(orc[0]).toContain("Map__11.png");
+    expect(orc[2]).toContain("ORC_StandardUnits.webp");
+    const undead = raceTextureFallbackPaths("undead");
+    expect(undead[0]).toContain("Map__11.png");
+  });
+
+  it("raceTextureFallbackPaths appends cache-bust query when provided", () => {
+    const paths = raceTextureFallbackPaths("orc", "4687926");
+    expect(paths[0]).toContain("?v=4687926");
+  });
+
   it("textureHealth flags missing and partial atlases", () => {
     expect(textureHealth({ withMap: 0, total: 42 }).ok).toBe(false);
     expect(textureHealth({ withMap: 10, total: 42 }).level).toBe("warn");

@@ -12,6 +12,7 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { configureGLTFLoader } from './gltfLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { clone as cloneSkinnedHierarchy } from 'three/addons/utils/SkeletonUtils.js';
 import { getRaceConfig, getRaceFactionColors, resolveWeapon, TierConfig } from './engine/RaceConfig.js';
@@ -21,6 +22,7 @@ import {
   CharacterLoadError,
   raceModelFallbackPaths,
   raceTextureFallbackPaths,
+  MODULAR_GLB_MAX_BYTES,
   isValidRace,
   auditCharacterMaterials,
   textureHealth,
@@ -33,10 +35,24 @@ import {
   loadBakedPackClips,
   validateBakedLocoClips,
   BakedAnimLoadError,
+  loadBakedClip,
+  ANIM_PACK_CLIPS,
+  animPackForWeapon,
 } from "./bakedAnimLoader.js";
-import { applyCharacterScale, regroundCharacter } from "./characterScale.js";
+import { idleVarietyBakedForWeapon } from "./idleVariety.js";
+import {
+  applyCharacterScale,
+  applyWorldBodyScaleFix,
+  regroundCharacter,
+} from "./characterScale.js";
 import { applyWeaponCarryTuning, preloadWeaponAttachManifest } from "./weaponAttachConfig.js";
 import { loadArenaPrefabManifest } from "./arenaPrefab.js";
+import {
+  shouldUseForgePrefab,
+  resolveForgeModelPath,
+  loadForgePrefabGltf,
+} from "./forgePrefabs.js";
+
 import { createBakedController } from './BakedAnimationController.js';
 import {
   remapClipBoneNames,
@@ -46,6 +62,7 @@ import {
   bip001UnderscoreToGltf,
 } from "./mixamoRetarget.js";
 import { validateCharacterSkeleton } from "./skeletonContract.js";
+import { getAnimationRoot } from "./characterScale.js";
 
 // ── Config from WeaponAnimationConfig.js ────────────────────────────────────
 
@@ -598,6 +615,7 @@ const gltfCache = new Map();
 const fbxCache = new Map();
 const clipCache = new Map();
 const gltfLoader = new GLTFLoader();
+configureGLTFLoader(gltfLoader).catch(() => {});
 const fbxLoader = new FBXLoader();
 const textureLoader = new THREE.TextureLoader();
 textureLoader.setCrossOrigin("anonymous");
@@ -626,40 +644,38 @@ function dataTextureFromImage(img, width, height) {
   return tex;
 }
 
+function finalizeAtlasTexture(tex) {
+  if (!tex) return null;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = true;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 function loadAtlasTexture(url) {
   return new Promise((resolve) => {
-    if (/\.(tga|webp)$/i.test(url)) {
-      textureLoader.load(url, resolve, undefined, () => resolve(null));
-      return;
-    }
-    const texLoader = new THREE.TextureLoader();
-    texLoader.setCrossOrigin("anonymous");
-    texLoader.load(
+    const imgLoader = new THREE.ImageLoader();
+    imgLoader.setCrossOrigin("anonymous");
+    imgLoader.load(
       url,
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.flipY = true;
-        resolve(tex);
+      (img) => {
+        try {
+          const w = img.naturalWidth || img.width;
+          const h = img.naturalHeight || img.height;
+          if (!w || !h) {
+            resolve(null);
+            return;
+          }
+          resolve(finalizeAtlasTexture(dataTextureFromImage(img, w, h)));
+        } catch {
+          resolve(null);
+        }
       },
       undefined,
-      () => {
-        const imgLoader = new THREE.ImageLoader();
-        imgLoader.setCrossOrigin("anonymous");
-        imgLoader.load(
-          url,
-          (img) => {
-            try {
-              resolve(
-                dataTextureFromImage(img, img.naturalWidth, img.naturalHeight),
-              );
-            } catch {
-              resolve(null);
-            }
-          },
-          undefined,
-          () => resolve(null),
-        );
-      },
+      () => resolve(null),
     );
   });
 }
@@ -703,13 +719,16 @@ async function loadRaceTextureMap(race) {
 
   // Try manifest path first, then direct fallback path
   const manifest = await loadCharacterManifest();
-  const rawManifestPath = manifest?.races?.[race]?.textures?.[0]?.file;
+  const texMeta = manifest?.races?.[race]?.textures?.[0];
+  const rawManifestPath = texMeta?.file;
+  const cacheBust = texMeta?.bytes > 1024 ? String(texMeta.bytes) : null;
   // Manifest stores /assets/... — route through assetUrl so prod uses /cdn proxy.
   const manifestPath = rawManifestPath
-    ? assetUrl(rawManifestPath.replace(/^\//, ""))
+    ? assetUrl(rawManifestPath.replace(/^\//, "")) +
+      (cacheBust ? `?v=${cacheBust}` : "")
     : null;
-  const directPaths = raceTextureFallbackPaths(race);
-  const paths = [...directPaths, manifestPath].filter(Boolean);
+  const directPaths = raceTextureFallbackPaths(race, cacheBust);
+  const paths = [manifestPath, ...directPaths].filter(Boolean);
 
   const texFailures = [];
   for (const texPath of paths) {
@@ -898,6 +917,17 @@ async function loadFBX(path) {
   return { scene: cached, animations: cached.animations || [], path, format: 'fbx' };
 }
 
+async function headContentLength(url) {
+  try {
+    const res = await fetch(url, { method: "HEAD", cache: "no-store" });
+    if (!res.ok) return null;
+    const len = res.headers.get("content-length");
+    return len ? Number(len) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadModelWithFallback(paths, { race } = {}) {
   const failures = [];
   for (const path of paths) {
@@ -905,12 +935,30 @@ async function loadModelWithFallback(paths, { race } = {}) {
       if (/\.fbx$/i.test(path)) {
         return await loadFBX(path);
       }
+      if (/_Characters\.glb/i.test(path)) {
+        const bytes = await headContentLength(path);
+        if (bytes != null && bytes > MODULAR_GLB_MAX_BYTES) {
+          console.warn(
+            `[modelLoader] skip bloated modular GLB (${(bytes / 1e6).toFixed(1)}MB): ${path}`,
+          );
+          failures.push({
+            path,
+            message: `oversized modular GLB (${bytes} bytes)`,
+          });
+          continue;
+        }
+      }
       let gltf = gltfCache.get(path);
       if (!gltf) {
         gltf = await new Promise((resolve, reject) => {
           gltfLoader.load(path, resolve, undefined, reject);
         });
         gltfCache.set(path, gltf);
+      }
+      if (race && !isD1ModularScene(gltf.scene) && /_Characters\.glb/i.test(path)) {
+        failures.push({ path, message: "loaded GLB is not D1 modular" });
+        console.warn(`[modelLoader] skip non-D1 mesh ${path}`);
+        continue;
       }
       return { ...gltf, path, format: "glb" };
     } catch (err) {
@@ -963,7 +1011,8 @@ function cloneGLTFScene(source) {
 }
 
 /** Fail fast when skinned meshes or skeleton contract are invalid. */
-function validateSkinnedBindings(scene, label = "character") {
+function validateSkinnedBindings(scene, label = "character", opts = {}) {
+  const strict = opts.strict ?? false;
   const boneSet = new Set();
   scene.traverse((n) => {
     if (n.isBone) boneSet.add(n);
@@ -976,15 +1025,47 @@ function validateSkinnedBindings(scene, label = "character") {
     }
   });
   if (bad > 0) {
-    console.warn(`[modelLoader] ${label}: ${bad} skinned bone refs outside hierarchy`);
+    const msg = `${label}: ${bad} skinned bone refs outside hierarchy`;
+    if (strict) {
+      throw new CharacterLoadError(msg, { code: "SKIN_BIND_FAIL", race: label });
+    }
+    console.warn(`[modelLoader] ${msg}`);
   }
   const skel = validateCharacterSkeleton(scene);
   if (!skel.ok) {
-    console.warn(
-      `[modelLoader] ${label}: skeleton contract missing [${skel.missing.join(", ")}]`,
-    );
+    const msg = `${label}: skeleton contract missing [${skel.missing.join(", ")}]`;
+    if (strict) {
+      throw new CharacterLoadError(msg, {
+        code: "SKELETON_CONTRACT",
+        race: label,
+        missing: skel.missing,
+      });
+    }
+    console.warn(`[modelLoader] ${msg}`);
   }
   return bad === 0 && skel.ok;
+}
+
+function assertBakedScaleMetrics(metrics, race, requireD1) {
+  if (!requireD1 || !metrics) return;
+  const applied = metrics.appliedScale ?? 1;
+  const hadWorldFix = String(metrics.source || "").includes("world-body-fix");
+  if (
+    metrics.source === "manifest-baked" &&
+    Math.abs(applied - 1) > 0.08 &&
+    !hadWorldFix
+  ) {
+    throw new CharacterLoadError(
+      `${race}: baked GLB rescale ${applied.toFixed(3)} — expected 1.0 (rebake from public/models)`,
+      { code: "SCALE_DRIFT", race, metrics },
+    );
+  }
+  if ((applied > 2 || applied < 0.12) && !hadWorldFix) {
+    throw new CharacterLoadError(
+      `${race}: extreme scene.scale ${applied.toFixed(3)}`,
+      { code: "SCALE_EXTREME", race, metrics },
+    );
+  }
 }
 
 /** Reset all skinned meshes to bind pose before applying Mixamo clips. */
@@ -1747,9 +1828,40 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     preloadWeaponAttachManifest(),
   ]);
 
-  const loaded = await loadModelWithFallback(raceModelFallbackPaths(race), { race });
-  const sourceScene = loaded.scene;
-  const scene = cloneGLTFScene(sourceScene);
+  // PURGE: forge prefabs + /models/*.glb for combat. Only CDN D1 modular GLB.
+  // Forge vertex-baked exports inflate scale and break Bip001 clip binding.
+  const useForge =
+    !requireD1 &&
+    (opts.useForgePrefab === true ||
+      (opts.useForgePrefab !== false &&
+        (await shouldUseForgePrefab(race, resolvedWeapon, meshLoadout, opts))));
+  let forgePath = null;
+  let loaded = null;
+  let scene;
+
+  if (useForge) {
+    forgePath = await resolveForgeModelPath(race, resolvedWeapon, opts.heroId);
+  }
+
+  if (forgePath) {
+    try {
+      const gltf = await loadForgePrefabGltf(forgePath);
+      scene = cloneGLTFScene(gltf.scene);
+      loaded = { path: forgePath, format: "gltf-forge" };
+      console.log(`[modelLoader] ${race}: forge prefab ${forgePath}`);
+    } catch (err) {
+      console.warn(`[modelLoader] forge prefab failed (${forgePath}): ${err.message}`);
+      forgePath = null;
+    }
+  }
+
+  if (!scene) {
+    loaded = await loadModelWithFallback(
+      raceModelFallbackPaths(race, { strictD1: requireD1 }),
+      { race },
+    );
+    scene = cloneGLTFScene(loaded.scene);
+  }
 
   scene.traverse((child) => {
     if (child.isMesh) {
@@ -1763,38 +1875,83 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
   });
 
   resetSkeletonBindPose(scene);
-  const metrics = await applyCharacterScale(scene, race, {
+  let metrics = await applyCharacterScale(scene, race, {
     log: (m) => console.log(m.replace("[characterScale]", "[modelLoader]")),
   });
-  validateSkinnedBindings(scene, race);
 
-  const { packName, clips, clipSources } = await loadBakedPackClips(
+  // Forge prefabs must use skinned-root bake — vertex-baked exports inflate ~100×.
+  if (
+    forgePath &&
+    metrics.bboxHeight > metrics.targetHeight * 2.5 &&
+    metrics.bboxHeight > 4
+  ) {
+    console.warn(
+      `[modelLoader] ${race}: forge prefab bbox ${metrics.bboxHeight.toFixed(1)}m — modular fallback`,
+    );
+    loaded = await loadModelWithFallback(raceModelFallbackPaths(race), { race });
+    scene = cloneGLTFScene(loaded.scene);
+    scene.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        child.frustumCulled = false;
+        if (child.material?.metalness !== undefined) {
+          child.material.metalness = Math.min(child.material.metalness, 0.6);
+        }
+      }
+    });
+    resetSkeletonBindPose(scene);
+    forgePath = null;
+    metrics = await applyCharacterScale(scene, race, {
+      log: (m) => console.log(m.replace("[characterScale]", "[modelLoader]")),
+    });
+  }
+
+  assertBakedScaleMetrics(metrics, race, requireD1);
+  validateSkinnedBindings(scene, race, { strict: requireD1 });
+
+  const { packName, clips, clipSources, skipped } = await loadBakedPackClips(
     resolvedWeapon,
     scene,
   );
+  // Soft-validate: fill-ins in loadBakedPackClips usually complete loco.
+  // Only hard-fail when even locomotion/idle fallbacks failed (true asset outage).
   try {
     validateBakedLocoClips(clips, resolvedWeapon, packName);
   } catch (err) {
     if (err instanceof BakedAnimLoadError) {
-      throw new CharacterLoadError(err.message, {
-        code: err.code,
-        race,
-        missing: err.missing,
-        cause: err,
-      });
+      const hasAnyLoco = clips.has("idle") || clips.has("walk") || clips.has("run");
+      if (requireD1 && !hasAnyLoco) {
+        throw new CharacterLoadError(err.message, {
+          code: err.code,
+          race,
+          missing: err.missing,
+          cause: err,
+        });
+      }
+      console.warn(
+        `[modelLoader] ${race}/${resolvedWeapon}: incomplete loco [${err.missing?.join(",") || skipped?.join(",")}] — continuing with available clips`,
+      );
+    } else {
+      throw err;
     }
-    throw err;
   }
-  const idle = clips.get("idle");
-  const walk = clips.get("walk");
-  const run = clips.get("run");
-  const sprint = clips.get("sprint");
-
-  const mixer = new THREE.AnimationMixer(scene);
+  const animRoot = getAnimationRoot(scene);
+  // One mixer per character on armature root — XZ/Y driven outside the mixer
+  const { createCharacterMixer, ensureLocoClips: ensureLoco } = await import(
+    "./engine/AnimClipSanitize.js"
+  );
+  const mixer = createCharacterMixer(animRoot);
+  const loco = ensureLoco(clips, {
+    idle: clips.get("idle"),
+    walk: clips.get("walk"),
+    run: clips.get("run"),
+    sprint: clips.get("sprint"),
+  });
   const controller = createBakedController(
     mixer,
-    scene,
-    { idle, walk, run, sprint },
+    animRoot,
+    loco,
     clips,
     resolvedWeapon,
     { clipSources },
@@ -1808,31 +1965,39 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     );
   }
 
-  // Atlas before equipment (base skin) and again after loadout (swapped D1 parts).
+  // Atlas + equip (visibility only — never skinned weapon TRS).
   await applyRaceTextureFix(scene, race);
 
   let equipment = null;
-  if (isD1) {
-    equipment = new EquipmentManager(scene, { manifest: prefabManifest });
+  if (isD1 && !forgePath) {
+    equipment = new EquipmentManager(scene, {
+      manifest: prefabManifest,
+      race,
+      classId: opts.classId,
+    });
     equipment.applyD1Loadout(resolvedWeapon, meshLoadout);
-    applyWeaponCarryTuning(scene, resolvedWeapon);
+    // D1 weapons are skinned to R_hand_container — do not applyWeaponCarryTuning.
+  } else if (forgePath) {
+    await applyRaceTextureFix(scene, race);
   } else if (!requireD1) {
     const weapon = createWeaponMesh(resolvedWeapon);
     tintWeaponMesh(weapon, raceConfig.gearTint, factionColors.emissive, tierCfg);
-    attachWeaponToBone(scene, weapon, 'Bip001_R_Hand');
-    const shieldWeapons = ['sabres', 'runeblade'];
+    attachWeaponToBone(scene, weapon, resolveHandBoneName(scene, "R"));
+    const shieldWeapons = ["sabres", "runeblade"];
     if (shieldWeapons.includes(resolvedWeapon)) {
       const shield = createShieldMesh();
       tintWeaponMesh(shield, raceConfig.gearTint, factionColors.emissive, tierCfg);
       shield.rotation.set(-Math.PI / 2, 0, Math.PI);
-      attachWeaponToBone(scene, shield, 'Bip001_L_Hand');
+      attachWeaponToBone(scene, shield, resolveHandBoneName(scene, "L"));
     }
   }
 
-  const texPatched = await applyRaceTextureFix(scene, race);
+  await applyRaceTextureFix(scene, race);
   applyFactionBodyColor(scene, race);
 
   regroundCharacter(scene, race);
+  applyWorldBodyScaleFix(scene, race, metrics.targetHeight, metrics);
+  metrics = scene.userData?.characterMetrics ?? metrics;
 
   const matAudit = auditCharacterMaterials(scene);
   const tex = textureHealth(matAudit);
@@ -1848,10 +2013,40 @@ export async function createBakedGrudge6Unit(race, weaponType, opts = {}) {
     }
   }
 
+  // Bind gate: idle must bind to scene bones or we ship T-pose
+  if (requireD1 && loco.idle) {
+    const probe = createCharacterMixer(animRoot);
+    const idleStats = getTrackBindingStats(probe.clipAction(loco.idle, animRoot));
+    if (idleStats.ratio < 0.45 || idleStats.bound < 8) {
+      throw new CharacterLoadError(
+        `${raceConfig.name}: baked idle unbound (${idleStats.bound}/${idleStats.total}) — Bip001 name mismatch`,
+        {
+          code: "ANIM_BIND_FAILED",
+          race,
+          missing: [`idle ${idleStats.bound}/${idleStats.total}`],
+        },
+      );
+    }
+    console.log(
+      `[modelLoader] ${race}: idle bind ${idleStats.bound}/${idleStats.total}`,
+    );
+  }
+
   resetSkeletonBindPose(scene);
-  validateSkinnedBindings(scene, `${race}-final`);
+  validateSkinnedBindings(scene, `${race}-final`, { strict: requireD1 });
+  // Facing: spawn yaw owns art-forward for +X kits — do not double-yaw here.
+  scene.userData.artForward = "spawn-yaw";
   controller.director.primeLocomotion();
   controller.mixer?.update?.(0);
+
+  const pack = animPackForWeapon(resolvedWeapon);
+  const primaryIdleRel = ANIM_PACK_CLIPS[pack]?.idle;
+  const altRels = idleVarietyBakedForWeapon(resolvedWeapon, primaryIdleRel);
+  if (altRels.length > 0) {
+    Promise.all(altRels.map((rel) => loadBakedClip(rel, animRoot)))
+      .then((altClips) => controller.bootstrapIdleVariety(altClips))
+      .catch((err) => console.warn(`[modelLoader] ${race} idle variety:`, err.message));
+  }
 
   console.log(
     `[modelLoader] ${raceConfig.name} baked-grudge6 ready: pack=${packName}, clips=${clips.size}, d1=${isD1}, equip=${equipment?.hasEquipment ?? false}, mesh=${loaded.path}, ${tex.detail}`,
@@ -1888,7 +2083,19 @@ export { formatCharacterLoadError };
  * @param {Object} [opts] - { tier: 1-8 }
  * @returns {{ scene, mixer, controller: AnimationController, raceConfig }}
  */
+/**
+ * @deprecated Prefer createBakedGrudge6Unit — production D1 + Bip001 baked clips.
+ * Legacy Mixamo packs do not bind to CDN Grudge6 skeletons (0% track bind / T-pose).
+ * This wrapper routes to baked unless opts.forceLegacy === true (debug only).
+ */
 export async function createAnimatedUnit(race, weaponType, opts = {}) {
+  if (opts.forceLegacy !== true) {
+    console.info(
+      `[modelLoader] createAnimatedUnit → createBakedGrudge6Unit (${race}/${weaponType}) — legacy Mixamo retired`,
+    );
+    return createBakedGrudge6Unit(race, weaponType, opts);
+  }
+
   const raceConfig = getRaceConfig(race);
   const factionColors = getRaceFactionColors(race);
   const tier = opts.tier || 1;
@@ -1965,7 +2172,7 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
 
   let equipment = null;
   if (isD1ModularScene(scene)) {
-    equipment = new EquipmentManager(scene, { manifest: prefabManifest });
+    equipment = new EquipmentManager(scene, { manifest: prefabManifest, race });
     equipment.applyLoadout(resolvedWeapon);
     applyWeaponCarryTuning(scene, resolvedWeapon);
     await applyRaceTextureFix(scene, race);
@@ -2004,6 +2211,10 @@ export async function createAnimatedUnit(race, weaponType, opts = {}) {
   controller.play("idle");
   mixer.update(0);
   regroundCharacter(scene, race);
+  const postEquipMetrics = scene.userData?.characterMetrics;
+  if (postEquipMetrics) {
+    applyWorldBodyScaleFix(scene, race, postEquipMetrics.targetHeight, postEquipMetrics);
+  }
   const idleStats = getTrackBindingStats(controller.currentAction);
   if (!controller.currentAction || idleStats.bound === 0) {
     console.warn(`[modelLoader] ${race}: idle unbound — retrying weapon pack…`);
@@ -2165,7 +2376,11 @@ export async function createHeroUnit(hero, weaponOverride = null, opts = {}) {
   const prefabManifestHero = await loadArenaPrefabManifest();
   let equipment = null;
   if (isD1ModularScene(scene)) {
-    equipment = new EquipmentManager(scene, { manifest: prefabManifestHero });
+    equipment = new EquipmentManager(scene, {
+      manifest: prefabManifestHero,
+      race: hero.race,
+      classId: hero.classId,
+    });
     equipment.applyLoadout(weaponType);
     await applyRaceTextureFix(scene, hero.race);
   } else {

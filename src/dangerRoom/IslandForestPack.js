@@ -3,9 +3,10 @@
  */
 
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { createGLTFLoader } from "../gltfLoader.js";
 import { islandAssetUrl } from "../assetConfig.js";
 import { islandHeight, islandEdgeFactor } from "./IslandTerrain.js";
+import { normalizePropHeight, PROP_TARGET_HEIGHT } from "./islandAssetScale.js";
 
 const PACK_URL = islandAssetUrl("forest_pack.glb");
 
@@ -95,10 +96,12 @@ function extractTemplates(scene) {
     const clone = obj.clone(true);
     enhanceMesh(clone);
     const baseName = obj.name;
-    normalizeTemplate(
-      clone,
-      baseName.startsWith("tree") ? 3.6 : baseName.startsWith("rock") ? 1.6 : 1,
-    );
+    const targetH = baseName.startsWith("tree")
+      ? PROP_TARGET_HEIGHT.tree
+      : baseName.startsWith("rock")
+        ? PROP_TARGET_HEIGHT.rock
+        : 1;
+    normalizeTemplate(clone, targetH);
     templates.set(baseName, clone);
   });
   return templates;
@@ -117,7 +120,7 @@ function isClearOfHub(x, z) {
 export async function scatterForestPack(root) {
   const group = new THREE.Group();
   group.name = "island-forest-pack";
-  const loader = new GLTFLoader();
+  const loader = await createGLTFLoader();
   const gltf = await loader.loadAsync(PACK_URL);
   const templates = extractTemplates(gltf.scene);
   const rand = mulberry32(90210);
@@ -141,7 +144,13 @@ export async function scatterForestPack(root) {
 
       const inst = cloneForestInstance(template);
       const scale = spec.minScale + rand() * (spec.maxScale - spec.minScale);
-      inst.scale.multiplyScalar(scale / (spec.template.startsWith("tree") ? 3.6 : 1));
+      const baseH = spec.template.startsWith("tree")
+        ? PROP_TARGET_HEIGHT.tree
+        : spec.template.startsWith("rock")
+          ? PROP_TARGET_HEIGHT.rock
+          : 1;
+      inst.scale.multiplyScalar(scale / baseH);
+      normalizePropHeight(inst, baseH * scale);
       inst.position.set(x, y, z);
       inst.rotation.y = rand() * Math.PI * 2;
       inst.name = `forest-pack-${spec.template}-${placed}`;

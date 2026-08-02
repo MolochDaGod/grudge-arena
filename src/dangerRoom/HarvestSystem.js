@@ -95,7 +95,7 @@ export class HarvestSystem {
     this.arena.scene.add(this.root);
     this.nodes = spawnIslandHarvestables(this.root);
     for (const n of this.nodes) {
-      this.arena._obstacleMeshes?.push(n.group);
+      this._registerObstacle(n.group);
       registerFocusTarget({
         id: n.id,
         kind: "harvestable",
@@ -121,6 +121,24 @@ export class HarvestSystem {
     this.pendingHit = null;
     this._stashEl?.remove();
     this._stashEl = null;
+  }
+
+  _registerObstacle(group) {
+    if (!group) return;
+    if (!this.arena._obstacleMeshes) this.arena._obstacleMeshes = [];
+    if (!this.arena._obstacleMeshes.includes(group)) {
+      this.arena._obstacleMeshes.push(group);
+    }
+    this.arena.terrainSystem?.registerObstacle?.(group, { harvest: true });
+    this.arena.orbitCamera?.setCollisionMeshes?.(this.arena._obstacleMeshes);
+  }
+
+  _unregisterObstacle(group) {
+    if (!group) return;
+    const idx = this.arena._obstacleMeshes?.indexOf(group);
+    if (idx >= 0) this.arena._obstacleMeshes.splice(idx, 1);
+    this.arena.terrainSystem?.unregisterObstacle?.(group);
+    this.arena.orbitCamera?.setCollisionMeshes?.(this.arena._obstacleMeshes ?? []);
   }
 
   clearTool() {
@@ -219,8 +237,7 @@ export class HarvestSystem {
       node.depleted = true;
       node.group.visible = false;
       unregisterFocusTarget(node.id);
-      const idx = this.arena._obstacleMeshes?.indexOf(node.group);
-      if (idx >= 0) this.arena._obstacleMeshes.splice(idx, 1);
+      this._unregisterObstacle(node.group);
     }
   }
 
@@ -301,8 +318,7 @@ export class HarvestSystem {
         node.depleted = true;
         node.group.visible = false;
         unregisterFocusTarget(node.id);
-        const idx = this.arena._obstacleMeshes?.indexOf(node.group);
-        if (idx >= 0) this.arena._obstacleMeshes.splice(idx, 1);
+        this._unregisterObstacle(node.group);
         continue;
       }
       const angle = t * (Math.PI / 2);

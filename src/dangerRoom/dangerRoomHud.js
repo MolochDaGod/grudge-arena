@@ -8,6 +8,10 @@ import {
   cycleRoomPreset,
   isCombatSandboxUi,
 } from "./dangerRoomStore.js";
+import {
+  mountCharacterHomeHud,
+  unmountCharacterHomeHud,
+} from "../characterHomeHud.js";
 import { ROOM_PRESETS } from "./roomPresets.js";
 import {
   getComboStage,
@@ -49,15 +53,17 @@ function buildShell(presetName) {
       <span>·</span>
       <span id="dr-weapon-label">Weapon</span>
       ${sandbox ? `<span class="dr-height-readout" id="dr-height-label"></span>` : ""}
-      ${sandbox ? `<span class="dr-focus-filter" id="dr-focus-filter">FOCUS: ALL</span>` : ""}
       <span class="dr-combo-badge" id="dr-combo-badge" hidden>Hit <span id="dr-combo-n">1</span></span>
     </div>
     <div class="dr-controls-hint">
-      <div><kbd>WASD</kbd> Move <kbd>Shift</kbd> Sprint <kbd>RMB</kbd> Look/Aim</div>
-      <div><kbd>Tab</kbd> Target <kbd>RMB</kbd> Attack <kbd>LMB</kbd> Fire <kbd>1-4</kbd> Skills</div>
-      <div><kbd>G</kbd> Gear · <kbd>M</kbd> Menu · <kbd>Hold F</kbd> Weapons · <kbd>Tab</kbd> Target</div>
-      ${sandbox ? `<div><kbd>\`</kbd> Toggle focus · <kbd>Tab</kbd> Cycle · <kbd>RMB</kbd> Hard lock</div>
-      <div><kbd>[</kbd><kbd>]</kbd> Preset · <kbd>Hold R</kbd> Harvest · <kbd>LMB</kbd> Swing</div>` : `<div><kbd>[</kbd><kbd>]</kbd> Room preset · <kbd>Hold R</kbd> Harvest tools · <kbd>LMB</kbd> Chop/Mine</div>`}
+      ${sandbox
+        ? `<div><kbd>W/A/S/D</kbd> Move <kbd>Shift</kbd> Sprint <kbd>RMB</kbd> Orbit camera <kbd>Scroll</kbd> Zoom</div>
+      <div><kbd>Tab</kbd> Target <kbd>LMB</kbd> Attack <kbd>1-4</kbd> Skills <kbd>5</kbd> Ultimate <kbd>6-8</kbd> Consumables</div>`
+        : `<div><kbd>W/S</kbd> Move <kbd>A/D</kbd> Turn <kbd>Shift</kbd> Sprint <kbd>Scroll</kbd> Zoom</div>
+      <div><kbd>RMB</kbd> Attack <kbd>LMB</kbd> Camera <kbd>1-4</kbd> Skills <kbd>5</kbd> Ultimate <kbd>6-8</kbd> Consumables</div>`}
+      <div><kbd>I</kbd> Inventory <kbd>C</kbd> Character <kbd>K</kbd> Spell Book · <kbd>Tab</kbd> Target</div>
+      ${sandbox ? `<div><kbd>[</kbd><kbd>]</kbd> Preset · <kbd>Hold R</kbd> Harvest · <kbd>LMB</kbd> Chop/Mine</div>
+      <div id="dr-boat-dock-hint" hidden><kbd>B</kbd> Boat dock — sail color &amp; ship size</div>` : `<div><kbd>[</kbd><kbd>]</kbd> Room preset · <kbd>Hold R</kbd> Harvest tools · <kbd>LMB</kbd> Chop/Mine</div>`}
     </div>
     <button type="button" class="dr-exit-btn" id="dr-exit-btn" ${sandbox ? "hidden" : ""}>Exit Danger Room</button>
   `;
@@ -96,14 +102,9 @@ export function mountDangerRoomHud() {
   const targetFrame = document.getElementById("target-frame");
   if (targetFrame) targetFrame.classList.add("dr-target-frame");
   const hints = document.querySelector(".fkey-hints");
-  if (hints) hints.style.display = sandbox ? "flex" : "none";
+  if (hints) hints.style.display = "none";
   if (sandbox) {
-    const bars = document.querySelector(".hud-bars");
-    const toggles = document.querySelector(".panel-toggles");
-    const bar = document.getElementById("abilityBar");
-    if (bars) bars.style.display = "flex";
-    if (toggles) toggles.style.display = "flex";
-    if (bar) bar.style.display = "flex";
+    mountCharacterHomeHud();
   }
 
   rootEl = document.createElement("div");
@@ -131,6 +132,7 @@ export function unmountDangerRoomHud() {
   rootEl?.remove();
   rootEl = null;
   lastPresetId = null;
+  unmountCharacterHomeHud();
   document.body.classList.remove("danger-room-active", "combat-sandbox-active");
   const gameUI = document.getElementById("gameUI");
   gameUI?.classList.remove("danger-room-hud", "combat-sandbox-hud");

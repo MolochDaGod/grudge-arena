@@ -3,11 +3,16 @@
  * Hitboxes remain on a separate cannon-es world (HitboxSystem).
  */
 
+import * as THREE from "three";
 import RAPIER from "@dimforge/rapier3d-compat";
-import { islandHeight } from "../dangerRoom/IslandTerrain.js";
+import { islandHeight, ISLAND_SIZE as TERRAIN_SIZE, ISLAND_SEGMENTS } from "../dangerRoom/IslandTerrain.js";
 
-const ISLAND_SIZE = 96;
-const SEGMENTS = 64;
+const _box = new THREE.Box3();
+const _size = new THREE.Vector3();
+const _center = new THREE.Vector3();
+
+const ISLAND_SIZE = TERRAIN_SIZE;
+const SEGMENTS = ISLAND_SEGMENTS;
 const FIXED_DT = 1 / 60;
 
 export const GROUP_SCENE = 2;
@@ -69,8 +74,35 @@ export class RapierPhysicsWorld {
   constructor(world) {
     this.world = world;
     this._bodies = new Set();
+    /** @type {Set<THREE.Object3D>} meshes already given static Rapier colliders */
+    this._staticMeshKeys = new Set();
     /** @type {import('cannon-es').World|null} cannon shim — use _hitboxWorld in game.js */
     this.cannonWorld = null;
+  }
+
+  /**
+   * AABB cuboid colliders for static props / obstacles (island village, pillars).
+   * @param {THREE.Object3D[]} meshes
+   */
+  addStaticMeshColliders(meshes) {
+    if (!meshes?.length) return;
+    for (const root of meshes) {
+      if (!root || this._staticMeshKeys.has(root)) continue;
+      root.updateMatrixWorld(true);
+      _box.setFromObject(root);
+      if (_box.isEmpty()) continue;
+      _box.getSize(_size);
+      _box.getCenter(_center);
+      const hx = Math.max(0.05, _size.x * 0.5);
+      const hy = Math.max(0.05, _size.y * 0.5);
+      const hz = Math.max(0.05, _size.z * 0.5);
+      const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+      const collider = RAPIER.ColliderDesc.cuboid(hx, hy, hz)
+        .setTranslation(_center.x, _center.y, _center.z)
+        .setFriction(0.9);
+      this.world.createCollider(collider, body);
+      this._staticMeshKeys.add(root);
+    }
   }
 
   step(delta) {

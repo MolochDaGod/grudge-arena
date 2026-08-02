@@ -4,7 +4,18 @@
  */
 
 import { ROUTES, navigate, parseRoute } from "./arenaRouter.js";
-import { isCombatSandboxMode, COMBAT_SANDBOX_PRESET } from "./combatSandbox.js";
+import { teardownArenaGame } from "./arenaBoot.js";
+import { getActiveArena, setSessionRoute } from "./arenaSessionStore.js";
+import {
+  isCombatSandboxMode,
+  COMBAT_SANDBOX_PRESET,
+  COMBAT_SANDBOX_ANIM_OVERDRIVE,
+} from "./combatSandbox.js";
+import {
+  isSandboxAutoStartRoute,
+  prepareSandboxLobbyChrome,
+  showSandboxBootLoading,
+} from "./sandboxGameFlow.js";
 
 const PENDING_ROUTE_KEY = "grudge_pending_route";
 
@@ -68,14 +79,7 @@ function showGameLoading() {
 }
 
 export async function stopActiveGame() {
-  const arena = window.__grudgeArena;
-  if (!arena) return;
-  if (arena.dangerMode) {
-    const { teardownDangerRoom } = await import("./dangerRoom/DangerRoomMode.js");
-    teardownDangerRoom(arena);
-  }
-  arena.dispose?.();
-  window.__grudgeArena = null;
+  await teardownArenaGame();
 }
 
 export async function exitToDressingRoom() {
@@ -89,7 +93,7 @@ async function applyDangerPresetFromUrl(route) {
   if (route?.combatSandbox || isCombatSandboxMode()) {
     setCombatSandboxUi(true);
     setRoomPreset(COMBAT_SANDBOX_PRESET);
-    setAnimOverdrive(2);
+    setAnimOverdrive(COMBAT_SANDBOX_ANIM_OVERDRIVE);
     return;
   }
   const preset = new URLSearchParams(location.search).get("preset");
@@ -101,6 +105,12 @@ async function applyDangerPresetFromUrl(route) {
  * @param {import('./arenaRouter.js').ArenaRoute} route
  */
 export async function handleRoute(route) {
+  setSessionRoute(route);
+
+  if (isSandboxAutoStartRoute(route)) {
+    prepareSandboxLobbyChrome();
+  }
+
   if (route.redirect) {
     const q = location.search || "";
     if (route.id === "anim-test" && host?.openAnimTest) {
@@ -122,10 +132,16 @@ export async function handleRoute(route) {
 
   if (!route.autoStart) return;
 
-  const activeMode = window.__grudgeArena?.dangerMode ? "danger" : "arena";
-  if (window.__grudgeArena && route.gameMode === activeMode) return;
+  const activeArena = getActiveArena();
+  const activeMode = activeArena?.dangerMode ? "danger" : "arena";
+  if (activeArena && route.gameMode === activeMode) return;
 
-  const sandbox = route.combatSandbox || isCombatSandboxMode();
+  // Danger room / combat sandbox: always playable (guest OK, no 160-point lock)
+  const sandbox =
+    route.combatSandbox ||
+    isCombatSandboxMode() ||
+    route.gameMode === "danger";
+
   if (!host?.isAuthed?.() && !sandbox) {
     if (route.autoStart && route.gameMode) {
       stashPendingRoute(route.path);
@@ -135,13 +151,25 @@ export async function handleRoute(route) {
     return;
   }
 
-  if (!host?.isBuildReady?.() && route.gameMode !== "danger") {
+  if (!host?.isBuildReady?.() && route.gameMode !== "danger" && !sandbox) {
     host?.setAuthStatus?.("Spend all 160 attribute points before entering");
     navigate(ROUTES.DRESSING_ROOM, { replace: true });
     return;
   }
 
-  const build = host.getBuildConfig();
+  // Prefer a ready champion build; fall back to human warrior for open play
+  let build = host.getBuildConfig?.() || {
+    race: "human",
+    weapon: "greatsword",
+    classId: "warrior",
+    attributes: {},
+  };
+  if (!build.race) build = { ...build, race: "human" };
+  if (!build.weapon) build = { ...build, weapon: "greatsword" };
+  // Danger-room showcase defaults to Grudge6 human when no selection
+  if (route.gameMode === "danger" && (!build.race || build.race === "default")) {
+    build = { ...build, race: "human", weapon: build.weapon || "greatsword", classId: build.classId || "warrior" };
+  }
 
   if (route.autoStart === "queue") {
     showDressingRoom();
@@ -154,11 +182,23 @@ export async function handleRoute(route) {
     return;
   }
 
-  if (route.gameMode === "danger" || route.combatSandbox || isCombatSandboxMode()) {
+  if (route.gameMode === "danger" || route.combatSandbox || isCombatSandboxMode() || sandbox) {
     await applyDangerPresetFromUrl(route);
+    // Always full island showcase for danger-room
+    try {
+      const { setRoomPreset, setCombatSandboxUi } = await import("./dangerRoom/dangerRoomStore.js");
+      setRoomPreset("island");
+      setCombatSandboxUi(true);
+    } catch {
+      /* store optional at boot */
+    }
   }
 
   await stopActiveGame();
-  showGameLoading();
+  if (isSandboxAutoStartRoute(route)) {
+    showSandboxBootLoading();
+  } else {
+    showGameLoading();
+  }
   await host.loadArenaGame(build.race, null, build, route.gameMode || "arena");
 }

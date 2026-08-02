@@ -15,6 +15,10 @@
     "landHard": { "label": "Hard landing", "source": "uploads/locomotion/hard_landing" },
     "descendSlope": { "label": "Down stairs / slope", "source": "uploads_2026_06/locomotion/descending stairs" },
     "turnLeft": { "label": "Turn left 90°", "source": "locomotion/left turn 90" },
-    "turnRight": { "label": "Turn right 90°", "source": "locomotion/right turn 90" }
+    "turnRight": { "label": "Turn right 90°", "source": "locomotion/right turn 90" },
+    "attack1": { "label": "Melee slash 1", "source": "sword_shield/sword and shield slash" },
+    "attack2": { "label": "Melee slash 2", "source": "sword_shield/sword and shield attack" },
+    "attack3": { "label": "Melee slash 3", "source": "sword_shield/sword and shield attack (2)" },
+    "attack4": { "label": "Main melee attack", "source": "sword/one hand sword combo" }
   }
 }

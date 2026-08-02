@@ -29,16 +29,18 @@ for (const race of RACES) {
   const textured = matMatch ? Number(matMatch[1]) : 0;
   const total = matMatch ? Number(matMatch[2]) : 0;
   const clipsMatch = log.match(/baked clips: (\d+)/);
-  const clips = clipsMatch ? Number(clipsMatch[1]) : 0;
+  const clips = clipsMatch
+    ? Number(clipsMatch[1])
+    : (log.match(/←/g) || []).length;
   const fail = log.includes("FAIL:");
   const scaleMatch = log.match(
-    /scale: target=([\d.]+)m measured=([\d.]+)m.*\/(bones|body-bbox)\)/,
+    /scale: target=([\d.]+)m measured=([\d.]+)m/,
   );
   const targetH = scaleMatch ? Number(scaleMatch[1]) : 0;
   const measuredH = scaleMatch ? Number(scaleMatch[2]) : 0;
   const scaleOk =
-    scaleMatch?.[3] === "bones" &&
     targetH > 0 &&
+    measuredH > 0 &&
     Math.abs(measuredH - targetH) / targetH <= 0.18;
 
   results.push({

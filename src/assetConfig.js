@@ -101,11 +101,44 @@ export function islandAssetUrl(path) {
 }
 
 /**
- * Baked Bip001 JSON clips — bundled under /anims/baked on sandbox/dev, CDN proxy in prod.
- * @param {string} rel - e.g. 'locomotion/walking' (no .json)
+ * Baked Bip001 JSON clips.
+ *
+ * Always serve from the app deploy (`/anims/baked/...`) — Vite copies public/anims.
+ * Do NOT use `/api/assets/anims/baked` in prod: that rewrites to R2 root and 404s
+ * on spaced filenames (magic/standing idle, sword and shield *, etc.), which hard-fails
+ * Danger Room (staff/magic missing idle/run/sprint).
+ *
+ * @param {string} rel - e.g. 'locomotion/walking' or 'magic/standing idle' (no .json)
  */
 export function bakedAnimUrl(rel) {
-  const p = rel.startsWith("/") ? rel.slice(1) : rel;
-  if (useBundledArenaAssets()) return `/anims/baked/${p}.json`;
-  return `/api/assets/anims/baked/${p}.json`;
+  const p = (rel.startsWith("/") ? rel.slice(1) : rel).replace(/\.json$/i, "");
+  // Encode each segment so spaces / parentheses are valid URLs; keep path slashes
+  const encoded = p
+    .split("/")
+    .filter(Boolean)
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+  return `/anims/baked/${encoded}.json`;
+}
+
+/**
+ * Ordered fetch mirrors for a baked clip (first hit wins).
+ * Deploy path first; underscore filename variants for bake-name drift.
+ * @param {string} rel
+ * @returns {string[]}
+ */
+export function bakedAnimUrlCandidates(rel) {
+  const p = (rel.startsWith("/") ? rel.slice(1) : rel).replace(/\.json$/i, "");
+  const segs = p.split("/").filter(Boolean);
+  const encoded = segs.map((seg) => encodeURIComponent(seg)).join("/");
+  const underscored = segs
+    .map((seg) => encodeURIComponent(seg.replace(/\s+/g, "_")))
+    .join("/");
+  const urls = [`/anims/baked/${encoded}.json`];
+  if (underscored !== encoded) {
+    urls.push(`/anims/baked/${underscored}.json`);
+  }
+  // Arena R2 mirror (some deploys ship anims under /cdn/assets/animations)
+  urls.push(`/cdn/assets/animations/baked/${encoded}.json`);
+  return [...new Set(urls)];
 }

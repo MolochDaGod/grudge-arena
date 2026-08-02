@@ -24,6 +24,9 @@
  */
 
 import * as THREE from 'three';
+import { recoil, applyCameraShake } from './CameraRecoil.js';
+import { getCharacterCameraPivot, hasCharacterRig } from '../characterScale.js';
+import { filterCameraCollisionMeshes } from './cameraCollision.js';
 
 const PI2 = Math.PI * 2;
 
@@ -193,7 +196,7 @@ export class OrbitCamera {
   setPlayerMoving(moving) { this._isMoving = moving; }
 
   setCollisionMeshes(meshes) {
-    this._collisionMeshes = meshes || [];
+    this._collisionMeshes = filterCameraCollisionMeshes(meshes || []);
   }
 
   nudgeToward(targetPos) {
@@ -211,8 +214,13 @@ export class OrbitCamera {
 
   snapBehind() {
     if (!this.target) return;
-    this.yaw         = this.target.rotation.y + Math.PI;
-    this._targetYaw  = this.yaw;
+    // D1 rigs face +X at yaw 0; TPS spawn uses ±π/2 — camera sits opposite forward (+π/2).
+    const behind =
+      this.controlMode === 'tps'
+        ? this.target.rotation.y + Math.PI * 0.5
+        : this.target.rotation.y + Math.PI;
+    this.yaw = behind;
+    this._targetYaw = this.yaw;
   }
 
   // ── Input ───────────────────────────────────────────────────────
@@ -315,7 +323,9 @@ export class OrbitCamera {
       while (yd < -Math.PI) yd += PI2;
       this._targetYaw += yd * k;
       this._targetPitch += (this._assistPitch - this._targetPitch) * k;
-      this._targetPitch = Math.max(CFG.PITCH_MIN, Math.min(CFG.PITCH_MAX, this._targetPitch));
+      const pMin = this.controlMode === 'tps' ? CFG.TPS_PITCH_MIN : CFG.PITCH_MIN;
+      const pMax = this.controlMode === 'tps' ? CFG.TPS_PITCH_MAX : CFG.PITCH_MAX;
+      this._targetPitch = Math.max(pMin, Math.min(pMax, this._targetPitch));
     }
 
     // ── 3. Smooth toward target orbit ─────────────────────────────
@@ -327,8 +337,12 @@ export class OrbitCamera {
     this.pitch    += (this._targetPitch    - this.pitch)    * st;
     this.distance += (this._targetDistance - this.distance) * st;
 
-    // ── 4. Pivot (character head position) ───────────────────────
-    this._pivotWorld.copy(this.target.position).add(this.pivotOffset);
+    // ── 4. Pivot (chest on live rig — not decoy armature / scene origin) ──
+    if (hasCharacterRig(this.target)) {
+      getCharacterCameraPivot(this.target, this._pivotWorld);
+    } else {
+      this._pivotWorld.copy(this.target.position).add(this.pivotOffset);
+    }
 
     const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
     const cy = Math.cos(this.yaw),   sy = Math.sin(this.yaw);
@@ -359,9 +373,9 @@ export class OrbitCamera {
     // ── 7. Final camera position using effective distance ────────
     const ed = this._effectiveDistance;
     const finalPos = new THREE.Vector3(
-      this._pivotWorld.x - sy * cp * ed + cy * this.shoulderOffset,
+      this._pivotWorld.x - sy * cp * ed + cy * shoulder,
       this._pivotWorld.y + sp * ed,
-      this._pivotWorld.z - cy * cp * ed - sy * this.shoulderOffset,
+      this._pivotWorld.z - cy * cp * ed - sy * shoulder,
     );
     finalPos.y = Math.max(CFG.CAMERA_MIN_HEIGHT, Math.min(CFG.CAMERA_MAX_HEIGHT, finalPos.y));
 
@@ -370,6 +384,13 @@ export class OrbitCamera {
     const lookAt = this._pivotWorld.clone().addScaledVector(
       new THREE.Vector3(-sy, 0, -cy), bias,
     );
+
+    // Recoil kick — nudge look target (danger room CameraRig parity)
+    if (Math.abs(recoil.camPitch) > 1e-6 || Math.abs(recoil.camYaw) > 1e-6) {
+      lookAt.y += recoil.camPitch * ed;
+      lookAt.x += cy * recoil.camYaw * ed;
+      lookAt.z -= sy * recoil.camYaw * ed;
+    }
 
     // ── 9. Apply ───────────────────────────────────────────────
     if (!this._initialized) {
@@ -386,6 +407,7 @@ export class OrbitCamera {
 
     this.camera.position.copy(this._currentPos);
     this.camera.lookAt(this._currentLookAt);
+    applyCameraShake(this.camera, delta);
 
     // ADS FOV zoom
     if (this.camera.isPerspectiveCamera) {

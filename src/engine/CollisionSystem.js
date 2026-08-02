@@ -21,8 +21,20 @@ export class CollisionSystem {
     if (index !== -1) this.colliders.splice(index, 1);
   }
 
+  /** Walk parent chain to find the registered collider root (GLB child mesh hits). */
+  _resolveCollider(hitObject) {
+    let node = hitObject;
+    while (node) {
+      const hit = this.colliders.find((c) => c.mesh === node);
+      if (hit) return hit;
+      node = node.parent;
+    }
+    return null;
+  }
+
   checkCollision(origin, direction, maxDistance = 100, layerMask = 0xFFFF) {
-    this.raycaster.set(origin, direction.normalize());
+    const dir = direction.clone ? direction.clone().normalize() : direction.normalize();
+    this.raycaster.set(origin, dir);
     this.raycaster.far = maxDistance;
 
     const meshes = this.colliders.filter(c => (c.layer & layerMask) !== 0).map(c => c.mesh);
@@ -30,7 +42,7 @@ export class CollisionSystem {
 
     if (intersects.length > 0) {
       const hit = intersects[0];
-      const collider = this.colliders.find(c => c.mesh === hit.object || c.mesh.children?.includes(hit.object));
+      const collider = this._resolveCollider(hit.object);
       return {
         hit: true, point: hit.point, distance: hit.distance,
         normal: hit.face?.normal || new THREE.Vector3(0, 1, 0),
